@@ -1,0 +1,21 @@
+{
+  "name": "davidrubydev/rez",
+  "description": "Rez reservation engine — domain and application layers",
+  "type": "library",
+  "autoload": {
+    "psr-4": {
+      "Rez\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Rez\\Tests\\": "tests/"
+    }
+  },
+  "require": {
+    "php": "^8.3"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11"
+  }
+}
