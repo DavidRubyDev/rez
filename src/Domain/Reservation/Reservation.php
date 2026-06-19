@@ -33,6 +33,17 @@ final class Reservation
         return new self($id, $resourceIds, $slot, $party, ReservationStatus::Pending, new DateTimeImmutable('now', new \DateTimeZone('UTC')));
     }
 
+    public static function reconstruct(
+        ReservationId $id,
+        ResourceIdCollection $resourceIds,
+        TimeSlot $slot,
+        Party $party,
+        ReservationStatus $status,
+        DateTimeImmutable $createdAt,
+    ): self {
+        return new self($id, $resourceIds, $slot, $party, $status, $createdAt);
+    }
+
     public function id(): ReservationId
     {
         return $this->id;

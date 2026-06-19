@@ -1,0 +1,46 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Rez\Infrastructure\Persistence\Mysql;
+
+use UnexpectedValueException;
+
+abstract class MysqlRepository
+{
+    protected function str(mixed $value): string
+    {
+        if (!is_string($value)) {
+            throw new UnexpectedValueException('Expected a string value from database row.');
+        }
+
+        return $value;
+    }
+
+    protected function int(mixed $value): int
+    {
+        if (!is_int($value)) {
+            throw new UnexpectedValueException('Expected an integer value from database row.');
+        }
+
+        return $value;
+    }
+
+    protected function nullStr(mixed $value): ?string
+    {
+        if ($value !== null && !is_string($value)) {
+            throw new UnexpectedValueException('Expected a nullable string value from database row.');
+        }
+
+        return $value;
+    }
+
+    protected function bool(mixed $value): bool
+    {
+        if (!is_int($value) && !is_bool($value)) {
+            throw new UnexpectedValueException('Expected a boolean value from database row.');
+        }
+
+        return (bool) $value;
+    }
+}
