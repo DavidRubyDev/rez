@@ -16,5 +16,8 @@
         <testsuite name="Handler">
             <directory>tests/Handler/</directory>
         </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration/</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

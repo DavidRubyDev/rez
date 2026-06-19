@@ -22,7 +22,8 @@
     "friendsofphp/php-cs-fixer": "^3"
   },
   "scripts": {
-    "test": "vendor/bin/phpunit",
+    "test": "vendor/bin/phpunit --exclude-group integration",
+    "test-integration": "vendor/bin/phpunit --testsuite Integration",
     "stan": "vendor/bin/phpstan analyse src tests --level=max",
     "cs": "PHP_CS_FIXER_IGNORE_ENV=1 vendor/bin/php-cs-fixer fix --dry-run --diff",
     "cs-fix": "PHP_CS_FIXER_IGNORE_ENV=1 vendor/bin/php-cs-fixer fix",
