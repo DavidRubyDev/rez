@@ -279,8 +279,31 @@ Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `
 
 ---
 
+### 16. Application Use Cases
+
+All use cases follow Request/Response/UseCase pattern under `src/Application/UseCase/`.
+`ConflictException` updated with `TimeSlot $slot` and `Resource $resource` constructor + getters.
+
+**CreateReservation** — iterates `ResourceId[]` from request, validates each resource exists, checks for slot conflicts per resource, creates `Reservation` with `ResourceIdCollection`, saves.
+- 6 tests passing.
+
+**CancelReservation** — loads reservation, calls `cancel()`, saves.
+- 4 tests passing.
+
+**GetReservation** — loads reservation, wraps in response.
+- 2 tests passing.
+
+**ListReservations** — `findAll(from, to)`, filters in memory by `resourceId` if provided.
+- 2 tests passing.
+
+**GetAvailability** — loads rules + overrides, finds matching rule for date, checks override block, generates candidate slots by duration, loads existing reservations, filters out conflicts.
+- 8 tests passing.
+
+Total: 123 tests passing.
+
+---
+
 ## Pending Steps
 
-- **16.** Application use cases + tests (CreateReservation, CancelReservation, GetReservation, ListReservations, GetAvailability)
 - **18.** Infrastructure MySQL repositories (`MysqlReservationRepository`, `MysqlResourceRepository`)
 - **19.** Handlers (Reservation, Resource, Availability)
