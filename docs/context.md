@@ -245,9 +245,23 @@ Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `
 
 ---
 
+### 14. DateTimeRange + DateTimeRangeTest
+
+`src/Domain/Shared/DateTimeRange.php` — shared utility (not a domain concept).
+
+- Constructor: `DateTimeImmutable $start`, `DateTimeImmutable $end` — throws `\InvalidArgumentException` if `$end < $start` (equal allowed)
+- `start(): DateTimeImmutable`
+- `end(): DateTimeImmutable`
+- `contains(DateTimeImmutable): bool`
+- `overlapsWith(DateTimeRange): bool` — adjacent ranges do NOT overlap
+- `toTimeSlot(): TimeSlot` — throws `InvalidTimeSlotException` if start === end
+
+`tests/Domain/Shared/DateTimeRangeTest.php` — all 9 cases passing.
+
+---
+
 ## Pending Steps
 
-- **14.** `DateTimeRange`
 - **15.** Port interfaces (`ReservationRepositoryInterface`, `ResourceRepositoryInterface`, `AvailabilityRepositoryInterface`)
 - **16.** Application use cases + tests (CreateReservation, CancelReservation, GetReservation, ListReservations, GetAvailability)
 - **18.** Infrastructure MySQL repositories (`MysqlReservationRepository`, `MysqlResourceRepository`)
