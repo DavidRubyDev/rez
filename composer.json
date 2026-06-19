@@ -31,7 +31,7 @@
     "test": "vendor/bin/phpunit",
     "stan": "vendor/bin/phpstan analyse src tests --level=max",
     "cs": "vendor/bin/phpcs --standard=PSR12 src tests",
-    "cs-fix": "vendor/bin/php-cs-fixer fix --rules=@PSR12 src tests",
+    "cs-fix": "PHP_CS_FIXER_IGNORE_ENV=1 vendor/bin/php-cs-fixer fix --rules=@PSR12 src tests",
     "infection": "vendor/bin/infection --threads=4"
   }
 }
