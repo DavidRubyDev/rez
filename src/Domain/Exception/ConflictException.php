@@ -1,5 +1,9 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Rez\Domain\Exception;
 
-class ConflictException extends DomainException {}
+class ConflictException extends DomainException
+{
+}

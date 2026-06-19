@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Rez\Domain\Resource;
 
@@ -6,7 +8,8 @@ final class ResourceId
 {
     private function __construct(
         private readonly string $id,
-    ) {}
+    ) {
+    }
 
     public static function generate(): self
     {

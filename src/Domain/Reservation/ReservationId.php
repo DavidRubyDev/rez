@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Rez\Domain\Reservation;
 
@@ -6,7 +8,8 @@ final class ReservationId
 {
     private function __construct(
         private readonly string $id,
-    ) {}
+    ) {
+    }
 
     public static function generate(): self
     {
