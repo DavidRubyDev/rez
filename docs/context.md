@@ -284,7 +284,14 @@ Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `
 All use cases follow Request/Response/UseCase pattern under `src/Application/UseCase/`.
 `ConflictException` updated with `TimeSlot $slot` and `Resource $resource` constructor + getters.
 
-**CreateReservation** — iterates `ResourceId[]` from request, validates each resource exists, checks for slot conflicts per resource, creates `Reservation` with `ResourceIdCollection`, saves.
+**AvailabilityService** (`src/Application/Service/`) — shared availability logic extracted into a service to avoid duplication between `CreateReservation` and `GetAvailability`.
+- `AvailabilityServiceInterface` — contract; both use cases depend on this.
+- `AvailabilityService implements AvailabilityServiceInterface` — concrete implementation.
+- `isSlotAvailable(ResourceId, TimeSlot): bool` — checks rule exists for date, override not blocking, no conflicting reservation.
+- `getAvailableSlots(ResourceId, DateTimeImmutable, int): AvailabilityWindow` — full slot generation pipeline.
+- 12 tests in `AvailabilityServiceTest`.
+
+**CreateReservation** — validates resource exists, builds `TimeSlot`, delegates availability check to `AvailabilityService` per resource, creates and saves `Reservation`.
 - 6 tests passing.
 
 **CancelReservation** — loads reservation, calls `cancel()`, saves.
@@ -296,10 +303,10 @@ All use cases follow Request/Response/UseCase pattern under `src/Application/Use
 **ListReservations** — `findAll(from, to)`, filters in memory by `resourceId` if provided.
 - 2 tests passing.
 
-**GetAvailability** — loads rules + overrides, finds matching rule for date, checks override block, generates candidate slots by duration, loads existing reservations, filters out conflicts.
-- 8 tests passing.
+**GetAvailability** — thin wrapper; delegates entirely to `AvailabilityService::getAvailableSlots()`.
+- 1 test passing.
 
-Total: 123 tests passing.
+Total: 128 tests passing.
 
 ---
 
