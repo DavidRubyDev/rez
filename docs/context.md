@@ -101,9 +101,21 @@ No test needed — used in Reservation tests.
 
 ---
 
+### 6. Party + PartyTest
+
+`src/Domain/Reservation/Party.php` — immutable value object.
+
+- Constructor: `string $name`, `string $email`, `int $size`, `?string $phone`
+- Throws `InvalidPartyException` for empty name, invalid email, or size < 1
+- Getters: `name()`, `email()`, `size()`, `phone()`
+
+`tests/Domain/Reservation/PartyTest.php` — all 6 cases passing.
+
+---
+
 ## Pending Steps
 
-- **6.** `Party` + `PartyTest`
+- **7.** `Resource` + `ResourceTest`
 - **7.** `Resource` + `ResourceTest`
 - **8.** `ResourceCollection` + `ResourceCollectionTest`
 - **9.** `Reservation` + `ReservationTest`
