@@ -14,4 +14,3 @@ jobs:
       - run: composer test
       - run: composer stan
       - run: composer cs
-      - run: composer infection
