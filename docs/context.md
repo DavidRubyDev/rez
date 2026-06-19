@@ -113,10 +113,21 @@ No test needed — used in Reservation tests.
 
 ---
 
+### 7. Resource + ResourceTest
+
+`src/Domain/Resource/Resource.php` — immutable entity.
+
+- Constructor: `ResourceId`, `ResourceType`, `string $name`, `int $capacity`, `array<string,mixed> $attributes = []`
+- Throws `\InvalidArgumentException` for empty name or capacity < 1
+- Getters: `id()`, `type()`, `name()`, `capacity()`, `attributes()`
+- `withAttributes(array): self` — returns new instance with merged attributes
+
+`tests/Domain/Resource/ResourceTest.php` — all 5 cases passing.
+
+---
+
 ## Pending Steps
 
-- **7.** `Resource` + `ResourceTest`
-- **7.** `Resource` + `ResourceTest`
 - **8.** `ResourceCollection` + `ResourceCollectionTest`
 - **9.** `Reservation` + `ReservationTest`
 - **10.** `ReservationCollection` + `ReservationCollectionTest`
