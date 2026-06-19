@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Rez\Tests\Domain;
+namespace Rez\Tests\Domain\Reservation;
 
 use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;

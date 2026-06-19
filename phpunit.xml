@@ -10,5 +10,11 @@
         <testsuite name="Application">
             <directory>tests/Application/</directory>
         </testsuite>
+        <testsuite name="Infrastructure">
+            <directory>tests/Infrastructure/</directory>
+        </testsuite>
+        <testsuite name="Handler">
+            <directory>tests/Handler/</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

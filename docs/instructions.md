@@ -1,6 +1,6 @@
-You are building "Rez" — the core PHP library for a reservation engine.
-This is the domain and application layer only. No HTTP, no database, no framework.
-Pure PHP 8.3, strict types, immutable value objects, hexagonal architecture, DDD, TDD.
+You are building "Rez" — a full PHP reservation engine.
+Domain, application, infrastructure, and handler layers.
+No HTTP framework. Pure PHP 8.3, strict types, immutable value objects, hexagonal architecture, DDD, TDD.
 
 ---
 
@@ -15,7 +15,7 @@ This will become a standalone Composer package.
 
 {
   "name": "davidrubydev/rez",
-  "description": "Rez reservation engine — domain and application layers",
+  "description": "Rez reservation engine",
   "type": "library",
   "autoload": {
     "psr-4": {
@@ -31,7 +31,10 @@ This will become a standalone Composer package.
     "php": "^8.3"
   },
   "require-dev": {
-    "phpunit/phpunit": "^11"
+    "phpunit/phpunit": "^11",
+    "phpstan/phpstan": "^2",
+    "squizlabs/php_codesniffer": "^3",
+    "friendsofphp/php-cs-fixer": "^3"
   }
 }
 
@@ -42,13 +45,15 @@ This will become a standalone Composer package.
 Standard PHPUnit config. testsuites:
 - Domain: tests/Domain/
 - Application: tests/Application/
+- Infrastructure: tests/Infrastructure/
+- Handler: tests/Handler/
 
 Bootstrap: vendor/autoload.php
 Colors enabled.
 
 ---
 
-## Directory structure to create
+## Directory structure
 
 src/
   Domain/
@@ -116,20 +121,74 @@ src/
       ResourceRepositoryInterface.php
       AvailabilityRepositoryInterface.php
 
+  Infrastructure/
+    Persistence/
+      Mysql/
+        MysqlReservationRepository.php
+        MysqlResourceRepository.php
+        MysqlAvailabilityRepository.php
+    Mapper/
+      ReservationStatusMapper.php
+      ResourceTypeMapper.php
+
+  Handler/
+    Reservation/
+      CreateReservationHandler.php
+      CancelReservationHandler.php
+      GetReservationHandler.php
+      ListReservationsHandler.php
+    Resource/
+      CreateResourceHandler.php
+      ListResourcesHandler.php
+    Availability/
+      GetAvailabilityHandler.php
+
 tests/
   Domain/
-    TimeSlotTest.php
-    ReservationTest.php
-    PartyTest.php
-    ResourceTest.php
-    AvailabilityRuleTest.php
-    ReservationCollectionTest.php
+    Resource/
+      ResourceIdTest.php
+      ResourceTest.php
+    Reservation/
+      ReservationIdTest.php
+      TimeSlotTest.php
+      PartyTest.php
+      ReservationTest.php
+      ReservationCollectionTest.php
+    Availability/
+      AvailabilityRuleTest.php
   Application/
-    CreateReservationUseCaseTest.php
-    CancelReservationUseCaseTest.php
-    GetReservationUseCaseTest.php
-    ListReservationsUseCaseTest.php
-    GetAvailabilityUseCaseTest.php
+    UseCase/
+      Reservation/
+        CreateReservation/
+          CreateReservationUseCaseTest.php
+        CancelReservation/
+          CancelReservationUseCaseTest.php
+        GetReservation/
+          GetReservationUseCaseTest.php
+        ListReservations/
+          ListReservationsUseCaseTest.php
+      Availability/
+        GetAvailability/
+          GetAvailabilityUseCaseTest.php
+  Infrastructure/
+    Persistence/
+      Mysql/
+        MysqlReservationRepositoryTest.php
+        MysqlResourceRepositoryTest.php
+    Mapper/
+      ReservationStatusMapperTest.php
+      ResourceTypeMapperTest.php
+  Handler/
+    Reservation/
+      CreateReservationHandlerTest.php
+      CancelReservationHandlerTest.php
+      GetReservationHandlerTest.php
+      ListReservationsHandlerTest.php
+    Resource/
+      CreateResourceHandlerTest.php
+      ListResourcesHandlerTest.php
+    Availability/
+      GetAvailabilityHandlerTest.php
 
 ---
 
@@ -182,7 +241,7 @@ TimeSlotTest must cover:
 
 ---
 
-### 3. ReservationId.php + ResourceId.php + ReservationIdTest.php
+### 3. ReservationId.php + ResourceId.php + ReservationIdTest.php + ResourceIdTest.php
 
 Both are identical in structure. Immutable value objects wrapping a UUID string.
 
@@ -199,7 +258,7 @@ $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
 $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
 return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
 
-Test:
+Each class has its own test file. Test:
 - generate() produces valid UUID v4 format
 - fromString() roundtrips correctly
 - fromString() with invalid string throws \InvalidArgumentException
@@ -209,12 +268,14 @@ Test:
 
 ### 4. ReservationStatus.php
 
-enum ReservationStatus: string
+Pure enum — no backing values. Serialization is handled by infrastructure mappers.
+
+enum ReservationStatus
 {
-    case Pending = 'pending';
-    case Confirmed = 'confirmed';
-    case Cancelled = 'cancelled';
-    case NoShow = 'no_show';
+    case Pending;
+    case Confirmed;
+    case Cancelled;
+    case NoShow;
 }
 
 No test needed. Used in Reservation tests.
@@ -232,6 +293,8 @@ static fromString(string $slug): self
 toString(): string
 equals(self $other): bool
 __toString(): string
+
+No test needed at this stage — tested indirectly via Resource tests.
 
 ---
 
@@ -478,7 +541,7 @@ interface AvailabilityRepositoryInterface
 
 ---
 
-### 16. Application DTOs and Use Cases
+### 16. Application Use Cases
 
 Build each use case group in this order.
 For every use case: write the test first using PHPUnit mocks, then implement.
@@ -587,10 +650,7 @@ GetAvailabilityUseCase:
      - Each slot: start = previous end, duration = slotDurationMinutes
      - Stop when slot end would exceed closeTimeForDate($date)
   6. Load existing reservations: findByTimeSlotAndResource for full day range + resourceId
-     Note: ListReservations filters in memory. Here we need per-resource.
-     Use findByTimeSlotAndResource with a TimeSlot spanning the full day.
   7. Filter candidates: keep slots where no existing reservation overlaps
-     Use TimeSlot::overlapsWith for each check
   8. Return AvailabilityWindow with remaining slots
 
 GetAvailabilityUseCaseTest:
@@ -605,6 +665,125 @@ GetAvailabilityUseCaseTest:
 
 ---
 
+### 17. Infrastructure — Mappers
+
+#### ReservationStatusMapper + ReservationStatusMapperTest
+
+Maps between ReservationStatus (pure enum) and string for persistence.
+
+Methods:
+- toString(ReservationStatus $status): string
+- fromString(string $value): ReservationStatus — throws \InvalidArgumentException for unknown values
+
+Mapping:
+  Pending   → 'pending'
+  Confirmed → 'confirmed'
+  Cancelled → 'cancelled'
+  NoShow    → 'no_show'
+
+Test:
+- Each case maps to the correct string
+- Each string maps back to the correct case
+- Unknown string throws \InvalidArgumentException
+
+#### ResourceTypeMapper + ResourceTypeMapperTest
+
+Maps between ResourceType value object and string for persistence.
+
+Methods:
+- toString(ResourceType $type): string
+- fromString(string $value): ResourceType
+
+Test:
+- Roundtrip: toString → fromString returns equivalent ResourceType
+- Invalid string throws \InvalidArgumentException
+
+---
+
+### 18. Infrastructure — MySQL Repositories
+
+Implement all three MySQL repositories. These are the driven adapters.
+Constructor injects a \PDO instance. All methods must satisfy the port interface contracts.
+Use mappers for enum/value object serialization.
+
+#### MysqlReservationRepository + MysqlReservationRepositoryTest
+
+Implements ReservationRepositoryInterface.
+
+- save(): INSERT ... ON DUPLICATE KEY UPDATE, keyed by id
+- findById(): throws ReservationNotFoundException if missing
+- findByTimeSlotAndResource(): query by resourceId and overlapping slot range
+- findAll(): optional from/to filtering via WHERE clause
+
+Test uses a real MySQL connection (integration test). Requires a test database.
+- save and findById roundtrip
+- findById missing throws ReservationNotFoundException
+- findByTimeSlotAndResource returns overlapping reservations only
+- findAll with no filters returns all
+- findAll with from/to filters correctly
+
+#### MysqlResourceRepository + MysqlResourceRepositoryTest
+
+Implements ResourceRepositoryInterface.
+
+- save(): INSERT ... ON DUPLICATE KEY UPDATE
+- findById(): throws ResourceNotFoundException if missing
+- findAll(): returns ResourceCollection of all stored
+
+Test:
+- save and findById roundtrip
+- findById missing throws ResourceNotFoundException
+- findAll returns all saved resources
+
+---
+
+### 19. Handlers
+
+Handlers are the driving adapters. They receive input from the outside world,
+delegate to a use case, and return output. No HTTP, no framework — pure PHP.
+
+Each handler wraps exactly one use case. Constructor injects the use case.
+The handle() method accepts the use case Request object and returns the Response object.
+
+#### Reservation Handlers
+
+CreateReservationHandler:
+  Constructor: CreateReservationUseCase
+  handle(CreateReservationRequest): CreateReservationResponse
+
+CancelReservationHandler:
+  Constructor: CancelReservationUseCase
+  handle(CancelReservationRequest): CancelReservationResponse
+
+GetReservationHandler:
+  Constructor: GetReservationUseCase
+  handle(GetReservationRequest): GetReservationResponse
+
+ListReservationsHandler:
+  Constructor: ListReservationsUseCase
+  handle(ListReservationsRequest): ListReservationsResponse
+
+#### Resource Handlers
+
+CreateResourceHandler:
+  Constructor: CreateResourceUseCase
+  handle(CreateResourceRequest): CreateResourceResponse
+
+ListResourcesHandler:
+  Constructor: ListResourcesUseCase
+  handle(ListResourcesRequest): ListResourcesResponse
+
+#### Availability Handler
+
+GetAvailabilityHandler:
+  Constructor: GetAvailabilityUseCase
+  handle(GetAvailabilityRequest): GetAvailabilityResponse
+
+Handler tests use PHPUnit mocks for the use case.
+Each test verifies that handle() delegates to the use case and returns its response.
+
+---
+
 ## General rules throughout
 
 - Every file starts with: <?php declare(strict_types=1);
@@ -613,6 +792,7 @@ GetAvailabilityUseCaseTest:
 - Use readonly where appropriate (PHP 8.1+ readonly properties)
 - All DateTimeImmutable values stored and compared in UTC
 - No static state except in the ID generate() methods
+- Enums are pure (no backing values) — string mapping lives in infrastructure mappers
 - PHPUnit mocks only — no test doubles library
 - Each test class has one responsibility — do not combine domain tests with use case tests
 - Run composer install and vendor/bin/phpunit after completing each numbered step above
