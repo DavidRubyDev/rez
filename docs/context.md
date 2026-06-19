@@ -230,9 +230,23 @@ Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `
 
 ---
 
+### 13. AvailabilityWindow
+
+`src/Domain/Availability/AvailabilityWindow.php` — immutable value object.
+
+- Constructor: `ResourceId $resourceId`, `DateTimeImmutable $date`, `TimeSlot[] $availableSlots`
+- `static empty(ResourceId, DateTimeImmutable): self`
+- `resourceId(): ResourceId`
+- `date(): DateTimeImmutable`
+- `slots(): TimeSlot[]`
+- `isEmpty(): bool`
+- `count(): int`
+- No test — no logic beyond trivial delegation.
+
+---
+
 ## Pending Steps
 
-- **13.** `AvailabilityWindow`
 - **14.** `DateTimeRange`
 - **15.** Port interfaces (`ReservationRepositoryInterface`, `ResourceRepositoryInterface`, `AvailabilityRepositoryInterface`)
 - **16.** Application use cases + tests (CreateReservation, CancelReservation, GetReservation, ListReservations, GetAvailability)
