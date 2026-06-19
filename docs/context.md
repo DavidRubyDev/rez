@@ -310,7 +310,37 @@ Total: 128 tests passing.
 
 ---
 
+### 18. MySQL Repositories
+
+`src/Infrastructure/Persistence/Mysql/MysqlRepository.php` — abstract base with type-narrowing helpers: `str()`, `int()`, `nullStr()`, `bool()`. Used by all repositories to safely extract typed values from PDO rows (required for PHPStan max).
+
+`Reservation::reconstruct()` added as a static factory for hydration from persistence (bypasses `create()` which hardcodes `Pending` status and UTC now).
+
+**MysqlReservationRepository** — implements `ReservationRepositoryInterface`.
+- `save()` — upsert reservations + delete/reinsert reservation_resources rows
+- `findById()` — throws `ReservationNotFoundException` if missing
+- `findByTimeSlotAndResource()` — JOIN on reservation_resources, overlap query
+- `findAll()` — optional from/to WHERE clause
+
+**MysqlResourceRepository** — implements `ResourceRepositoryInterface`.
+- `save()` — upsert, attributes stored as JSON
+- `findById()` — throws `ResourceNotFoundException` if missing
+- `findAll()` — returns full `ResourceCollection`
+
+**MysqlAvailabilityRepository** — implements `AvailabilityRepositoryInterface`.
+- `saveRule()` / `saveOverride()` — upsert with generated UUID
+- `findRulesForResource()` / `findOverridesForResource()` — filtered queries
+
+**Integration tests** — `tests/Integration/Persistence/Mysql/`, skip gracefully when `DB_HOST`/`DB_NAME`/`DB_USER` env vars not set.
+- CI: separate `Integration Tests` job with MySQL 8.0 service container.
+- `composer test-integration` runs the Integration suite only.
+- `composer test` excludes integration tests.
+- 13 integration tests (skip locally), 128 unit tests passing.
+
+Schema: `resources`, `reservations`, `reservation_resources`, `availability_rules`, `availability_overrides` — created by `MysqlIntegrationTestCase::createSchema()` and truncated between tests.
+
+---
+
 ## Pending Steps
 
-- **18.** Infrastructure MySQL repositories (`MysqlReservationRepository`, `MysqlResourceRepository`)
 - **19.** Handlers (Reservation, Resource, Availability)
