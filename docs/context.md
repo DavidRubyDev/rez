@@ -143,10 +143,24 @@ No test needed — used in Reservation tests.
 
 ---
 
+### 9. Reservation + ReservationTest
+
+`src/Domain/Reservation/Reservation.php` — immutable entity, static factory only.
+
+- `static create(ReservationId, ResourceId[] $resourceIds, TimeSlot, Party): self` — sets status to `Pending`, `createdAt` to UTC now. Throws `\InvalidArgumentException` if `$resourceIds` is empty.
+- `confirm(): self` — only from `Pending`, throws `InvalidReservationStateException` otherwise
+- `cancel(): self` — from `Pending` or `Confirmed`, throws `InvalidReservationStateException` if already `Cancelled`
+- `markNoShow(): self` — only from `Confirmed`, throws `InvalidReservationStateException` otherwise
+- Getters: `id()`, `resourceIds()`, `slot()`, `party()`, `status()`, `createdAt()`
+
+Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `DomainException` subclass for state transition violations.
+
+`tests/Domain/Reservation/ReservationTest.php` — all 12 cases passing.
+
+---
+
 ## Pending Steps
 
-- **9.** `Reservation` + `ReservationTest`
-- **9.** `Reservation` + `ReservationTest`
 - **10.** `ReservationCollection` + `ReservationCollectionTest`
 - **11.** `AvailabilityRule` + `AvailabilityRuleTest`
 - **12.** `AvailabilityOverride`

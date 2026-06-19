@@ -373,18 +373,20 @@ Immutable entity.
 Static factory only — no public constructor:
 static create(
   ReservationId $id,
-  ResourceId $resourceId,
+  ResourceId[] $resourceIds,
   TimeSlot $slot,
   Party $party
 ): self
 Sets status to ReservationStatus::Pending.
+Throws \InvalidArgumentException if $resourceIds is empty.
 
 State transition methods — each returns new immutable instance:
 - confirm(): self — only from Pending, throws DomainException otherwise
 - cancel(): self — from Pending or Confirmed, throws DomainException if already Cancelled
 - markNoShow(): self — only from Confirmed, throws DomainException otherwise
 
-Getters: id(), resourceId(), slot(), party(), status(), createdAt()
+Getters: id(), resourceIds(), slot(), party(), status(), createdAt()
+resourceIds() returns ResourceId[].
 createdAt() is set to current UTC time on create().
 
 ReservationTest must cover:
@@ -549,7 +551,7 @@ For every use case: write the test first using PHPUnit mocks, then implement.
 #### CreateReservation
 
 CreateReservationRequest — readonly constructor properties:
-  ResourceId $resourceId
+  ResourceId[] $resourceIds
   DateTimeImmutable $start
   DateTimeImmutable $end
   Party $party
