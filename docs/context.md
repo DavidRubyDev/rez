@@ -1,10 +1,14 @@
 # Rez — Implementation Progress
 
-## Infrastructure
+## Project Setup
 
 - `composer.json` — package `davidrubydev/rez`, PSR-4 autoloading for `Rez\\` and `Rez\\Tests\\`
-- `phpunit.xml` — Domain and Application test suites
-- `.github/workflows/tests.yml` — CI pipeline running PHPUnit on push and pull_request
+- `phpunit.xml` — Domain, Application, Infrastructure, Handler test suites
+- `.github/workflows/ci.yml` — CI pipeline with separate jobs for tests, PHPStan, and code style
+- `.php-cs-fixer.php` — PSR-12 code style config
+- Test directory structure mirrors `src/` exactly (e.g. `tests/Domain/Reservation/`, `tests/Domain/Resource/`)
+- Library is a full engine: Domain, Application, Infrastructure (MySQL), Handler layers
+- Enums are pure (no backing values) — string mapping in infrastructure mappers
 
 ---
 
@@ -38,7 +42,7 @@ All concrete exceptions extend `DomainException`. Constructors to be added as ne
 - `equals(TimeSlot $other): bool` — compares timestamps
 - `__toString(): string` — format `Y-m-d H:i:s / Y-m-d H:i:s`
 
-`tests/Domain/TimeSlotTest.php` — all 12 cases passing.
+`tests/Domain/Reservation/TimeSlotTest.php` — all 12 cases passing.
 
 ---
 
@@ -54,14 +58,33 @@ Both are immutable value objects wrapping a UUID v4 string, under their respecti
 - `equals(self $other): bool`
 - `__toString(): string`
 
-`tests/Domain/ReservationIdTest.php` and `tests/Domain/ResourceIdTest.php` — all 6 cases each passing.
+`tests/Domain/Reservation/ReservationIdTest.php` and `tests/Domain/Resource/ResourceIdTest.php` — all 6 cases each passing.
+
+---
+
+### 4. ReservationStatus
+
+`src/Domain/Reservation/ReservationStatus.php` — pure enum (no backing values).
+
+Cases: `Pending`, `Confirmed`, `Cancelled`, `NoShow`.
+String serialization handled by `ReservationStatusMapper` in infrastructure.
+No test needed — used in Reservation tests.
+
+---
+
+### 4b. ReservationStatusMapper
+
+`src/Infrastructure/Mapper/ReservationStatusMapper.php` — maps `ReservationStatus` pure enum to/from string for persistence.
+
+- `toString(ReservationStatus): string` — Pending→'pending', Confirmed→'confirmed', Cancelled→'cancelled', NoShow→'no_show'
+- `fromString(string): ReservationStatus` — throws `\InvalidArgumentException` for unknown values
+
+`tests/Infrastructure/Mapper/ReservationStatusMapperTest.php` — all 9 cases passing.
 
 ---
 
 ## Pending Steps
 
-- **4.** `ReservationStatus` (enum)
-- **4.** `ReservationStatus` (enum)
 - **5.** `ResourceType`
 - **6.** `Party` + `PartyTest`
 - **7.** `Resource` + `ResourceTest`
@@ -74,3 +97,6 @@ Both are immutable value objects wrapping a UUID v4 string, under their respecti
 - **14.** `DateTimeRange`
 - **15.** Port interfaces (`ReservationRepositoryInterface`, `ResourceRepositoryInterface`, `AvailabilityRepositoryInterface`)
 - **16.** Application use cases + tests (CreateReservation, CancelReservation, GetReservation, ListReservations, GetAvailability)
+- **17.** Infrastructure mappers (`ResourceTypeMapper` — `ReservationStatusMapper` done)
+- **18.** Infrastructure MySQL repositories (`MysqlReservationRepository`, `MysqlResourceRepository`)
+- **19.** Handlers (Reservation, Resource, Availability)
