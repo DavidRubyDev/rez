@@ -220,9 +220,18 @@ Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `
 
 ---
 
+### 12. AvailabilityOverride
+
+`src/Domain/Availability/AvailabilityOverride.php` — immutable value object.
+
+- Constructor: `ResourceId $resourceId`, `DateTimeImmutable $date`, `bool $available`
+- Getters: `resourceId()`, `date()`, `isAvailable()`
+- No test — logic is trivial.
+
+---
+
 ## Pending Steps
 
-- **12.** `AvailabilityOverride`
 - **13.** `AvailabilityWindow`
 - **14.** `DateTimeRange`
 - **15.** Port interfaces (`ReservationRepositoryInterface`, `ResourceRepositoryInterface`, `AvailabilityRepositoryInterface`)
