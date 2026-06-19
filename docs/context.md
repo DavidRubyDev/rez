@@ -126,9 +126,26 @@ No test needed — used in Reservation tests.
 
 ---
 
+### 8. ResourceCollection + ResourceCollectionTest
+
+`src/Domain/Resource/ResourceCollection.php` — immutable collection wrapping `Resource[]`.
+
+- `static empty(): self`
+- `static fromArray(Resource[]): self`
+- `add(Resource): self` — immutable, returns new instance
+- `isEmpty(): bool`
+- `count(): int`
+- `toArray(): Resource[]`
+- `filter(callable): self`
+- `findById(ResourceId): ?Resource`
+
+`tests/Domain/Resource/ResourceCollectionTest.php` — all 7 cases passing.
+
+---
+
 ## Pending Steps
 
-- **8.** `ResourceCollection` + `ResourceCollectionTest`
+- **9.** `Reservation` + `ReservationTest`
 - **9.** `Reservation` + `ReservationTest`
 - **10.** `ReservationCollection` + `ReservationCollectionTest`
 - **11.** `AvailabilityRule` + `AvailabilityRuleTest`
