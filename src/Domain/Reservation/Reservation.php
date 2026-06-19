@@ -44,32 +44,32 @@ final class Reservation
         return new self($id, $resourceIds, $slot, $party, $status, $createdAt);
     }
 
-    public function id(): ReservationId
+    public function getId(): ReservationId
     {
         return $this->id;
     }
 
-    public function resourceIds(): ResourceIdCollection
+    public function getResourceIds(): ResourceIdCollection
     {
         return $this->resourceIds;
     }
 
-    public function slot(): TimeSlot
+    public function getSlot(): TimeSlot
     {
         return $this->slot;
     }
 
-    public function party(): Party
+    public function getParty(): Party
     {
         return $this->party;
     }
 
-    public function status(): ReservationStatus
+    public function getStatus(): ReservationStatus
     {
         return $this->status;
     }
 
-    public function createdAt(): DateTimeImmutable
+    public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
     }

@@ -54,10 +54,10 @@ class ResourceCollectionTest extends TestCase
         $b = $this->makeResource('Room B');
 
         $collection = ResourceCollection::empty()->add($a)->add($b);
-        $filtered   = $collection->filter(fn (Resource $r) => $r->name() === 'Room A');
+        $filtered   = $collection->filter(fn (Resource $r) => $r->getName() === 'Room A');
 
         $this->assertSame(1, $filtered->count());
-        $this->assertSame('Room A', $filtered->toArray()[0]->name());
+        $this->assertSame('Room A', $filtered->toArray()[0]->getName());
     }
 
     public function testFindByIdReturnsCorrectResource(): void
@@ -65,10 +65,10 @@ class ResourceCollectionTest extends TestCase
         $resource   = $this->makeResource();
         $collection = ResourceCollection::empty()->add($resource);
 
-        $found = $collection->findById($resource->id());
+        $found = $collection->findById($resource->getId());
 
         $this->assertNotNull($found);
-        $this->assertTrue($resource->id()->equals($found->id()));
+        $this->assertTrue($resource->getId()->equals($found->getId()));
     }
 
     public function testFindByIdReturnsNullWhenNotFound(): void

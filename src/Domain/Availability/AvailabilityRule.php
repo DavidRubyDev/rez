@@ -20,22 +20,22 @@ final class AvailabilityRule
         }
     }
 
-    public function resourceId(): ResourceId
+    public function getResourceId(): ResourceId
     {
         return $this->resourceId;
     }
 
-    public function dayOfWeek(): DayOfWeek
+    public function getDayOfWeek(): DayOfWeek
     {
         return $this->dayOfWeek;
     }
 
-    public function openTime(): string
+    public function getOpenTime(): string
     {
         return $this->openTime;
     }
 
-    public function closeTime(): string
+    public function getCloseTime(): string
     {
         return $this->closeTime;
     }

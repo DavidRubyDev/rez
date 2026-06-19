@@ -25,8 +25,8 @@ class TimeSlotTest extends TestCase
 
         $slot = new TimeSlot($start, $end);
 
-        $this->assertEquals($start, $slot->start());
-        $this->assertEquals($end, $slot->end());
+        $this->assertEquals($start, $slot->getStart());
+        $this->assertEquals($end, $slot->getEnd());
     }
 
     public function testEndEqualToStartThrowsInvalidTimeSlotException(): void

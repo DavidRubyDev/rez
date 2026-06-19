@@ -23,28 +23,28 @@ final class Resource
         }
     }
 
-    public function id(): ResourceId
+    public function getId(): ResourceId
     {
         return $this->id;
     }
 
-    public function type(): ResourceType
+    public function getType(): ResourceType
     {
         return $this->type;
     }
 
-    public function name(): string
+    public function getName(): string
     {
         return $this->name;
     }
 
-    public function capacity(): int
+    public function getCapacity(): int
     {
         return $this->capacity;
     }
 
     /** @return array<string, mixed> */
-    public function attributes(): array
+    public function getAttributes(): array
     {
         return $this->attributes;
     }
@@ -52,6 +52,6 @@ final class Resource
     /** @param array<string, mixed> $attributes */
     public function withAttributes(array $attributes): self
     {
-        return new self($this->id, $this->type, $this->name, $this->capacity, array_merge($this->attributes, $attributes));
+        return new self($this->id, $this->type, $this->name, $this->capacity, array_merge($this->getAttributes(), $attributes));
     }
 }

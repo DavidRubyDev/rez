@@ -24,11 +24,11 @@ class ResourceTest extends TestCase
     {
         $resource = new Resource($this->id, $this->type, 'Room A', 10);
 
-        $this->assertTrue($this->id->equals($resource->id()));
-        $this->assertTrue($this->type->equals($resource->type()));
-        $this->assertSame('Room A', $resource->name());
-        $this->assertSame(10, $resource->capacity());
-        $this->assertSame([], $resource->attributes());
+        $this->assertTrue($this->id->equals($resource->getId()));
+        $this->assertTrue($this->type->equals($resource->getType()));
+        $this->assertSame('Room A', $resource->getName());
+        $this->assertSame(10, $resource->getCapacity());
+        $this->assertSame([], $resource->getAttributes());
     }
 
     public function testEmptyNameThrowsInvalidArgumentException(): void
@@ -48,7 +48,7 @@ class ResourceTest extends TestCase
         $resource = new Resource($this->id, $this->type, 'Room A', 10);
         $updated  = $resource->withAttributes(['projector' => true]);
 
-        $this->assertSame(['projector' => true], $updated->attributes());
+        $this->assertSame(['projector' => true], $updated->getAttributes());
     }
 
     public function testOriginalUnchangedAfterWithAttributes(): void
@@ -56,6 +56,6 @@ class ResourceTest extends TestCase
         $resource = new Resource($this->id, $this->type, 'Room A', 10);
         $resource->withAttributes(['projector' => true]);
 
-        $this->assertSame([], $resource->attributes());
+        $this->assertSame([], $resource->getAttributes());
     }
 }

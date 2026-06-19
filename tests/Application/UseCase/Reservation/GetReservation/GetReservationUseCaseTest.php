@@ -52,8 +52,8 @@ class GetReservationUseCaseTest extends TestCase
     {
         $this->reservationRepository->method('findById')->willReturn($this->reservation);
 
-        $response = $this->useCase->execute(new GetReservationRequest($this->reservation->id()));
+        $response = $this->useCase->execute(new GetReservationRequest($this->reservation->getId()));
 
-        $this->assertTrue($this->reservation->id()->equals($response->reservation->id()));
+        $this->assertTrue($this->reservation->getId()->equals($response->reservation->getId()));
     }
 }

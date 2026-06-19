@@ -16,12 +16,12 @@ final class AvailabilityOverride
     ) {
     }
 
-    public function resourceId(): ResourceId
+    public function getResourceId(): ResourceId
     {
         return $this->resourceId;
     }
 
-    public function date(): DateTimeImmutable
+    public function getDate(): DateTimeImmutable
     {
         return $this->date;
     }

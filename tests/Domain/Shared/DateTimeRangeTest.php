@@ -18,8 +18,8 @@ class DateTimeRangeTest extends TestCase
             new DateTimeImmutable('2024-01-15 17:00:00'),
         );
 
-        $this->assertSame('2024-01-15 09:00:00', $range->start()->format('Y-m-d H:i:s'));
-        $this->assertSame('2024-01-15 17:00:00', $range->end()->format('Y-m-d H:i:s'));
+        $this->assertSame('2024-01-15 09:00:00', $range->getStart()->format('Y-m-d H:i:s'));
+        $this->assertSame('2024-01-15 17:00:00', $range->getEnd()->format('Y-m-d H:i:s'));
     }
 
     public function testZeroDurationIsAllowed(): void
@@ -27,7 +27,7 @@ class DateTimeRangeTest extends TestCase
         $dt    = new DateTimeImmutable('2024-01-15 09:00:00');
         $range = new DateTimeRange($dt, $dt);
 
-        $this->assertSame($dt->getTimestamp(), $range->start()->getTimestamp());
+        $this->assertSame($dt->getTimestamp(), $range->getStart()->getTimestamp());
     }
 
     public function testEndBeforeStartThrows(): void
@@ -95,8 +95,8 @@ class DateTimeRangeTest extends TestCase
         );
         $timeSlot = $range->toTimeSlot();
 
-        $this->assertSame('2024-01-15 09:00:00', $timeSlot->start()->format('Y-m-d H:i:s'));
-        $this->assertSame('2024-01-15 17:00:00', $timeSlot->end()->format('Y-m-d H:i:s'));
+        $this->assertSame('2024-01-15 09:00:00', $timeSlot->getStart()->format('Y-m-d H:i:s'));
+        $this->assertSame('2024-01-15 17:00:00', $timeSlot->getEnd()->format('Y-m-d H:i:s'));
     }
 
     public function testToTimeSlotThrowsForZeroDurationRange(): void

@@ -27,22 +27,22 @@ final class Party
         }
     }
 
-    public function name(): string
+    public function getName(): string
     {
         return $this->name;
     }
 
-    public function email(): string
+    public function getEmail(): string
     {
         return $this->email;
     }
 
-    public function size(): int
+    public function getSize(): int
     {
         return $this->size;
     }
 
-    public function phone(): ?string
+    public function getPhone(): ?string
     {
         return $this->phone;
     }
