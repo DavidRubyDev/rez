@@ -159,9 +159,27 @@ Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `
 
 ---
 
+### 10. ReservationCollection + ReservationCollectionTest
+
+`src/Domain/Reservation/ReservationCollection.php` — immutable collection wrapping `Reservation[]`.
+
+- `static empty(): self`
+- `static fromArray(Reservation[]): self`
+- `add(Reservation): self` — immutable
+- `isEmpty(): bool`
+- `count(): int`
+- `toArray(): Reservation[]`
+- `filter(callable): self`
+- `filterByStatus(ReservationStatus): self`
+- `findById(ReservationId): ?Reservation`
+
+`tests/Domain/Reservation/ReservationCollectionTest.php` — all 7 cases passing.
+
+---
+
 ## Pending Steps
 
-- **10.** `ReservationCollection` + `ReservationCollectionTest`
+- **11.** `AvailabilityRule` + `AvailabilityRuleTest`
 - **11.** `AvailabilityRule` + `AvailabilityRuleTest`
 - **12.** `AvailabilityOverride`
 - **13.** `AvailabilityWindow`
