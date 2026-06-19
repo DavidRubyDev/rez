@@ -377,6 +377,26 @@ Everything else is resolved by PHP-DI auto-wiring:
 
 Client app is responsible for binding: `PDO`, and the three `*RepositoryInterface` → `Mysql*Repository` pairs.
 
+Example client app container config:
+
+```php
+use DI\ContainerBuilder;
+use function DI\autowire;
+
+$container = (new ContainerBuilder())
+    ->addDefinitions(__DIR__ . '/../vendor/davidrubydev/rez/config/container.php')
+    ->addDefinitions([
+        PDO::class                             => fn() => new PDO('mysql:host=...;dbname=...', 'user', 'pass'),
+        ReservationRepositoryInterface::class  => autowire(MysqlReservationRepository::class),
+        ResourceRepositoryInterface::class     => autowire(MysqlResourceRepository::class),
+        AvailabilityRepositoryInterface::class => autowire(MysqlAvailabilityRepository::class),
+    ])
+    ->build();
+
+// fully wired — no manual new anywhere
+$useCase = $container->get(CreateReservationUseCase::class);
+```
+
 ---
 
 ## Pending Steps
