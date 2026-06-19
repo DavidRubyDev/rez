@@ -16,9 +16,9 @@ class AvailabilityRuleTest extends TestCase
     {
         $rule = new AvailabilityRule(ResourceId::generate(), DayOfWeek::Monday, '09:00', '17:00');
 
-        $this->assertSame(DayOfWeek::Monday, $rule->getDayOfWeek());
-        $this->assertSame('09:00', $rule->getOpenTime());
-        $this->assertSame('17:00', $rule->getCloseTime());
+        $this->assertSame(DayOfWeek::Monday, $rule->dayOfWeek);
+        $this->assertSame('09:00', $rule->openTime);
+        $this->assertSame('17:00', $rule->closeTime);
     }
 
     public function testCloseTimeBeforeOpenTimeThrows(): void

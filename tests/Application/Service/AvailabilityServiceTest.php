@@ -165,7 +165,7 @@ class AvailabilityServiceTest extends TestCase
         $window = $this->service->getAvailableSlots($this->resourceId, $this->date, 60);
 
         $this->assertSame(1, $window->count());
-        $this->assertSame('2024-01-15 11:00:00', $window->getSlots()[0]->getStart()->format('Y-m-d H:i:s'));
+        $this->assertSame('2024-01-15 11:00:00', $window->slots[0]->start->format('Y-m-d H:i:s'));
     }
 
     public function testGetAvailableSlotsExcludesSlotThatWouldExceedCloseTime(): void

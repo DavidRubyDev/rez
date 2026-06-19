@@ -48,11 +48,11 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $reservation = $this->makeReservation();
         $this->repository->save($reservation);
 
-        $found = $this->repository->findById($reservation->getId());
+        $found = $this->repository->findById($reservation->id);
 
-        $this->assertTrue($reservation->getId()->equals($found->getId()));
-        $this->assertSame($reservation->getStatus(), $found->getStatus());
-        $this->assertTrue($found->getResourceIds()->contains($this->resourceId));
+        $this->assertTrue($reservation->id->equals($found->id));
+        $this->assertSame($reservation->status, $found->status);
+        $this->assertTrue($found->resourceIds->contains($this->resourceId));
     }
 
     public function testFindByIdMissingThrowsReservationNotFoundException(): void
@@ -69,9 +69,9 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $confirmed = $reservation->confirm();
         $this->repository->save($confirmed);
 
-        $found = $this->repository->findById($reservation->getId());
+        $found = $this->repository->findById($reservation->id);
 
-        $this->assertSame($confirmed->getStatus(), $found->getStatus());
+        $this->assertSame($confirmed->status, $found->status);
     }
 
     public function testFindByTimeSlotAndResourceReturnsOverlappingReservations(): void
@@ -96,7 +96,7 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $result = $this->repository->findByTimeSlotAndResource($querySlot, $this->resourceId);
 
         $this->assertSame(1, $result->count());
-        $this->assertTrue($result->toArray()[0]->getId()->equals($overlapping->getId()));
+        $this->assertTrue($result->toArray()[0]->id->equals($overlapping->id));
     }
 
     public function testFindAllWithNoFiltersReturnsAll(): void
@@ -129,6 +129,6 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         );
 
         $this->assertSame(1, $result->count());
-        $this->assertTrue($result->toArray()[0]->getId()->equals($inside->getId()));
+        $this->assertTrue($result->toArray()[0]->id->equals($inside->id));
     }
 }

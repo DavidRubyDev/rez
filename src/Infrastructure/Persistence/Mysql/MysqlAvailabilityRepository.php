@@ -63,10 +63,10 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
         ');
 
         $stmt->execute([
-            ':resource_id' => $rule->getResourceId()->toString(),
-            ':day_of_week' => $this->dayMapper->toString($rule->getDayOfWeek()),
-            ':open_time'   => $rule->getOpenTime(),
-            ':close_time'  => $rule->getCloseTime(),
+            ':resource_id' => $rule->resourceId->toString(),
+            ':day_of_week' => $this->dayMapper->toString($rule->dayOfWeek),
+            ':open_time'   => $rule->openTime,
+            ':close_time'  => $rule->closeTime,
         ]);
     }
 
@@ -80,9 +80,9 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
         ');
 
         $stmt->execute([
-            ':resource_id' => $override->getResourceId()->toString(),
-            ':date'        => $override->getDate()->format('Y-m-d'),
-            ':available'   => $override->isAvailable() ? 1 : 0,
+            ':resource_id' => $override->resourceId->toString(),
+            ':date'        => $override->date->format('Y-m-d'),
+            ':available'   => $override->isAvailable ? 1 : 0,
         ]);
     }
 

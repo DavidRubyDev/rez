@@ -51,13 +51,13 @@ final class ReservationCollection
 
     public function filterByStatus(ReservationStatus $status): self
     {
-        return $this->filter(fn (Reservation $r) => $r->getStatus() === $status);
+        return $this->filter(fn (Reservation $r) => $r->status === $status);
     }
 
     public function findById(ReservationId $id): ?Reservation
     {
         foreach ($this->reservations as $reservation) {
-            if ($reservation->getId()->equals($id)) {
+            if ($reservation->id->equals($id)) {
                 return $reservation;
             }
         }

@@ -38,13 +38,13 @@ class MysqlResourceRepositoryTest extends MysqlIntegrationTestCase
         $resource = $this->makeResource();
         $this->repository->save($resource);
 
-        $found = $this->repository->findById($resource->getId());
+        $found = $this->repository->findById($resource->id);
 
-        $this->assertTrue($resource->getId()->equals($found->getId()));
-        $this->assertSame($resource->getName(), $found->getName());
-        $this->assertSame($resource->getCapacity(), $found->getCapacity());
-        $this->assertSame('table', $found->getType()->toString());
-        $this->assertSame(['location' => 'main-floor'], $found->getAttributes());
+        $this->assertTrue($resource->id->equals($found->id));
+        $this->assertSame($resource->name, $found->name);
+        $this->assertSame($resource->capacity, $found->capacity);
+        $this->assertSame('table', $found->type->toString());
+        $this->assertSame(['location' => 'main-floor'], $found->attributes);
     }
 
     public function testFindByIdMissingThrowsResourceNotFoundException(): void

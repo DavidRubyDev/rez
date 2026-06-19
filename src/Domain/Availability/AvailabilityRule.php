@@ -10,34 +10,14 @@ use Rez\Domain\Resource\ResourceId;
 final class AvailabilityRule
 {
     public function __construct(
-        private readonly ResourceId $resourceId,
-        private readonly DayOfWeek $dayOfWeek,
-        private readonly string $openTime,
-        private readonly string $closeTime,
+        public readonly ResourceId $resourceId,
+        public readonly DayOfWeek $dayOfWeek,
+        public readonly string $openTime,
+        public readonly string $closeTime,
     ) {
         if ($closeTime <= $openTime) {
             throw new \InvalidArgumentException('Close time must be after open time.');
         }
-    }
-
-    public function getResourceId(): ResourceId
-    {
-        return $this->resourceId;
-    }
-
-    public function getDayOfWeek(): DayOfWeek
-    {
-        return $this->dayOfWeek;
-    }
-
-    public function getOpenTime(): string
-    {
-        return $this->openTime;
-    }
-
-    public function getCloseTime(): string
-    {
-        return $this->closeTime;
     }
 
     public function appliesToDate(DateTimeImmutable $date): bool

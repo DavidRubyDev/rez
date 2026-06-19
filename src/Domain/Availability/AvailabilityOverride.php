@@ -10,24 +10,9 @@ use Rez\Domain\Resource\ResourceId;
 final class AvailabilityOverride
 {
     public function __construct(
-        private readonly ResourceId $resourceId,
-        private readonly DateTimeImmutable $date,
-        private readonly bool $available,
+        public readonly ResourceId $resourceId,
+        public readonly DateTimeImmutable $date,
+        public readonly bool $isAvailable,
     ) {
-    }
-
-    public function getResourceId(): ResourceId
-    {
-        return $this->resourceId;
-    }
-
-    public function getDate(): DateTimeImmutable
-    {
-        return $this->date;
-    }
-
-    public function isAvailable(): bool
-    {
-        return $this->available;
     }
 }

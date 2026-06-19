@@ -119,7 +119,7 @@ class CreateReservationUseCaseTest extends TestCase
             $this->party,
         ));
 
-        $this->assertSame(ReservationStatus::Pending, $response->reservation->getStatus());
+        $this->assertSame(ReservationStatus::Pending, $response->reservation->status);
     }
 
     public function testSuccessReservationHasCorrectResourceId(): void
@@ -134,6 +134,6 @@ class CreateReservationUseCaseTest extends TestCase
             $this->party,
         ));
 
-        $this->assertTrue($response->reservation->getResourceIds()->contains($this->resourceId));
+        $this->assertTrue($response->reservation->resourceIds->contains($this->resourceId));
     }
 }

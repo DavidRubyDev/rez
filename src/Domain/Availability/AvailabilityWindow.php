@@ -10,11 +10,11 @@ use Rez\Domain\Resource\ResourceId;
 
 final class AvailabilityWindow
 {
-    /** @param TimeSlot[] $availableSlots */
+    /** @param TimeSlot[] $slots */
     public function __construct(
-        private readonly ResourceId $resourceId,
-        private readonly DateTimeImmutable $date,
-        private readonly array $availableSlots,
+        public readonly ResourceId $resourceId,
+        public readonly DateTimeImmutable $date,
+        public readonly array $slots,
     ) {
     }
 
@@ -23,29 +23,13 @@ final class AvailabilityWindow
         return new self($resourceId, $date, []);
     }
 
-    public function getResourceId(): ResourceId
-    {
-        return $this->resourceId;
-    }
-
-    public function getDate(): DateTimeImmutable
-    {
-        return $this->date;
-    }
-
-    /** @return TimeSlot[] */
-    public function getSlots(): array
-    {
-        return $this->availableSlots;
-    }
-
     public function isEmpty(): bool
     {
-        return $this->availableSlots === [];
+        return $this->slots === [];
     }
 
     public function count(): int
     {
-        return count($this->availableSlots);
+        return count($this->slots);
     }
 }

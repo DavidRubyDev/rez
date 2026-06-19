@@ -9,10 +9,10 @@ use Rez\Domain\Exception\InvalidPartyException;
 final class Party
 {
     public function __construct(
-        private readonly string $name,
-        private readonly string $email,
-        private readonly int $size,
-        private readonly ?string $phone,
+        public readonly string $name,
+        public readonly string $email,
+        public readonly int $size,
+        public readonly ?string $phone,
     ) {
         if ($name === '') {
             throw new InvalidPartyException('Party name must not be empty.');
@@ -27,23 +27,4 @@ final class Party
         }
     }
 
-    public function getName(): string
-    {
-        return $this->name;
-    }
-
-    public function getEmail(): string
-    {
-        return $this->email;
-    }
-
-    public function getSize(): int
-    {
-        return $this->size;
-    }
-
-    public function getPhone(): ?string
-    {
-        return $this->phone;
-    }
 }

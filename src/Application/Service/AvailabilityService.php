@@ -26,17 +26,17 @@ final class AvailabilityService implements AvailabilityServiceInterface
     public function isSlotAvailable(ResourceId $resourceId, TimeSlot $slot): bool
     {
         $rules = $this->availabilityRepository->findRulesForResource($resourceId);
-        $rule  = $this->findRuleForDate($rules, $slot->getStart());
+        $rule  = $this->findRuleForDate($rules, $slot->start);
 
         if ($rule === null) {
             return false;
         }
 
-        $dayStart  = $slot->getStart()->setTime(0, 0);
+        $dayStart  = $slot->start->setTime(0, 0);
         $dayEnd    = $dayStart->modify('+1 day');
         $overrides = $this->availabilityRepository->findOverridesForResource($resourceId, $dayStart, $dayEnd);
 
-        if ($this->isBlockedByOverride($overrides, $slot->getStart())) {
+        if ($this->isBlockedByOverride($overrides, $slot->start)) {
             return false;
         }
 
@@ -85,7 +85,7 @@ final class AvailabilityService implements AvailabilityServiceInterface
         $dateString = $date->format('Y-m-d');
 
         foreach ($overrides as $override) {
-            if ($override->getDate()->format('Y-m-d') === $dateString && !$override->isAvailable()) {
+            if ($override->date->format('Y-m-d') === $dateString && !$override->isAvailable) {
                 return true;
             }
         }
@@ -125,7 +125,7 @@ final class AvailabilityService implements AvailabilityServiceInterface
             $candidates,
             function (TimeSlot $candidate) use ($reservations): bool {
                 foreach ($reservations->toArray() as $reservation) {
-                    if ($candidate->overlapsWith($reservation->getSlot())) {
+                    if ($candidate->overlapsWith($reservation->slot)) {
                         return false;
                     }
                 }

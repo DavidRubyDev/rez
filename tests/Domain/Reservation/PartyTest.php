@@ -14,10 +14,10 @@ class PartyTest extends TestCase
     {
         $party = new Party('John Doe', 'john@example.com', 3, '+1234567890');
 
-        $this->assertSame('John Doe', $party->getName());
-        $this->assertSame('john@example.com', $party->getEmail());
-        $this->assertSame(3, $party->getSize());
-        $this->assertSame('+1234567890', $party->getPhone());
+        $this->assertSame('John Doe', $party->name);
+        $this->assertSame('john@example.com', $party->email);
+        $this->assertSame(3, $party->size);
+        $this->assertSame('+1234567890', $party->phone);
     }
 
     public function testEmptyNameThrowsInvalidPartyException(): void
@@ -48,6 +48,6 @@ class PartyTest extends TestCase
     {
         $party = new Party('John Doe', 'john@example.com', 1, null);
 
-        $this->assertNull($party->getPhone());
+        $this->assertNull($party->phone);
     }
 }

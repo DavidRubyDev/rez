@@ -56,7 +56,7 @@ class ReservationCollectionTest extends TestCase
         $confirmed = $this->makeReservation()->confirm();
 
         $collection = ReservationCollection::empty()->add($pending)->add($confirmed);
-        $filtered   = $collection->filter(fn (Reservation $r) => $r->getStatus() === ReservationStatus::Confirmed);
+        $filtered   = $collection->filter(fn (Reservation $r) => $r->status === ReservationStatus::Confirmed);
 
         $this->assertSame(1, $filtered->count());
     }
@@ -70,7 +70,7 @@ class ReservationCollectionTest extends TestCase
         $filtered   = $collection->filterByStatus(ReservationStatus::Pending);
 
         $this->assertSame(1, $filtered->count());
-        $this->assertSame(ReservationStatus::Pending, $filtered->toArray()[0]->getStatus());
+        $this->assertSame(ReservationStatus::Pending, $filtered->toArray()[0]->status);
     }
 
     public function testFindByIdReturnsCorrectReservation(): void
@@ -78,10 +78,10 @@ class ReservationCollectionTest extends TestCase
         $reservation = $this->makeReservation();
         $collection  = ReservationCollection::empty()->add($reservation);
 
-        $found = $collection->findById($reservation->getId());
+        $found = $collection->findById($reservation->id);
 
         $this->assertNotNull($found);
-        $this->assertTrue($reservation->getId()->equals($found->getId()));
+        $this->assertTrue($reservation->id->equals($found->id));
     }
 
     public function testFindByIdReturnsNullWhenNotFound(): void

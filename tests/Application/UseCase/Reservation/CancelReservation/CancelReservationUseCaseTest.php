@@ -58,7 +58,7 @@ class CancelReservationUseCaseTest extends TestCase
 
         $this->expectException(DomainException::class);
 
-        $this->useCase->execute(new CancelReservationRequest($cancelled->getId()));
+        $this->useCase->execute(new CancelReservationRequest($cancelled->id));
     }
 
     public function testSuccessSaveCalledWithCancelledReservation(): void
@@ -69,18 +69,18 @@ class CancelReservationUseCaseTest extends TestCase
             ->expects($this->once())
             ->method('save')
             ->with($this->callback(
-                fn (Reservation $r) => $r->getStatus() === ReservationStatus::Cancelled
+                fn (Reservation $r) => $r->status === ReservationStatus::Cancelled
             ));
 
-        $this->useCase->execute(new CancelReservationRequest($this->reservation->getId()));
+        $this->useCase->execute(new CancelReservationRequest($this->reservation->id));
     }
 
     public function testSuccessResponseHasCancelledStatus(): void
     {
         $this->reservationRepository->method('findById')->willReturn($this->reservation);
 
-        $response = $this->useCase->execute(new CancelReservationRequest($this->reservation->getId()));
+        $response = $this->useCase->execute(new CancelReservationRequest($this->reservation->id));
 
-        $this->assertSame(ReservationStatus::Cancelled, $response->reservation->getStatus());
+        $this->assertSame(ReservationStatus::Cancelled, $response->reservation->status);
     }
 }

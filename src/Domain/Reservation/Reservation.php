@@ -11,12 +11,12 @@ use Rez\Domain\Resource\ResourceIdCollection;
 final class Reservation
 {
     private function __construct(
-        private readonly ReservationId $id,
-        private readonly ResourceIdCollection $resourceIds,
-        private readonly TimeSlot $slot,
-        private readonly Party $party,
-        private readonly ReservationStatus $status,
-        private readonly DateTimeImmutable $createdAt,
+        public readonly ReservationId $id,
+        public readonly ResourceIdCollection $resourceIds,
+        public readonly TimeSlot $slot,
+        public readonly Party $party,
+        public readonly ReservationStatus $status,
+        public readonly DateTimeImmutable $createdAt,
     ) {
     }
 
@@ -42,36 +42,6 @@ final class Reservation
         DateTimeImmutable $createdAt,
     ): self {
         return new self($id, $resourceIds, $slot, $party, $status, $createdAt);
-    }
-
-    public function getId(): ReservationId
-    {
-        return $this->id;
-    }
-
-    public function getResourceIds(): ResourceIdCollection
-    {
-        return $this->resourceIds;
-    }
-
-    public function getSlot(): TimeSlot
-    {
-        return $this->slot;
-    }
-
-    public function getParty(): Party
-    {
-        return $this->party;
-    }
-
-    public function getStatus(): ReservationStatus
-    {
-        return $this->status;
-    }
-
-    public function getCreatedAt(): DateTimeImmutable
-    {
-        return $this->createdAt;
     }
 
     public function cancel(): self

@@ -59,11 +59,11 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
         ');
 
         $stmt->execute([
-            ':id'         => $resource->getId()->toString(),
-            ':type'       => $this->typeMapper->toString($resource->getType()),
-            ':name'       => $resource->getName(),
-            ':capacity'   => $resource->getCapacity(),
-            ':attributes' => json_encode($resource->getAttributes()),
+            ':id'         => $resource->id->toString(),
+            ':type'       => $this->typeMapper->toString($resource->type),
+            ':name'       => $resource->name,
+            ':capacity'   => $resource->capacity,
+            ':attributes' => json_encode($resource->attributes),
         ]);
     }
 

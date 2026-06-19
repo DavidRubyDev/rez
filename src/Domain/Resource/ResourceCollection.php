@@ -52,7 +52,7 @@ final class ResourceCollection
     public function findById(ResourceId $id): ?Resource
     {
         foreach ($this->resources as $resource) {
-            if ($resource->getId()->equals($id)) {
+            if ($resource->id->equals($id)) {
                 return $resource;
             }
         }
