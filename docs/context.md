@@ -83,9 +83,26 @@ No test needed — used in Reservation tests.
 
 ---
 
+### 5. ResourceType + ResourceTypeMapper
+
+`src/Domain/Resource/ResourceType.php` — immutable value object wrapping a slug string.
+
+- `static fromString(string $slug): self` — validates lowercase alphanumeric + hyphens, throws `\InvalidArgumentException` if invalid
+- `toString(): string`
+- `equals(self $other): bool`
+- `__toString(): string`
+
+`src/Infrastructure/Mapper/ResourceTypeMapper.php` — maps `ResourceType` to/from string for persistence.
+
+- `toString(ResourceType): string`
+- `fromString(string): ResourceType` — inherits validation from `ResourceType::fromString()`
+
+`tests/Infrastructure/Mapper/ResourceTypeMapperTest.php` — all 4 cases passing.
+
+---
+
 ## Pending Steps
 
-- **5.** `ResourceType`
 - **6.** `Party` + `PartyTest`
 - **7.** `Resource` + `ResourceTest`
 - **8.** `ResourceCollection` + `ResourceCollectionTest`
@@ -97,6 +114,5 @@ No test needed — used in Reservation tests.
 - **14.** `DateTimeRange`
 - **15.** Port interfaces (`ReservationRepositoryInterface`, `ResourceRepositoryInterface`, `AvailabilityRepositoryInterface`)
 - **16.** Application use cases + tests (CreateReservation, CancelReservation, GetReservation, ListReservations, GetAvailability)
-- **17.** Infrastructure mappers (`ResourceTypeMapper` — `ReservationStatusMapper` done)
 - **18.** Infrastructure MySQL repositories (`MysqlReservationRepository`, `MysqlResourceRepository`)
 - **19.** Handlers (Reservation, Resource, Availability)
