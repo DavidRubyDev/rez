@@ -363,6 +363,22 @@ All callers updated (application services, use cases, infrastructure repositorie
 
 ---
 
+### 17b. PHP-DI container definitions
+
+Added `php-di/php-di ^7.0` as a runtime dependency.
+
+`config/container.php` — library-owned definitions file for the client app to import:
+- `AvailabilityServiceInterface::class` → `autowire(AvailabilityService::class)` — the only interface-to-implementation binding the library owns
+
+Everything else is resolved by PHP-DI auto-wiring:
+- Mappers (`ReservationStatusMapper`, `ResourceTypeMapper`, `DayOfWeekMapper`) — no deps, auto-wired
+- Repositories — auto-wired once the client binds `PDO` and the three repository interfaces
+- Use cases — auto-wired once their interface dependencies are bound
+
+Client app is responsible for binding: `PDO`, and the three `*RepositoryInterface` → `Mysql*Repository` pairs.
+
+---
+
 ## Pending Steps
 
 - **19.** Handlers (Reservation, Resource, Availability)
