@@ -147,7 +147,7 @@ No test needed — used in Reservation tests.
 
 `src/Domain/Reservation/Reservation.php` — immutable entity, static factory only.
 
-- `static create(ReservationId, ResourceId[] $resourceIds, TimeSlot, Party): self` — sets status to `Pending`, `createdAt` to UTC now. Throws `\InvalidArgumentException` if `$resourceIds` is empty.
+- `static create(ReservationId, ResourceIdCollection $resourceIds, TimeSlot, Party): self` — sets status to `Pending`, `createdAt` to UTC now. Throws `\InvalidArgumentException` if `$resourceIds` is empty.
 - `confirm(): self` — only from `Pending`, throws `InvalidReservationStateException` otherwise
 - `cancel(): self` — from `Pending` or `Confirmed`, throws `InvalidReservationStateException` if already `Cancelled`
 - `markNoShow(): self` — only from `Confirmed`, throws `InvalidReservationStateException` otherwise
@@ -156,6 +156,23 @@ No test needed — used in Reservation tests.
 Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `DomainException` subclass for state transition violations.
 
 `tests/Domain/Reservation/ReservationTest.php` — all 12 cases passing.
+
+---
+
+### 9b. ResourceIdCollection + ResourceIdCollectionTest
+
+`src/Domain/Resource/ResourceIdCollection.php` — immutable collection wrapping `ResourceId[]`.
+
+- `static empty(): self`
+- `static fromArray(ResourceId[]): self` — throws `\InvalidArgumentException` if empty
+- `add(ResourceId): self` — immutable
+- `contains(ResourceId): bool`
+- `isEmpty(): bool`
+- `count(): int`
+- `toArray(): ResourceId[]`
+
+`Reservation::create()` now accepts `ResourceIdCollection` (not `ResourceId[]`) and throws if empty.
+`tests/Domain/Resource/ResourceIdCollectionTest.php` — all 8 cases passing.
 
 ---
 

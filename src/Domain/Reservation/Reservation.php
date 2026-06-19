@@ -6,14 +6,13 @@ namespace Rez\Domain\Reservation;
 
 use DateTimeImmutable;
 use Rez\Domain\Exception\InvalidReservationStateException;
-use Rez\Domain\Resource\ResourceId;
+use Rez\Domain\Resource\ResourceIdCollection;
 
 final class Reservation
 {
-    /** @param ResourceId[] $resourceIds */
     private function __construct(
         private readonly ReservationId $id,
-        private readonly array $resourceIds,
+        private readonly ResourceIdCollection $resourceIds,
         private readonly TimeSlot $slot,
         private readonly Party $party,
         private readonly ReservationStatus $status,
@@ -21,14 +20,13 @@ final class Reservation
     ) {
     }
 
-    /** @param ResourceId[] $resourceIds */
     public static function create(
         ReservationId $id,
-        array $resourceIds,
+        ResourceIdCollection $resourceIds,
         TimeSlot $slot,
         Party $party,
     ): self {
-        if ($resourceIds === []) {
+        if ($resourceIds->isEmpty()) {
             throw new \InvalidArgumentException('A reservation must have at least one resource.');
         }
 
@@ -40,8 +38,7 @@ final class Reservation
         return $this->id;
     }
 
-    /** @return ResourceId[] */
-    public function resourceIds(): array
+    public function resourceIds(): ResourceIdCollection
     {
         return $this->resourceIds;
     }
