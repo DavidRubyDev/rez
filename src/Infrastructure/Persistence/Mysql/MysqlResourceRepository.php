@@ -14,12 +14,10 @@ use Rez\Infrastructure\Mapper\ResourceTypeMapper;
 
 final class MysqlResourceRepository extends MysqlRepository implements ResourceRepositoryInterface
 {
-    private ResourceTypeMapper $typeMapper;
-
     public function __construct(
         private readonly PDO $pdo,
+        private readonly ResourceTypeMapper $typeMapper,
     ) {
-        $this->typeMapper = new ResourceTypeMapper();
     }
 
     public function findById(ResourceId $id): Resource
@@ -61,11 +59,11 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
         ');
 
         $stmt->execute([
-            ':id'         => $resource->id()->toString(),
-            ':type'       => $this->typeMapper->toString($resource->type()),
-            ':name'       => $resource->name(),
-            ':capacity'   => $resource->capacity(),
-            ':attributes' => json_encode($resource->attributes()),
+            ':id'         => $resource->getId()->toString(),
+            ':type'       => $this->typeMapper->toString($resource->getType()),
+            ':name'       => $resource->getName(),
+            ':capacity'   => $resource->getCapacity(),
+            ':attributes' => json_encode($resource->getAttributes()),
         ]);
     }
 

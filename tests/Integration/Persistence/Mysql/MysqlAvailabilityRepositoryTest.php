@@ -9,6 +9,7 @@ use Rez\Domain\Availability\AvailabilityOverride;
 use Rez\Domain\Availability\AvailabilityRule;
 use Rez\Domain\Availability\DayOfWeek;
 use Rez\Domain\Resource\ResourceId;
+use Rez\Infrastructure\Mapper\DayOfWeekMapper;
 use Rez\Infrastructure\Persistence\Mysql\MysqlAvailabilityRepository;
 
 class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
@@ -20,7 +21,7 @@ class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
     {
         parent::setUp();
 
-        $this->repository = new MysqlAvailabilityRepository($this->pdo());
+        $this->repository = new MysqlAvailabilityRepository($this->pdo(), new DayOfWeekMapper());
         $this->resourceId = ResourceId::generate();
     }
 
@@ -32,9 +33,9 @@ class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
         $rules = $this->repository->findRulesForResource($this->resourceId);
 
         $this->assertCount(1, $rules);
-        $this->assertSame(DayOfWeek::Monday, $rules[0]->dayOfWeek());
-        $this->assertSame('09:00', $rules[0]->openTime());
-        $this->assertSame('17:00', $rules[0]->closeTime());
+        $this->assertSame(DayOfWeek::Monday, $rules[0]->getDayOfWeek());
+        $this->assertSame('09:00', $rules[0]->getOpenTime());
+        $this->assertSame('17:00', $rules[0]->getCloseTime());
     }
 
     public function testFindRulesForResourceReturnsEmptyForUnknownResource(): void
@@ -57,7 +58,7 @@ class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
 
         $this->assertCount(1, $overrides);
         $this->assertFalse($overrides[0]->isAvailable());
-        $this->assertSame('2024-01-15', $overrides[0]->date()->format('Y-m-d'));
+        $this->assertSame('2024-01-15', $overrides[0]->getDate()->format('Y-m-d'));
     }
 
     public function testFindOverridesForResourceFiltersOutsideDateRange(): void

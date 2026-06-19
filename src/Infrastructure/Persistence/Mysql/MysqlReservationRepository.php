@@ -19,12 +19,10 @@ use Rez\Infrastructure\Mapper\ReservationStatusMapper;
 
 final class MysqlReservationRepository extends MysqlRepository implements ReservationRepositoryInterface
 {
-    private ReservationStatusMapper $statusMapper;
-
     public function __construct(
         private readonly PDO $pdo,
+        private readonly ReservationStatusMapper $statusMapper,
     ) {
-        $this->statusMapper = new ReservationStatusMapper();
     }
 
     public function findById(ReservationId $id): Reservation
@@ -54,8 +52,8 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
 
         $stmt->execute([
             ':resource_id' => $resourceId->toString(),
-            ':start_at'    => $slot->start()->format('Y-m-d H:i:s'),
-            ':end_at'      => $slot->end()->format('Y-m-d H:i:s'),
+            ':start_at'    => $slot->getStart()->format('Y-m-d H:i:s'),
+            ':end_at'      => $slot->getEnd()->format('Y-m-d H:i:s'),
         ]);
 
         /** @var array<int, array<string, mixed>> $rows */
@@ -107,27 +105,27 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         ');
 
         $stmt->execute([
-            ':id'          => $reservation->id()->toString(),
-            ':status'      => $this->statusMapper->toString($reservation->status()),
-            ':start_at'    => $reservation->slot()->start()->format('Y-m-d H:i:s'),
-            ':end_at'      => $reservation->slot()->end()->format('Y-m-d H:i:s'),
-            ':party_name'  => $reservation->party()->name(),
-            ':party_email' => $reservation->party()->email(),
-            ':party_size'  => $reservation->party()->size(),
-            ':party_phone' => $reservation->party()->phone(),
-            ':created_at'  => $reservation->createdAt()->format('Y-m-d H:i:s'),
+            ':id'          => $reservation->getId()->toString(),
+            ':status'      => $this->statusMapper->toString($reservation->getStatus()),
+            ':start_at'    => $reservation->getSlot()->getStart()->format('Y-m-d H:i:s'),
+            ':end_at'      => $reservation->getSlot()->getEnd()->format('Y-m-d H:i:s'),
+            ':party_name'  => $reservation->getParty()->getName(),
+            ':party_email' => $reservation->getParty()->getEmail(),
+            ':party_size'  => $reservation->getParty()->getSize(),
+            ':party_phone' => $reservation->getParty()->getPhone(),
+            ':created_at'  => $reservation->getCreatedAt()->format('Y-m-d H:i:s'),
         ]);
 
         $delete = $this->pdo->prepare('DELETE FROM reservation_resources WHERE reservation_id = :id');
-        $delete->execute([':id' => $reservation->id()->toString()]);
+        $delete->execute([':id' => $reservation->getId()->toString()]);
 
         $insert = $this->pdo->prepare('
             INSERT INTO reservation_resources (reservation_id, resource_id) VALUES (:reservation_id, :resource_id)
         ');
 
-        foreach ($reservation->resourceIds()->toArray() as $resourceId) {
+        foreach ($reservation->getResourceIds()->toArray() as $resourceId) {
             $insert->execute([
-                ':reservation_id' => $reservation->id()->toString(),
+                ':reservation_id' => $reservation->getId()->toString(),
                 ':resource_id'    => $resourceId->toString(),
             ]);
         }

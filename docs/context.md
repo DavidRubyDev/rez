@@ -341,6 +341,28 @@ Schema: `resources`, `reservations`, `reservation_resources`, `availability_rule
 
 ---
 
+### 17. Getter-prefix refactor + DI in repositories
+
+All property-accessor methods across the domain now follow `get*` / `is*` naming conventions.
+
+**Domain getter renames:**
+- `TimeSlot`: `start()` → `getStart()`, `end()` → `getEnd()`
+- `Party`: `name()` → `getName()`, `email()` → `getEmail()`, `size()` → `getSize()`, `phone()` → `getPhone()`
+- `Reservation`: `id()` → `getId()`, `resourceIds()` → `getResourceIds()`, `slot()` → `getSlot()`, `party()` → `getParty()`, `status()` → `getStatus()`, `createdAt()` → `getCreatedAt()`
+- `Resource`: `id()` → `getId()`, `type()` → `getType()`, `name()` → `getName()`, `capacity()` → `getCapacity()`, `attributes()` → `getAttributes()`
+- `AvailabilityRule`: `resourceId()` → `getResourceId()`, `dayOfWeek()` → `getDayOfWeek()`, `openTime()` → `getOpenTime()`, `closeTime()` → `getCloseTime()`
+- `AvailabilityOverride`: `resourceId()` → `getResourceId()`, `date()` → `getDate()` (`isAvailable()` unchanged)
+- `AvailabilityWindow`: `resourceId()` → `getResourceId()`, `date()` → `getDate()`, `slots()` → `getSlots()`
+- `DateTimeRange`: `start()` → `getStart()`, `end()` → `getEnd()`
+- `ConflictException`: `slot()` → `getSlot()`, `resource()` → `getResource()`
+
+**DI in MySQL repositories:** `ReservationStatusMapper`, `ResourceTypeMapper`, and `DayOfWeekMapper` are now injected via constructor parameters rather than instantiated internally.
+
+All callers updated (application services, use cases, infrastructure repositories, all tests).
+128 unit tests passing, PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
 - **19.** Handlers (Reservation, Resource, Availability)

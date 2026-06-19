@@ -12,6 +12,7 @@ use Rez\Domain\Reservation\ReservationId;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Infrastructure\Mapper\ReservationStatusMapper;
 use Rez\Infrastructure\Persistence\Mysql\MysqlReservationRepository;
 
 class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
@@ -24,7 +25,7 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
     {
         parent::setUp();
 
-        $this->repository = new MysqlReservationRepository($this->pdo());
+        $this->repository = new MysqlReservationRepository($this->pdo(), new ReservationStatusMapper());
         $this->resourceId = ResourceId::generate();
         $this->party      = new Party('John Doe', 'john@example.com', 2, null);
     }
@@ -47,11 +48,11 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $reservation = $this->makeReservation();
         $this->repository->save($reservation);
 
-        $found = $this->repository->findById($reservation->id());
+        $found = $this->repository->findById($reservation->getId());
 
-        $this->assertTrue($reservation->id()->equals($found->id()));
-        $this->assertSame($reservation->status(), $found->status());
-        $this->assertTrue($found->resourceIds()->contains($this->resourceId));
+        $this->assertTrue($reservation->getId()->equals($found->getId()));
+        $this->assertSame($reservation->getStatus(), $found->getStatus());
+        $this->assertTrue($found->getResourceIds()->contains($this->resourceId));
     }
 
     public function testFindByIdMissingThrowsReservationNotFoundException(): void
@@ -68,9 +69,9 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $confirmed = $reservation->confirm();
         $this->repository->save($confirmed);
 
-        $found = $this->repository->findById($reservation->id());
+        $found = $this->repository->findById($reservation->getId());
 
-        $this->assertSame($confirmed->status(), $found->status());
+        $this->assertSame($confirmed->getStatus(), $found->getStatus());
     }
 
     public function testFindByTimeSlotAndResourceReturnsOverlappingReservations(): void
@@ -95,7 +96,7 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $result = $this->repository->findByTimeSlotAndResource($querySlot, $this->resourceId);
 
         $this->assertSame(1, $result->count());
-        $this->assertTrue($result->toArray()[0]->id()->equals($overlapping->id()));
+        $this->assertTrue($result->toArray()[0]->getId()->equals($overlapping->getId()));
     }
 
     public function testFindAllWithNoFiltersReturnsAll(): void
@@ -128,6 +129,6 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         );
 
         $this->assertSame(1, $result->count());
-        $this->assertTrue($result->toArray()[0]->id()->equals($inside->id()));
+        $this->assertTrue($result->toArray()[0]->getId()->equals($inside->getId()));
     }
 }

@@ -16,12 +16,12 @@ class ConflictException extends DomainException
         parent::__construct('Reservation conflicts with an existing booking.');
     }
 
-    public function slot(): TimeSlot
+    public function getSlot(): TimeSlot
     {
         return $this->slot;
     }
 
-    public function resource(): Resource
+    public function getResource(): Resource
     {
         return $this->resource;
     }

@@ -18,12 +18,12 @@ final class DateTimeRange
         }
     }
 
-    public function start(): DateTimeImmutable
+    public function getStart(): DateTimeImmutable
     {
         return $this->start;
     }
 
-    public function end(): DateTimeImmutable
+    public function getEnd(): DateTimeImmutable
     {
         return $this->end;
     }
@@ -35,7 +35,7 @@ final class DateTimeRange
 
     public function overlapsWith(DateTimeRange $other): bool
     {
-        return $this->start < $other->end && $this->end > $other->start;
+        return $this->start < $other->getEnd() && $this->end > $other->getStart();
     }
 
     public function toTimeSlot(): TimeSlot

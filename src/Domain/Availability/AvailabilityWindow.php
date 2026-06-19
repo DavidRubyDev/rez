@@ -23,18 +23,18 @@ final class AvailabilityWindow
         return new self($resourceId, $date, []);
     }
 
-    public function resourceId(): ResourceId
+    public function getResourceId(): ResourceId
     {
         return $this->resourceId;
     }
 
-    public function date(): DateTimeImmutable
+    public function getDate(): DateTimeImmutable
     {
         return $this->date;
     }
 
     /** @return TimeSlot[] */
-    public function slots(): array
+    public function getSlots(): array
     {
         return $this->availableSlots;
     }

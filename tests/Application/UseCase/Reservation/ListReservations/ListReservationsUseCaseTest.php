@@ -69,6 +69,6 @@ class ListReservationsUseCaseTest extends TestCase
         $response = $this->useCase->execute(new ListReservationsRequest(resourceId: $this->resourceId));
 
         $this->assertSame(1, $response->reservations->count());
-        $this->assertTrue($response->reservations->toArray()[0]->resourceIds()->contains($this->resourceId));
+        $this->assertTrue($response->reservations->toArray()[0]->getResourceIds()->contains($this->resourceId));
     }
 }

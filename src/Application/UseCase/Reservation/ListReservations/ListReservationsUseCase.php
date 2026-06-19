@@ -21,7 +21,7 @@ final class ListReservationsUseCase
         if ($request->resourceId !== null) {
             $resourceId   = $request->resourceId;
             $reservations = $reservations->filter(
-                fn (Reservation $r) => $r->resourceIds()->contains($resourceId)
+                fn (Reservation $r) => $r->getResourceIds()->contains($resourceId)
             );
         }
 

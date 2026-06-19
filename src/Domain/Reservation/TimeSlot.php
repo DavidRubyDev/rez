@@ -21,12 +21,12 @@ final class TimeSlot
         }
     }
 
-    public function start(): DateTimeImmutable
+    public function getStart(): DateTimeImmutable
     {
         return $this->start;
     }
 
-    public function end(): DateTimeImmutable
+    public function getEnd(): DateTimeImmutable
     {
         return $this->end;
     }
