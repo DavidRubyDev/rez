@@ -13,19 +13,19 @@ use Rez\Domain\Reservation\ReservationId;
 use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
+use Rez\Domain\Resource\ResourceIdCollection;
 
 class ReservationTest extends TestCase
 {
     private ReservationId $id;
-    /** @var ResourceId[] */
-    private array $resourceIds;
+    private ResourceIdCollection $resourceIds;
     private TimeSlot $slot;
     private Party $party;
 
     protected function setUp(): void
     {
         $this->id          = ReservationId::generate();
-        $this->resourceIds = [ResourceId::generate(), ResourceId::generate()];
+        $this->resourceIds = ResourceIdCollection::fromArray([ResourceId::generate(), ResourceId::generate()]);
         $this->slot        = new TimeSlot(new DateTimeImmutable('2024-01-15 10:00:00'), new DateTimeImmutable('2024-01-15 11:00:00'));
         $this->party       = new Party('John Doe', 'john@example.com', 2, null);
     }
@@ -50,14 +50,14 @@ class ReservationTest extends TestCase
     public function testCreateWithNoResourceIdsThrowsInvalidArgumentException(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        Reservation::create($this->id, [], $this->slot, $this->party);
+        Reservation::create($this->id, ResourceIdCollection::empty(), $this->slot, $this->party);
     }
 
     public function testCreateStoresAllResourceIds(): void
     {
         $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
 
-        $this->assertCount(2, $reservation->resourceIds());
+        $this->assertSame(2, $reservation->resourceIds()->count());
     }
 
     public function testConfirmFromPendingReturnsConfirmed(): void

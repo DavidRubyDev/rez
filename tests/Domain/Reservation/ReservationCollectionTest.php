@@ -13,6 +13,7 @@ use Rez\Domain\Reservation\ReservationId;
 use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
+use Rez\Domain\Resource\ResourceIdCollection;
 
 class ReservationCollectionTest extends TestCase
 {
@@ -20,7 +21,7 @@ class ReservationCollectionTest extends TestCase
     {
         return Reservation::create(
             ReservationId::generate(),
-            [ResourceId::generate()],
+            ResourceIdCollection::fromArray([ResourceId::generate()]),
             new TimeSlot(new DateTimeImmutable('2024-01-15 10:00:00'), new DateTimeImmutable('2024-01-15 11:00:00')),
             new Party('John Doe', 'john@example.com', 2, null),
         );
