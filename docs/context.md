@@ -260,9 +260,27 @@ Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `
 
 ---
 
+### 15. Port Interfaces
+
+`src/Application/Port/ReservationRepositoryInterface.php`:
+- `findById(ReservationId): Reservation`
+- `findByTimeSlotAndResource(TimeSlot, ResourceId): ReservationCollection`
+- `findAll(?DateTimeImmutable $from, ?DateTimeImmutable $to): ReservationCollection`
+- `save(Reservation): void`
+
+`src/Application/Port/ResourceRepositoryInterface.php`:
+- `findById(ResourceId): Resource`
+- `findAll(): ResourceCollection`
+- `save(Resource): void`
+
+`src/Application/Port/AvailabilityRepositoryInterface.php`:
+- `findRulesForResource(ResourceId): AvailabilityRule[]`
+- `findOverridesForResource(ResourceId, DateTimeImmutable $from, DateTimeImmutable $to): AvailabilityOverride[]`
+
+---
+
 ## Pending Steps
 
-- **15.** Port interfaces (`ReservationRepositoryInterface`, `ResourceRepositoryInterface`, `AvailabilityRepositoryInterface`)
 - **16.** Application use cases + tests (CreateReservation, CancelReservation, GetReservation, ListReservations, GetAvailability)
 - **18.** Infrastructure MySQL repositories (`MysqlReservationRepository`, `MysqlResourceRepository`)
 - **19.** Handlers (Reservation, Resource, Availability)
