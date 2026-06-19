@@ -194,21 +194,29 @@ Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `
 
 ---
 
-### 11. AvailabilityRule + AvailabilityRuleTest
+### 11. DayOfWeek + AvailabilityRule + AvailabilityRuleTest + DayOfWeekMapper
+
+`src/Domain/Availability/DayOfWeek.php` — pure enum, Monday-first (Monday … Sunday).
+
+- `static fromDate(DateTimeImmutable): self` — uses ISO-8601 `format('N')` (1=Monday, 7=Sunday)
+- String serialization in `DayOfWeekMapper`
 
 `src/Domain/Availability/AvailabilityRule.php` — immutable value object.
 
-- Constructor: `ResourceId $resourceId`, `int $dayOfWeek` (0–6), `string $openTime` ('HH:MM'), `string $closeTime` ('HH:MM')
-- Throws `\InvalidArgumentException` if `$dayOfWeek` outside 0–6 or `$closeTime <= $openTime`
+- Constructor: `ResourceId $resourceId`, `DayOfWeek $dayOfWeek`, `string $openTime` ('HH:MM'), `string $closeTime` ('HH:MM')
+- Throws `\InvalidArgumentException` if `$closeTime <= $openTime`
 - `resourceId(): ResourceId`
-- `dayOfWeek(): int`
+- `dayOfWeek(): DayOfWeek`
 - `openTime(): string`
 - `closeTime(): string`
-- `appliesToDate(DateTimeImmutable): bool` — compares `$date->format('w')` to `dayOfWeek`
+- `appliesToDate(DateTimeImmutable): bool` — uses `DayOfWeek::fromDate()`
 - `openTimeForDate(DateTimeImmutable): DateTimeImmutable`
 - `closeTimeForDate(DateTimeImmutable): DateTimeImmutable`
 
-`tests/Domain/Availability/AvailabilityRuleTest.php` — all 8 cases passing.
+`src/Infrastructure/Mapper/DayOfWeekMapper.php` — maps `DayOfWeek` to/from string ('monday' … 'sunday').
+
+`tests/Domain/Availability/AvailabilityRuleTest.php` — 6 cases passing.
+`tests/Infrastructure/Mapper/DayOfWeekMapperTest.php` — 3 cases passing.
 
 ---
 

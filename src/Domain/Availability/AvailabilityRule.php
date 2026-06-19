@@ -11,14 +11,10 @@ final class AvailabilityRule
 {
     public function __construct(
         private readonly ResourceId $resourceId,
-        private readonly int $dayOfWeek,
+        private readonly DayOfWeek $dayOfWeek,
         private readonly string $openTime,
         private readonly string $closeTime,
     ) {
-        if ($dayOfWeek < 0 || $dayOfWeek > 6) {
-            throw new \InvalidArgumentException('Day of week must be between 0 (Sunday) and 6 (Saturday).');
-        }
-
         if ($closeTime <= $openTime) {
             throw new \InvalidArgumentException('Close time must be after open time.');
         }
@@ -29,7 +25,7 @@ final class AvailabilityRule
         return $this->resourceId;
     }
 
-    public function dayOfWeek(): int
+    public function dayOfWeek(): DayOfWeek
     {
         return $this->dayOfWeek;
     }
@@ -46,7 +42,7 @@ final class AvailabilityRule
 
     public function appliesToDate(DateTimeImmutable $date): bool
     {
-        return (int) $date->format('w') === $this->dayOfWeek;
+        return DayOfWeek::fromDate($date) === $this->dayOfWeek;
     }
 
     public function openTimeForDate(DateTimeImmutable $date): DateTimeImmutable
