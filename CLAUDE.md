@@ -71,15 +71,13 @@ Write self-commenting code — well-named classes, methods, and variables should
 
 ## Before Every Commit
 
-Run these three commands and fix any issues before committing:
+Run the full code analysis suite and fix any issues before committing:
 
 ```bash
-composer cs-fix   # auto-fix code style
-composer test     # run PHPUnit
-composer stan     # run PHPStan (level max)
+composer ca
 ```
 
-Do not commit if any of these fail. Fix the issue first.
+This runs `cs-fix`, `test`, and `stan` in sequence. Do not commit if any of these fail.
 
 ---
 
@@ -89,10 +87,13 @@ Do not commit if any of these fail. Fix the issue first.
   ```bash
   git checkout -b feature/your-task-name
   ```
-- **After the task is done and pushed:** checkout `main` and pull
+- **After the task is complete:** the user handles `git push` and `git pull` — never run these
+- **After the user confirms the branch is merged:** checkout `main`
   ```bash
-  git checkout main && git pull
+  git checkout main
   ```
+
+**Never run `git push` or `git pull`** — these are always done by the user.
 
 ---
 
