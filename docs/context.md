@@ -194,10 +194,26 @@ Added `src/Domain/Exception/InvalidReservationStateException.php` — concrete `
 
 ---
 
+### 11. AvailabilityRule + AvailabilityRuleTest
+
+`src/Domain/Availability/AvailabilityRule.php` — immutable value object.
+
+- Constructor: `ResourceId $resourceId`, `int $dayOfWeek` (0–6), `string $openTime` ('HH:MM'), `string $closeTime` ('HH:MM')
+- Throws `\InvalidArgumentException` if `$dayOfWeek` outside 0–6 or `$closeTime <= $openTime`
+- `resourceId(): ResourceId`
+- `dayOfWeek(): int`
+- `openTime(): string`
+- `closeTime(): string`
+- `appliesToDate(DateTimeImmutable): bool` — compares `$date->format('w')` to `dayOfWeek`
+- `openTimeForDate(DateTimeImmutable): DateTimeImmutable`
+- `closeTimeForDate(DateTimeImmutable): DateTimeImmutable`
+
+`tests/Domain/Availability/AvailabilityRuleTest.php` — all 8 cases passing.
+
+---
+
 ## Pending Steps
 
-- **11.** `AvailabilityRule` + `AvailabilityRuleTest`
-- **11.** `AvailabilityRule` + `AvailabilityRuleTest`
 - **12.** `AvailabilityOverride`
 - **13.** `AvailabilityWindow`
 - **14.** `DateTimeRange`
