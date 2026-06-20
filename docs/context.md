@@ -420,6 +420,32 @@ All use cases now implement a `*UseCaseInterface` so handlers type-hint on the i
 
 ---
 
+### 20. Resource Use Cases + Handlers
+
+`src/Application/UseCase/Resource/` — three use cases following the same Request/Response/UseCase/Interface pattern.
+
+**CreateResource** — builds a `Resource` from `ResourceType::fromString()`, `ResourceId::generate()`, name, capacity, and optional attributes. Saves via repository and returns it in the response. Throws `\InvalidArgumentException` for invalid type slug or capacity < 1.
+
+**GetResource** — `findById(ResourceId)` — propagates `ResourceNotFoundException` if missing.
+
+**ListResources** — `findAll()` wrapped in `ListResourcesResponse`.
+
+All three expose a `*UseCaseInterface` registered in `config/container.php`.
+
+`src/Handler/ResourceSerializer.php` — shared serialization of `Resource` to typed array shape:
+`array{id: string, type: string, name: string, capacity: int, attributes: array<string, mixed>}`
+
+**Resource handlers** (`src/Handler/Resource/`):
+- `CreateResourceHandler::handle(array{type, name, capacity, attributes?}): array`
+- `GetResourceHandler::handle(array{id}): array`
+- `ListResourcesHandler::handle(array{}): list<array{...}>` — `array_values(array_map(...))` ensures list type
+
+11 new tests (6 use case, 5 handler). Total: 160 unit tests passing, PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-- **20.** Resource use cases + handlers (CreateResource, GetResource, ListResources)
+- **21.** Database setup — `database/schema.sql`
+- **22.** OpenAPI spec — `docs/openapi.yaml`
+- **23.** CLI seed script — `bin/seed.php`

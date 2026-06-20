@@ -800,3 +800,427 @@ Each test verifies that handle() delegates to the use case and returns its respo
 - Run composer install and vendor/bin/phpunit after completing each numbered step above
   Fix any failures before proceeding to the next step
 - Do not create any files outside rez/
+
+---
+
+### 20. Resource Use Cases + Handlers
+
+Build these in TDD order: test → commit → confirm red → implement → amend.
+
+#### CreateResource
+
+`CreateResourceRequest` — readonly constructor properties:
+  `string $type` — ResourceType slug
+  `string $name`
+  `int $capacity`
+  `array $attributes = []`
+
+`CreateResourceResponse` — readonly constructor property: `Resource $resource`
+
+`CreateResourceUseCase implements CreateResourceUseCaseInterface`:
+  Constructor injects `ResourceRepositoryInterface`.
+  Logic:
+  1. `Resource::create(ResourceId::generate(), ResourceType::fromString($request->type), $request->name, $request->capacity, $request->attributes)`
+  2. `save()`
+  3. Return response
+
+`CreateResourceUseCaseInterface` — same pattern as reservation interfaces.
+
+Test:
+  - Success: `save()` called once, response contains resource with correct type/name/capacity
+  - Invalid type slug throws `\InvalidArgumentException`
+  - Capacity < 1 throws `\InvalidArgumentException`
+
+#### GetResource
+
+`GetResourceRequest` — readonly: `ResourceId $resourceId`
+`GetResourceResponse` — readonly: `Resource $resource`
+
+`GetResourceUseCase implements GetResourceUseCaseInterface`:
+  `findById()` — throws `ResourceNotFoundException` if missing.
+
+Test:
+  - Not found throws `ResourceNotFoundException`
+  - Found returns correct resource in response
+
+#### ListResources
+
+`ListResourcesRequest` — empty (no filters).
+`ListResourcesResponse` — readonly: `ResourceCollection $resources`
+
+`ListResourcesUseCase implements ListResourcesUseCaseInterface`:
+  `findAll()` — wrap in response.
+
+Test:
+  - Returns all resources from repository
+
+#### CreateResourceHandler / GetResourceHandler / ListResourcesHandler
+
+`src/Handler/ResourceSerializer.php` — shared serialization of `Resource` to array:
+
+```php
+/**
+ * @return array{
+ *     id: string,
+ *     type: string,
+ *     name: string,
+ *     capacity: int,
+ *     attributes: array<string, mixed>
+ * }
+ */
+public static function serialize(Resource $resource): array
+```
+
+`CreateResourceHandler::handle(array): array`
+  Input shape: `array{type: string, name: string, capacity: int, attributes?: array<string, mixed>}`
+  Returns serialized resource.
+
+`GetResourceHandler::handle(array): array`
+  Input shape: `array{id: string}`
+  Returns serialized resource.
+
+`ListResourcesHandler::handle(array): array`
+  Input shape: `array{}` (no input needed)
+  Returns `list<array{id: string, type: string, name: string, capacity: int, attributes: array<string, mixed>}>`
+
+Add all three use case interfaces to `config/container.php` bindings.
+
+---
+
+### 21. Database Setup
+
+Create a standalone SQL file at `database/schema.sql` containing the full DDL.
+This file is the authoritative schema definition — keep it in sync with `MysqlIntegrationTestCase::createSchema()`.
+
+```sql
+CREATE TABLE IF NOT EXISTS resources (
+    id         CHAR(36)     NOT NULL PRIMARY KEY,
+    type       VARCHAR(100) NOT NULL,
+    name       VARCHAR(255) NOT NULL,
+    capacity   INT          NOT NULL,
+    attributes JSON         NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS reservations (
+    id          CHAR(36)     NOT NULL PRIMARY KEY,
+    status      VARCHAR(20)  NOT NULL,
+    start_at    DATETIME     NOT NULL,
+    end_at      DATETIME     NOT NULL,
+    party_name  VARCHAR(255) NOT NULL,
+    party_email VARCHAR(255) NOT NULL,
+    party_size  INT          NOT NULL,
+    party_phone VARCHAR(50)  NULL,
+    created_at  DATETIME     NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS reservation_resources (
+    reservation_id CHAR(36) NOT NULL,
+    resource_id    CHAR(36) NOT NULL,
+    PRIMARY KEY (reservation_id, resource_id),
+    FOREIGN KEY (reservation_id) REFERENCES reservations(id)  ON DELETE CASCADE,
+    FOREIGN KEY (resource_id)    REFERENCES resources(id)     ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS availability_rules (
+    resource_id CHAR(36)    NOT NULL,
+    day_of_week VARCHAR(10) NOT NULL,
+    open_time   CHAR(5)     NOT NULL,
+    close_time  CHAR(5)     NOT NULL,
+    PRIMARY KEY (resource_id, day_of_week),
+    FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS availability_overrides (
+    resource_id CHAR(36)   NOT NULL,
+    date        DATE       NOT NULL,
+    available   TINYINT(1) NOT NULL,
+    PRIMARY KEY (resource_id, date),
+    FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+);
+```
+
+Column notes:
+- `open_time` / `close_time`: `CHAR(5)` stores `'HH:MM'` exactly as used in `AvailabilityRule`
+- `available`: `1` = available, `0` = blocked
+- `attributes`: `JSON` — MySQL 5.7.8+
+- All timestamps in UTC, stored without timezone
+- No auto-increment IDs — all PKs are UUID v4 strings generated in PHP
+
+---
+
+### 22. OpenAPI / Swagger
+
+Create `docs/openapi.yaml`. This describes the HTTP API surface that a client app exposes by wiring the handlers to routes. The library is framework-agnostic — this spec is the contract, not the implementation.
+
+```yaml
+openapi: 3.0.3
+info:
+  title: Rez Reservation API
+  version: 1.0.0
+
+paths:
+
+  /resources:
+    post:
+      summary: Create a resource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, name, capacity]
+              properties:
+                type:        { type: string, example: table }
+                name:        { type: string, example: "Table 1" }
+                capacity:    { type: integer, minimum: 1, example: 4 }
+                attributes:  { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resource' }
+    get:
+      summary: List all resources
+      responses:
+        '200':
+          description: List of resources
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Resource' }
+
+  /resources/{id}:
+    get:
+      summary: Get a resource by ID
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Resource found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resource' }
+        '404': { description: Resource not found }
+
+  /reservations:
+    post:
+      summary: Create a reservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource_ids, start, end, party]
+              properties:
+                resource_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                  minItems: 1
+                start:  { type: string, format: date-time, example: "2024-06-01 10:00:00" }
+                end:    { type: string, format: date-time, example: "2024-06-01 11:00:00" }
+                party:
+                  type: object
+                  required: [name, email, size]
+                  properties:
+                    name:   { type: string }
+                    email:  { type: string, format: email }
+                    size:   { type: integer, minimum: 1 }
+                    phone:  { type: string, nullable: true }
+      responses:
+        '201':
+          description: Reservation created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '409': { description: Conflict — slot already taken }
+
+    get:
+      summary: List reservations
+      parameters:
+        - { name: from,        in: query, schema: { type: string, format: date-time } }
+        - { name: to,          in: query, schema: { type: string, format: date-time } }
+        - { name: resource_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: List of reservations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Reservation' }
+
+  /reservations/{id}:
+    get:
+      summary: Get a reservation by ID
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Reservation found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '404': { description: Reservation not found }
+
+  /reservations/{id}/cancel:
+    post:
+      summary: Cancel a reservation
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Reservation cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '404': { description: Reservation not found }
+        '422': { description: Cannot cancel (already cancelled) }
+
+  /availability:
+    get:
+      summary: Get available slots for a resource on a date
+      parameters:
+        - { name: resource_id,           in: query, required: true,  schema: { type: string, format: uuid } }
+        - { name: date,                  in: query, required: true,  schema: { type: string, format: date, example: "2024-06-01" } }
+        - { name: slot_duration_minutes, in: query, required: false, schema: { type: integer, minimum: 1, default: 60 } }
+      responses:
+        '200':
+          description: Availability window
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AvailabilityWindow' }
+
+components:
+  schemas:
+
+    Resource:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        type:       { type: string }
+        name:       { type: string }
+        capacity:   { type: integer }
+        attributes: { type: object, additionalProperties: true }
+
+    Party:
+      type: object
+      properties:
+        name:  { type: string }
+        email: { type: string, format: email }
+        size:  { type: integer }
+        phone: { type: string, nullable: true }
+
+    Reservation:
+      type: object
+      properties:
+        id:           { type: string, format: uuid }
+        status:       { type: string, enum: [pending, confirmed, cancelled, no_show] }
+        start:        { type: string, format: date-time }
+        end:          { type: string, format: date-time }
+        resource_ids: { type: array, items: { type: string, format: uuid } }
+        party:        { $ref: '#/components/schemas/Party' }
+        created_at:   { type: string, format: date-time }
+
+    TimeSlot:
+      type: object
+      properties:
+        start: { type: string, format: date-time }
+        end:   { type: string, format: date-time }
+
+    AvailabilityWindow:
+      type: object
+      properties:
+        resource_id: { type: string, format: uuid }
+        date:        { type: string, format: date }
+        slots:
+          type: array
+          items: { $ref: '#/components/schemas/TimeSlot' }
+```
+
+---
+
+### 23. CLI Seed Command
+
+Create `bin/seed.php` — a standalone PHP script to populate the database with realistic sample data.
+
+The script must:
+- Read `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS` from environment or `.env` file at project root (parse manually, no library required)
+- Bootstrap via `vendor/autoload.php`
+- Wire the container using `config/container.php` plus the infrastructure bindings
+- Use the use case handlers (not repositories directly) to insert data
+- Be idempotent where possible (re-running does not duplicate data)
+- Print progress to stdout
+
+Seed data to create:
+
+1. **3 resources** of type `table` with names Table 1/2/3, capacity 4
+2. **Availability rules** for each resource: Monday–Friday 09:00–17:00, Saturday 10:00–14:00
+3. **1 availability override** — mark the Saturday of the current week as unavailable for Table 1
+4. **3 reservations** across different resources and time slots in the current week, all in the 09:00–17:00 window
+
+Script structure:
+
+```php
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/../vendor/autoload.php';
+
+// Load .env if present
+$envFile = __DIR__ . '/../.env';
+if (file_exists($envFile)) {
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        if (str_starts_with(trim($line), '#') || !str_contains($line, '=')) {
+            continue;
+        }
+        [$key, $value] = explode('=', $line, 2);
+        $_ENV[trim($key)] = trim($value);
+    }
+}
+
+use DI\ContainerBuilder;
+use function DI\autowire;
+use Rez\Application\Port\ReservationRepositoryInterface;
+use Rez\Application\Port\ResourceRepositoryInterface;
+use Rez\Application\Port\AvailabilityRepositoryInterface;
+use Rez\Infrastructure\Persistence\Mysql\MysqlReservationRepository;
+use Rez\Infrastructure\Persistence\Mysql\MysqlResourceRepository;
+use Rez\Infrastructure\Persistence\Mysql\MysqlAvailabilityRepository;
+
+$pdo = new PDO(
+    sprintf(
+        'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+        $_ENV['DB_HOST'] ?? 'localhost',
+        $_ENV['DB_PORT'] ?? '3306',
+        $_ENV['DB_NAME'] ?? 'rez',
+    ),
+    $_ENV['DB_USER'] ?? 'root',
+    $_ENV['DB_PASS'] ?? '',
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+);
+
+$container = (new ContainerBuilder())
+    ->addDefinitions(__DIR__ . '/../config/container.php')
+    ->addDefinitions([
+        PDO::class                             => fn () => $pdo,
+        ReservationRepositoryInterface::class  => autowire(MysqlReservationRepository::class),
+        ResourceRepositoryInterface::class     => autowire(MysqlResourceRepository::class),
+        AvailabilityRepositoryInterface::class => autowire(MysqlAvailabilityRepository::class),
+    ])
+    ->build();
+
+// Instantiate handlers and run seed logic here
+// ...
+
+echo "Seed complete.\n";
+```
+
+The availability repository's `saveRule()` and `saveOverride()` methods are on `MysqlAvailabilityRepository` directly (not on the port interface). Call them via the concrete class or extend the port interface to include write methods before this step.
+
+Note: `AvailabilityRepositoryInterface` currently only defines read methods. Decide in this step whether to add `saveRule()` and `saveOverride()` to the port interface or keep write methods on the concrete class only (preferred if only the seed script needs them).
