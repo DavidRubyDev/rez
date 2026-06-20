@@ -444,8 +444,48 @@ All three expose a `*UseCaseInterface` registered in `config/container.php`.
 
 ---
 
+### 21. Database Setup
+
+`database/schema.sql` — authoritative DDL for all five tables, safe to re-run (`IF NOT EXISTS`).
+
+Tables: `resources`, `reservations`, `reservation_resources`, `availability_rules`, `availability_overrides`.
+
+Foreign key constraints with `ON DELETE CASCADE` on all child tables. `open_time`/`close_time` stored as `CHAR(5)` (`HH:MM`). `attributes` as `JSON`. All PKs are UUID v4 strings. All timestamps in UTC, no timezone stored.
+
+---
+
+### 22. OpenAPI Spec
+
+`docs/openapi.yaml` — OpenAPI 3.0.3 spec describing the full HTTP surface.
+
+8 endpoints:
+- `POST /resources`, `GET /resources`, `GET /resources/{id}`
+- `POST /reservations`, `GET /reservations`, `GET /reservations/{id}`, `POST /reservations/{id}/cancel`
+- `GET /availability`
+
+Schemas: `Resource`, `Reservation`, `Party`, `PartyInput`, `TimeSlot`, `AvailabilityWindow`.
+
+---
+
+### 23. CLI Seed Script
+
+`bin/seed.php` — standalone PHP CLI script to populate the database with sample data.
+
+- Loads `.env` from project root if present (manual parsing, no library)
+- Bootstraps via `vendor/autoload.php` and PHP-DI container
+- Uses `CreateResourceUseCaseInterface` and `CreateReservationUseCaseInterface` via the container
+- Calls `MysqlAvailabilityRepository::saveRule()` / `saveOverride()` directly (write methods not on the port interface)
+
+Seed data:
+- 3 resources of type `table` (Table 1/2/3, capacity 4)
+- Availability rules: Mon–Fri 09:00–17:00, Saturday 10:00–14:00 for all three
+- 1 override: Table 1 unavailable on the Saturday of the current week
+- 3 reservations on Monday/Tuesday of the current week for different tables and parties
+
+`bin/seed.php` is excluded from PHPStan (only `src/` and `tests/` are analysed).
+
+---
+
 ## Pending Steps
 
-- **21.** Database setup — `database/schema.sql`
-- **22.** OpenAPI spec — `docs/openapi.yaml`
-- **23.** CLI seed script — `bin/seed.php`
+None — all planned steps complete.
