@@ -51,7 +51,7 @@ final class CreateReservationUseCase
 
     private function assertAvailable(TimeSlot $slot, Resource $resource): void
     {
-        if (!$this->availabilityService->isSlotAvailable($resource->getId(), $slot)) {
+        if (!$this->availabilityService->isSlotAvailable($resource->id, $slot)) {
             throw new ConflictException($slot, $resource);
         }
     }

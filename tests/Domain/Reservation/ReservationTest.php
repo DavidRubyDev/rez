@@ -34,7 +34,7 @@ class ReservationTest extends TestCase
     {
         $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
 
-        $this->assertSame(ReservationStatus::Pending, $reservation->getStatus());
+        $this->assertSame(ReservationStatus::Pending, $reservation->status);
     }
 
     public function testCreateSetsCreatedAtToApproximatelyNow(): void
@@ -43,8 +43,8 @@ class ReservationTest extends TestCase
         $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
         $after       = new DateTimeImmutable();
 
-        $this->assertGreaterThanOrEqual($before->getTimestamp(), $reservation->getCreatedAt()->getTimestamp());
-        $this->assertLessThanOrEqual($after->getTimestamp(), $reservation->getCreatedAt()->getTimestamp());
+        $this->assertGreaterThanOrEqual($before->getTimestamp(), $reservation->createdAt->getTimestamp());
+        $this->assertLessThanOrEqual($after->getTimestamp(), $reservation->createdAt->getTimestamp());
     }
 
     public function testCreateWithNoResourceIdsThrowsInvalidArgumentException(): void
@@ -57,14 +57,14 @@ class ReservationTest extends TestCase
     {
         $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
 
-        $this->assertSame(2, $reservation->getResourceIds()->count());
+        $this->assertSame(2, $reservation->resourceIds->count());
     }
 
     public function testConfirmFromPendingReturnsConfirmed(): void
     {
         $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
 
-        $this->assertSame(ReservationStatus::Confirmed, $reservation->confirm()->getStatus());
+        $this->assertSame(ReservationStatus::Confirmed, $reservation->confirm()->status);
     }
 
     public function testConfirmFromConfirmedThrowsDomainException(): void
@@ -77,14 +77,14 @@ class ReservationTest extends TestCase
     {
         $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
 
-        $this->assertSame(ReservationStatus::Cancelled, $reservation->cancel()->getStatus());
+        $this->assertSame(ReservationStatus::Cancelled, $reservation->cancel()->status);
     }
 
     public function testCancelFromConfirmedReturnsCancelled(): void
     {
         $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)->confirm();
 
-        $this->assertSame(ReservationStatus::Cancelled, $reservation->cancel()->getStatus());
+        $this->assertSame(ReservationStatus::Cancelled, $reservation->cancel()->status);
     }
 
     public function testCancelFromCancelledThrowsDomainException(): void
@@ -97,7 +97,7 @@ class ReservationTest extends TestCase
     {
         $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)->confirm();
 
-        $this->assertSame(ReservationStatus::NoShow, $reservation->markNoShow()->getStatus());
+        $this->assertSame(ReservationStatus::NoShow, $reservation->markNoShow()->status);
     }
 
     public function testMarkNoShowFromPendingThrowsDomainException(): void
@@ -112,7 +112,7 @@ class ReservationTest extends TestCase
         $confirmed = $original->confirm();
 
         $this->assertNotSame($original, $confirmed);
-        $this->assertSame(ReservationStatus::Pending, $original->getStatus());
-        $this->assertSame(ReservationStatus::Confirmed, $confirmed->getStatus());
+        $this->assertSame(ReservationStatus::Pending, $original->status);
+        $this->assertSame(ReservationStatus::Confirmed, $confirmed->status);
     }
 }

@@ -11,24 +11,14 @@ use Rez\Domain\Exception\InvalidTimeSlotException;
 final class TimeSlot
 {
     public function __construct(
-        private readonly DateTimeImmutable $start,
-        private readonly DateTimeImmutable $end,
+        public readonly DateTimeImmutable $start,
+        public readonly DateTimeImmutable $end,
     ) {
         if ($end <= $start) {
             throw new InvalidTimeSlotException(
                 sprintf('Slot end (%s) must be after start (%s).', $end->format('Y-m-d H:i:s'), $start->format('Y-m-d H:i:s'))
             );
         }
-    }
-
-    public function getStart(): DateTimeImmutable
-    {
-        return $this->start;
-    }
-
-    public function getEnd(): DateTimeImmutable
-    {
-        return $this->end;
     }
 
     public function overlapsWith(TimeSlot $other): bool

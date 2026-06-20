@@ -10,19 +10,9 @@ use Rez\Domain\Resource\Resource;
 class ConflictException extends DomainException
 {
     public function __construct(
-        private readonly TimeSlot $slot,
-        private readonly Resource $resource,
+        public readonly TimeSlot $slot,
+        public readonly Resource $resource,
     ) {
         parent::__construct('Reservation conflicts with an existing booking.');
-    }
-
-    public function getSlot(): TimeSlot
-    {
-        return $this->slot;
-    }
-
-    public function getResource(): Resource
-    {
-        return $this->resource;
     }
 }
