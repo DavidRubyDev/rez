@@ -6,7 +6,7 @@ namespace Rez\Application\UseCase\Reservation\CancelReservation;
 
 use Rez\Application\Port\ReservationRepositoryInterface;
 
-final class CancelReservationUseCase
+final class CancelReservationUseCase implements CancelReservationUseCaseInterface
 {
     public function __construct(
         private readonly ReservationRepositoryInterface $reservationRepository,

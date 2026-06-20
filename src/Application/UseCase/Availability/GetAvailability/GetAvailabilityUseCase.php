@@ -6,7 +6,7 @@ namespace Rez\Application\UseCase\Availability\GetAvailability;
 
 use Rez\Application\Service\AvailabilityServiceInterface;
 
-final class GetAvailabilityUseCase
+final class GetAvailabilityUseCase implements GetAvailabilityUseCaseInterface
 {
     public function __construct(
         private readonly AvailabilityServiceInterface $availabilityService,

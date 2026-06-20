@@ -14,7 +14,7 @@ use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceIdCollection;
 
-final class CreateReservationUseCase
+final class CreateReservationUseCase implements CreateReservationUseCaseInterface
 {
     public function __construct(
         private readonly ReservationRepositoryInterface $reservationRepository,

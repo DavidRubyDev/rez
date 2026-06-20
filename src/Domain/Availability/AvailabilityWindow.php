@@ -10,7 +10,7 @@ use Rez\Domain\Resource\ResourceId;
 
 final class AvailabilityWindow
 {
-    /** @param TimeSlot[] $slots */
+    /** @param list<TimeSlot> $slots */
     public function __construct(
         public readonly ResourceId $resourceId,
         public readonly DateTimeImmutable $date,

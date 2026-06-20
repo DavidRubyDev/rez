@@ -8,7 +8,8 @@ use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsResponse;
-use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCase;
+use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsRequest;
+use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCaseInterface;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationCollection;
@@ -20,12 +21,12 @@ use Rez\Handler\Reservation\ListReservationsHandler;
 
 class ListReservationsHandlerTest extends TestCase
 {
-    private ListReservationsUseCase&MockObject $useCase;
+    private ListReservationsUseCaseInterface&MockObject $useCase;
     private ListReservationsHandler $handler;
 
     protected function setUp(): void
     {
-        $this->useCase = $this->createMock(ListReservationsUseCase::class);
+        $this->useCase = $this->createMock(ListReservationsUseCaseInterface::class);
         $this->handler = new ListReservationsHandler($this->useCase);
     }
 
@@ -50,8 +51,9 @@ class ListReservationsHandlerTest extends TestCase
         $result = $this->handler->handle([]);
 
         $this->assertCount(2, $result);
-        $this->assertArrayHasKey('id', $result[0]);
-        $this->assertArrayHasKey('status', $result[0]);
+        $first = $result[0];
+        $this->assertArrayHasKey('id', $first);
+        $this->assertArrayHasKey('status', $first);
     }
 
     public function testHandleWithNoFiltersPassesNulls(): void
@@ -60,7 +62,7 @@ class ListReservationsHandlerTest extends TestCase
             ->expects($this->once())
             ->method('execute')
             ->with($this->callback(
-                fn ($r) => $r->from === null && $r->to === null && $r->resourceId === null
+                fn (ListReservationsRequest $r) => $r->from === null && $r->to === null && $r->resourceId === null
             ))
             ->willReturn(new ListReservationsResponse(ReservationCollection::empty()));
 
@@ -75,7 +77,7 @@ class ListReservationsHandlerTest extends TestCase
             ->expects($this->once())
             ->method('execute')
             ->with($this->callback(
-                fn ($r) => $r->from !== null && $r->to !== null && $r->resourceId !== null
+                fn (ListReservationsRequest $r) => $r->from !== null && $r->to !== null && $r->resourceId !== null
             ))
             ->willReturn(new ListReservationsResponse(ReservationCollection::empty()));
 

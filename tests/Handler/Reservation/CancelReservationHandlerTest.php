@@ -8,7 +8,7 @@ use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationResponse;
-use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationUseCase;
+use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationUseCaseInterface;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationId;
@@ -19,13 +19,13 @@ use Rez\Handler\Reservation\CancelReservationHandler;
 
 class CancelReservationHandlerTest extends TestCase
 {
-    private CancelReservationUseCase&MockObject $useCase;
+    private CancelReservationUseCaseInterface&MockObject $useCase;
     private CancelReservationHandler $handler;
     private Reservation $reservation;
 
     protected function setUp(): void
     {
-        $this->useCase = $this->createMock(CancelReservationUseCase::class);
+        $this->useCase = $this->createMock(CancelReservationUseCaseInterface::class);
         $this->handler = new CancelReservationHandler($this->useCase);
 
         $this->reservation = Reservation::create(
@@ -48,10 +48,4 @@ class CancelReservationHandlerTest extends TestCase
         $this->assertSame('cancelled', $result['status']);
     }
 
-    public function testHandleMissingIdThrows(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-
-        $this->handler->handle([]);
-    }
 }

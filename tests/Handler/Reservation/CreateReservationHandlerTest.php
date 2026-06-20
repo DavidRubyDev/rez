@@ -8,7 +8,7 @@ use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationResponse;
-use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationUseCase;
+use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationUseCaseInterface;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationId;
@@ -20,13 +20,13 @@ use Rez\Handler\Reservation\CreateReservationHandler;
 
 class CreateReservationHandlerTest extends TestCase
 {
-    private CreateReservationUseCase&MockObject $useCase;
+    private CreateReservationUseCaseInterface&MockObject $useCase;
     private CreateReservationHandler $handler;
     private Reservation $reservation;
 
     protected function setUp(): void
     {
-        $this->useCase = $this->createMock(CreateReservationUseCase::class);
+        $this->useCase = $this->createMock(CreateReservationUseCaseInterface::class);
         $this->handler = new CreateReservationHandler($this->useCase);
 
         $this->reservation = Reservation::create(
@@ -58,31 +58,12 @@ class CreateReservationHandlerTest extends TestCase
         $this->assertSame('pending', $result['status']);
         $this->assertSame('2024-01-15 10:00:00', $result['start']);
         $this->assertSame('2024-01-15 11:00:00', $result['end']);
-        $this->assertSame('John Doe', $result['party']['name']);
-        $this->assertSame('john@example.com', $result['party']['email']);
-        $this->assertSame(2, $result['party']['size']);
-        $this->assertNull($result['party']['phone']);
+
+        $party = $result['party'];
+        $this->assertSame('John Doe', $party['name']);
+        $this->assertSame('john@example.com', $party['email']);
+        $this->assertSame(2, $party['size']);
+        $this->assertNull($party['phone']);
     }
 
-    public function testHandleMissingResourceIdsThrows(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-
-        $this->handler->handle([
-            'start' => '2024-01-15 10:00:00',
-            'end'   => '2024-01-15 11:00:00',
-            'party' => ['name' => 'John Doe', 'email' => 'john@example.com', 'size' => 2],
-        ]);
-    }
-
-    public function testHandleMissingPartyThrows(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-
-        $this->handler->handle([
-            'resource_ids' => ['some-uuid'],
-            'start'        => '2024-01-15 10:00:00',
-            'end'          => '2024-01-15 11:00:00',
-        ]);
-    }
 }

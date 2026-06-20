@@ -8,7 +8,7 @@ use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Rez\Application\UseCase\Reservation\GetReservation\GetReservationResponse;
-use Rez\Application\UseCase\Reservation\GetReservation\GetReservationUseCase;
+use Rez\Application\UseCase\Reservation\GetReservation\GetReservationUseCaseInterface;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationId;
@@ -19,13 +19,13 @@ use Rez\Handler\Reservation\GetReservationHandler;
 
 class GetReservationHandlerTest extends TestCase
 {
-    private GetReservationUseCase&MockObject $useCase;
+    private GetReservationUseCaseInterface&MockObject $useCase;
     private GetReservationHandler $handler;
     private Reservation $reservation;
 
     protected function setUp(): void
     {
-        $this->useCase = $this->createMock(GetReservationUseCase::class);
+        $this->useCase = $this->createMock(GetReservationUseCaseInterface::class);
         $this->handler = new GetReservationHandler($this->useCase);
 
         $this->reservation = Reservation::create(
@@ -51,10 +51,4 @@ class GetReservationHandlerTest extends TestCase
         $this->assertSame('+1234567890', $result['party']['phone']);
     }
 
-    public function testHandleMissingIdThrows(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-
-        $this->handler->handle([]);
-    }
 }

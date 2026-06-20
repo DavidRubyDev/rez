@@ -6,7 +6,7 @@ namespace Rez\Domain\Reservation;
 
 final class ReservationCollection
 {
-    /** @param Reservation[] $reservations */
+    /** @param list<Reservation> $reservations */
     private function __construct(
         private readonly array $reservations = [],
     ) {
@@ -17,7 +17,7 @@ final class ReservationCollection
         return new self();
     }
 
-    /** @param Reservation[] $reservations */
+    /** @param list<Reservation> $reservations */
     public static function fromArray(array $reservations): self
     {
         return new self($reservations);
@@ -38,7 +38,7 @@ final class ReservationCollection
         return count($this->reservations);
     }
 
-    /** @return Reservation[] */
+    /** @return list<Reservation> */
     public function toArray(): array
     {
         return $this->reservations;
