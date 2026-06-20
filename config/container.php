@@ -14,6 +14,12 @@ use Rez\Application\UseCase\Reservation\GetReservation\GetReservationUseCase;
 use Rez\Application\UseCase\Reservation\GetReservation\GetReservationUseCaseInterface;
 use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCase;
 use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCaseInterface;
+use Rez\Application\UseCase\Resource\CreateResource\CreateResourceUseCase;
+use Rez\Application\UseCase\Resource\CreateResource\CreateResourceUseCaseInterface;
+use Rez\Application\UseCase\Resource\GetResource\GetResourceUseCase;
+use Rez\Application\UseCase\Resource\GetResource\GetResourceUseCaseInterface;
+use Rez\Application\UseCase\Resource\ListResources\ListResourcesUseCase;
+use Rez\Application\UseCase\Resource\ListResources\ListResourcesUseCaseInterface;
 
 use function DI\autowire;
 
@@ -24,4 +30,7 @@ return [
     GetReservationUseCaseInterface::class     => autowire(GetReservationUseCase::class),
     ListReservationsUseCaseInterface::class   => autowire(ListReservationsUseCase::class),
     GetAvailabilityUseCaseInterface::class    => autowire(GetAvailabilityUseCase::class),
+    CreateResourceUseCaseInterface::class     => autowire(CreateResourceUseCase::class),
+    GetResourceUseCaseInterface::class        => autowire(GetResourceUseCase::class),
+    ListResourcesUseCaseInterface::class      => autowire(ListResourcesUseCase::class),
 ];
