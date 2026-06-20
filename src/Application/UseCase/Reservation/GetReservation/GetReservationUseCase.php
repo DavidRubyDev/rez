@@ -6,7 +6,7 @@ namespace Rez\Application\UseCase\Reservation\GetReservation;
 
 use Rez\Application\Port\ReservationRepositoryInterface;
 
-final class GetReservationUseCase
+final class GetReservationUseCase implements GetReservationUseCaseInterface
 {
     public function __construct(
         private readonly ReservationRepositoryInterface $reservationRepository,

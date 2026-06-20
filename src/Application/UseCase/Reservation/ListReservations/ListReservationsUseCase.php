@@ -7,7 +7,7 @@ namespace Rez\Application\UseCase\Reservation\ListReservations;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Domain\Reservation\Reservation;
 
-final class ListReservationsUseCase
+final class ListReservationsUseCase implements ListReservationsUseCaseInterface
 {
     public function __construct(
         private readonly ReservationRepositoryInterface $reservationRepository,

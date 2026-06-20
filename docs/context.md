@@ -399,6 +399,27 @@ $useCase = $container->get(CreateReservationUseCase::class);
 
 ---
 
+### 19. Handlers
+
+Entry points under `src/Handler/` that accept raw `array<string, mixed>` input, delegate to a use case, and return a serialized array.
+
+`src/Handler/ReservationSerializer.php` — shared serialization of `Reservation` to array.
+
+**Reservation handlers** (`src/Handler/Reservation/`):
+- `CreateReservationHandler::handle(array): array` — validates `resource_ids` and `party`, builds domain objects, delegates to `CreateReservationUseCaseInterface`
+- `CancelReservationHandler::handle(array): array` — requires `id`, delegates to `CancelReservationUseCaseInterface`
+- `GetReservationHandler::handle(array): array` — requires `id`, delegates to `GetReservationUseCaseInterface`
+- `ListReservationsHandler::handle(array): array[]` — optional `from`, `to`, `resource_id` filters, delegates to `ListReservationsUseCaseInterface`
+
+**Availability handlers** (`src/Handler/Availability/`):
+- `GetAvailabilityHandler::handle(array): array` — requires `resource_id`, `date`, optional `slot_duration_minutes`, delegates to `GetAvailabilityUseCaseInterface`
+
+All use cases now implement a `*UseCaseInterface` so handlers type-hint on the interface and tests can mock them.
+
+14 new handler tests passing. Total: 142 unit tests passing, PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-- **19.** Handlers (Reservation, Resource, Availability)
+- **20.** Resource use cases + handlers (CreateResource, GetResource, ListResources)

@@ -59,7 +59,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         /** @var array<int, array<string, mixed>> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return ReservationCollection::fromArray(array_map($this->hydrate(...), $rows));
+        return ReservationCollection::fromArray(array_values(array_map($this->hydrate(...), $rows)));
     }
 
     public function findAll(?DateTimeImmutable $from = null, ?DateTimeImmutable $to = null): ReservationCollection
@@ -86,7 +86,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         /** @var array<int, array<string, mixed>> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return ReservationCollection::fromArray(array_map($this->hydrate(...), $rows));
+        return ReservationCollection::fromArray(array_values(array_map($this->hydrate(...), $rows)));
     }
 
     public function save(Reservation $reservation): void

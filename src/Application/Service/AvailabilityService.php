@@ -93,7 +93,7 @@ final class AvailabilityService implements AvailabilityServiceInterface
         return false;
     }
 
-    /** @return TimeSlot[] */
+    /** @return list<TimeSlot> */
     private function generateCandidateSlots(AvailabilityRule $rule, DateTimeImmutable $date, int $slotDurationMinutes): array
     {
         $slots    = [];
@@ -116,8 +116,8 @@ final class AvailabilityService implements AvailabilityServiceInterface
     }
 
     /**
-     * @param TimeSlot[] $candidates
-     * @return TimeSlot[]
+     * @param list<TimeSlot> $candidates
+     * @return list<TimeSlot>
      */
     private function filterConflictingSlots(array $candidates, ReservationCollection $reservations): array
     {
