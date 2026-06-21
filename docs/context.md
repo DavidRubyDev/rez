@@ -446,7 +446,7 @@ All three expose a `*UseCaseInterface` registered in `config/container.php`.
 
 ### 21. Database Setup
 
-`database/schema.sql` — authoritative DDL for all five tables, safe to re-run (`IF NOT EXISTS`).
+`database/seeds/000_schema.sql` — authoritative DDL for all five tables, safe to re-run (`IF NOT EXISTS`). Lives in the seeds directory so `bin/seed.php` applies it automatically before data files.
 
 Tables: `resources`, `reservations`, `reservation_resources`, `availability_rules`, `availability_overrides`.
 
@@ -469,20 +469,25 @@ Schemas: `Resource`, `Reservation`, `Party`, `PartyInput`, `TimeSlot`, `Availabi
 
 ### 23. CLI Seed Script
 
-`bin/seed.php` — standalone PHP CLI script to populate the database with sample data.
+Fully hexagonal seed pipeline — data lives in SQL files, the use case orchestrates execution via a port.
 
-- Loads `.env` from project root if present (manual parsing, no library)
-- Bootstraps via `vendor/autoload.php` and PHP-DI container
-- Uses `CreateResourceUseCaseInterface` and `CreateReservationUseCaseInterface` via the container
-- Calls `MysqlAvailabilityRepository::saveRule()` / `saveOverride()` directly (write methods not on the port interface)
+**`DatabaseSeederInterface`** (`src/Application/Port/`) — `executeFile(string $filePath): void`
 
-Seed data:
-- 3 resources of type `table` (Table 1/2/3, capacity 4)
-- Availability rules: Mon–Fri 09:00–17:00, Saturday 10:00–14:00 for all three
-- 1 override: Table 1 unavailable on the Saturday of the current week
-- 3 reservations on Monday/Tuesday of the current week for different tables and parties
+**`SeedDatabaseUseCase`** (`src/Application/UseCase/Seed/SeedDatabase/`) — receives a `SeedDatabaseRequest(string $seedsDirectory)`, globs `*.sql` files, sorts by filename, delegates each to the port. Returns `SeedDatabaseResponse(int $filesExecuted)`.
 
-`bin/seed.php` is excluded from PHPStan (only `src/` and `tests/` are analysed).
+**`MysqlDatabaseSeeder`** (`src/Infrastructure/Persistence/Mysql/`) — reads a file, splits on `;`, executes each non-empty statement via `PDO::exec()`.
+
+**`database/seeds/`** — four idempotent SQL files with hardcoded UUIDs:
+- `001_resources.sql` — 3 tables (UUIDs `aaaaaaaa-…-001/002/003`)
+- `002_availability_rules.sql` — Mon–Fri 09:00–17:00, Sat 10:00–14:00 for all three
+- `003_availability_overrides.sql` — Table 1 unavailable on 2024-06-08
+- `004_reservations.sql` — 3 reservations (Mon/Tue 2024-06-03/04) + reservation_resources rows
+
+**`bin/seed.php`** — thin CLI entry point: loads `.env`, boots PHP-DI container, calls `SeedDatabaseUseCaseInterface` with `__DIR__ . '/../database/seeds'`.
+
+`DatabaseSeederInterface` and `SeedDatabaseUseCaseInterface` registered in `config/container.php`.
+
+4 new tests in `SeedDatabaseUseCaseTest` (file count, filename order, non-sql ignored, empty dir). Total: 164 unit tests passing, PHPStan max clean, CS clean.
 
 ---
 

@@ -21,21 +21,11 @@ use DI\ContainerBuilder;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
-use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationRequest;
-use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationUseCaseInterface;
-use Rez\Application\UseCase\Resource\CreateResource\CreateResourceRequest;
-use Rez\Application\UseCase\Resource\CreateResource\CreateResourceUseCaseInterface;
-use Rez\Domain\Availability\AvailabilityOverride;
-use Rez\Domain\Availability\AvailabilityRule;
-use Rez\Domain\Availability\DayOfWeek;
-use Rez\Domain\Reservation\Party;
-use Rez\Domain\Resource\ResourceId;
+use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseRequest;
+use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCaseInterface;
 use Rez\Infrastructure\Persistence\Mysql\MysqlAvailabilityRepository;
 use Rez\Infrastructure\Persistence\Mysql\MysqlReservationRepository;
 use Rez\Infrastructure\Persistence\Mysql\MysqlResourceRepository;
-use Rez\Infrastructure\Mapper\DayOfWeekMapper;
-use Rez\Infrastructure\Mapper\ReservationStatusMapper;
-use Rez\Infrastructure\Mapper\ResourceTypeMapper;
 
 use function DI\autowire;
 use function DI\factory;
@@ -62,102 +52,7 @@ $container = (new ContainerBuilder())
     ])
     ->build();
 
-$createResource    = $container->get(CreateResourceUseCaseInterface::class);
-$createReservation = $container->get(CreateReservationUseCaseInterface::class);
-$availabilityRepo  = new MysqlAvailabilityRepository($pdo, new DayOfWeekMapper());
+$useCase  = $container->get(SeedDatabaseUseCaseInterface::class);
+$response = $useCase->execute(new SeedDatabaseRequest(__DIR__ . '/../database/seeds'));
 
-// -------------------------------------------------------------------------
-// 1. Resources
-// -------------------------------------------------------------------------
-
-echo "Creating resources...\n";
-
-$resourceIds = [];
-
-foreach (['Table 1', 'Table 2', 'Table 3'] as $name) {
-    $resource       = $createResource->execute(new CreateResourceRequest('table', $name, 4))->resource;
-    $resourceIds[]  = $resource->id;
-    echo "  Created: {$name} ({$resource->id->toString()})\n";
-}
-
-// -------------------------------------------------------------------------
-// 2. Availability rules — Mon–Fri 09:00–17:00, Sat 10:00–14:00
-// -------------------------------------------------------------------------
-
-echo "Creating availability rules...\n";
-
-$weekdays = [
-    DayOfWeek::Monday,
-    DayOfWeek::Tuesday,
-    DayOfWeek::Wednesday,
-    DayOfWeek::Thursday,
-    DayOfWeek::Friday,
-];
-
-foreach ($resourceIds as $resourceId) {
-    foreach ($weekdays as $day) {
-        $availabilityRepo->saveRule(new AvailabilityRule($resourceId, $day, '09:00', '17:00'));
-    }
-    $availabilityRepo->saveRule(new AvailabilityRule($resourceId, DayOfWeek::Saturday, '10:00', '14:00'));
-    echo "  Rules set for resource {$resourceId->toString()}\n";
-}
-
-// -------------------------------------------------------------------------
-// 3. Override — this Saturday unavailable for Table 1
-// -------------------------------------------------------------------------
-
-echo "Creating availability override...\n";
-
-$now      = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-$saturday = $now->modify('saturday this week');
-
-$availabilityRepo->saveOverride(new AvailabilityOverride(
-    $resourceIds[0],
-    $saturday,
-    false,
-));
-
-echo "  Table 1 marked unavailable on {$saturday->format('Y-m-d')}\n";
-
-// -------------------------------------------------------------------------
-// 4. Reservations — three bookings in the current week
-// -------------------------------------------------------------------------
-
-echo "Creating reservations...\n";
-
-$monday = $now->modify('monday this week');
-
-$bookings = [
-    [
-        'resource' => $resourceIds[0],
-        'start'    => $monday->setTime(10, 0),
-        'end'      => $monday->setTime(11, 0),
-        'party'    => new Party('Alice Martin', 'alice@example.com', 2, null),
-    ],
-    [
-        'resource' => $resourceIds[1],
-        'start'    => $monday->setTime(14, 0),
-        'end'      => $monday->setTime(15, 0),
-        'party'    => new Party('Bob Chen', 'bob@example.com', 3, '+1234567890'),
-    ],
-    [
-        'resource' => $resourceIds[2],
-        'start'    => (clone $monday)->modify('+1 day')->setTime(11, 0),
-        'end'      => (clone $monday)->modify('+1 day')->setTime(12, 0),
-        'party'    => new Party('Carol Davis', 'carol@example.com', 4, null),
-    ],
-];
-
-foreach ($bookings as $booking) {
-    $reservation = $createReservation->execute(new CreateReservationRequest(
-        [$booking['resource']],
-        $booking['start'],
-        $booking['end'],
-        $booking['party'],
-    ))->reservation;
-
-    echo "  Reserved {$reservation->slot->start->format('Y-m-d H:i')}–{$reservation->slot->end->format('H:i')}"
-        . " for {$reservation->party->name} ({$reservation->id->toString()})\n";
-}
-
-echo "\nSeed complete.\n";
+echo "Seeded {$response->filesExecuted} file(s).\n";
