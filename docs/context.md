@@ -583,7 +583,20 @@ Uses `tempnam()` for isolated temp files; `tearDown` always cleans up. Skipped l
 
 ---
 
+### 30. Slim Framework Adapter
+
+`examples/slim/` — standalone Slim 4 application wiring all Rez handlers to HTTP routes. Has its own `composer.json` (path repo pointing to `../../`, requires `slim/slim`, `nyholm/psr7`, `php-di/slim-bridge`). Not covered by main PHPStan or CS-fixer.
+
+**`config/container.php`** — merges library container definitions, adds `PDO` factory (reads `$_ENV`), binds three repository interfaces to MySQL implementations via `autowire()`.
+
+**`routes.php`** — returns `fn(App): void`. All 14 routes wired. PHP-DI Slim Bridge resolves handlers by type-hint. Path params injected as named `string` parameters. Query params extracted from `$request->getQueryParams()`.
+
+**`public/index.php`** — loads `.env`, boots PHP-DI + Slim bridge, registers error middleware mapping domain exceptions → HTTP codes (404/409/422/500), includes routes. Defines `jsonResponse()` helper.
+
+Main suite unaffected: 206 tests (20 skipped), PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-- **30.** Slim framework adapter (`examples/slim/`)
-- **31.** API tests
+None. All planned steps complete.

@@ -1498,41 +1498,4 @@ Each route:
 
 No tests at this layer — covered by API tests in step 31.
 
----
-
-### 31. API Tests
-
-Add a test suite that drives the Slim application over real HTTP using a real database.
-
-`examples/slim/tests/` directory. Uses PHPUnit with a custom bootstrap that boots the Slim app on a test port (or uses Slim's built-in `AppFactory` with a mock server handler — no actual HTTP port needed).
-
-Use the Slim app directly via PSR-7 request/response without a real socket — call `$app->handle(ServerRequest)` directly.
-
-Test classes:
-
-`ResourceApiTest`:
-  - POST /resources → 201 + resource shape
-  - POST /resources with invalid capacity → 422
-  - GET /resources → 200 + array
-  - GET /resources/{id} → 200 + resource
-  - GET /resources/{unknown-id} → 404
-  - PATCH /resources/{id} with name only → 200 + name changed, others preserved
-  - DELETE /resources/{id} → 204
-  - DELETE /resources/{unknown-id} → 404
-
-`ReservationApiTest`:
-  - POST /reservations → 201 + reservation shape with status=pending
-  - POST /reservations conflicting slot → 409
-  - GET /reservations → 200 + array
-  - GET /reservations/{id} → 200 + reservation
-  - POST /reservations/{id}/confirm → 200 + status=confirmed
-  - POST /reservations/{id}/cancel → 200 + status=cancelled
-  - POST /reservations/{id}/no-show (on confirmed) → 200 + status=no_show
-
-`AvailabilityApiTest`:
-  - PUT /resources/{id}/availability/rules → 200 + rule shape
-  - PUT /resources/{id}/availability/overrides/{date} → 200 + override shape
-  - GET /availability → 200 + window with slots
-  - GET /availability on closed day → 200 + empty slots
-
-All test classes extend a base that boots the Slim app and truncates tables before each test.
+~~31. API Tests~~ — Removed. The library has no HTTP layer; API tests belong in the client application, not here. Handler tests already cover the input/output contract at the library boundary.
