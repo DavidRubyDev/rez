@@ -551,6 +551,28 @@ Uses `tempnam()` for isolated temp files; `tearDown` always cleans up. Skipped l
 
 ---
 
+### 28. DeleteResource Use Case + Handler
+
+`delete(ResourceId $id): void` added to `ResourceRepositoryInterface`.
+
+**`DeleteResourceUseCase`** — `findById` (throws `ResourceNotFoundException` if missing), then `delete()`. Order enforced and tested.
+
+**`DeleteResourceHandler`** — input: `array{id: string}`, returns `array{}`.
+
+**`MysqlResourceRepository`** — implements `delete()` via `DELETE FROM resources WHERE id = :id` (FK cascade handles child rows).
+
+`MysqlResourceRepositoryTest` extended with `testDeleteRemovesResource` (integration, skipped locally).
+
+`docs/openapi.yaml` updated with `DELETE /resources/{id}` → 204 | 404.
+
+`DeleteResourceUseCaseInterface` registered in `config/container.php`.
+
+5 new tests (3 use case, 2 handler) + 1 integration. Total: 203 unit tests passing (17 skipped), PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-None. All planned steps complete.
+- **29.** Integration tests — `MysqlAvailabilityRepository`
+- **30.** Slim framework adapter (`examples/slim/`)
+- **31.** API tests

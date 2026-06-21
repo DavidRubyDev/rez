@@ -46,6 +46,12 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
         return ResourceCollection::fromArray(array_map($this->hydrate(...), $rows));
     }
 
+    public function delete(ResourceId $id): void
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM resources WHERE id = :id');
+        $stmt->execute([':id' => $id->toString()]);
+    }
+
     public function save(Resource $resource): void
     {
         $stmt = $this->pdo->prepare('

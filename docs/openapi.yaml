@@ -123,6 +123,22 @@ paths:
         '422':
           description: Validation error (capacity < 1, empty name)
 
+    delete:
+      summary: Delete a resource
+      operationId: deleteResource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Resource deleted
+        '404':
+          description: Resource not found
+
   /reservations:
     post:
       summary: Create a reservation

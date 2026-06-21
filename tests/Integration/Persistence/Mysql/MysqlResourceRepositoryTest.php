@@ -62,4 +62,14 @@ class MysqlResourceRepositoryTest extends MysqlIntegrationTestCase
 
         $this->assertSame(2, $result->count());
     }
+
+    public function testDeleteRemovesResource(): void
+    {
+        $resource = $this->makeResource();
+        $this->repository->save($resource);
+        $this->repository->delete($resource->id);
+
+        $this->expectException(ResourceNotFoundException::class);
+        $this->repository->findById($resource->id);
+    }
 }
