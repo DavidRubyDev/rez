@@ -35,7 +35,7 @@ Every operation is exposed through a handler with a single `handle(array $data):
 | `ListResourcesHandler` | _(none)_ | Resource[] |
 | `UpdateResourceHandler` | `id`, `name?`, `capacity?`, `attributes?` | Resource |
 | `DeleteResourceHandler` | `id` | `[]` |
-| `SaveAvailabilityRuleHandler` | `resource_id`, `day_of_week`, `open_time`, `close_time` | Rule |
+| `SaveAvailabilityRuleHandler` | `resource_id`, `day_of_week` (`monday`–`sunday`), `open_time` (`HH:MM`), `close_time` (`HH:MM`) | Rule |
 | `SaveAvailabilityOverrideHandler` | `resource_id`, `date`, `available` | Override |
 | `GetAvailabilityHandler` | `resource_id`, `date`, `slot_duration_minutes?` | Availability window |
 | `CreateReservationHandler` | `resource_ids[]`, `start`, `end`, `party{name,email,size,phone?}` | Reservation |
@@ -225,5 +225,5 @@ Integration tests require a real database:
 
 ```bash
 DB_HOST=127.0.0.1 DB_NAME=rez DB_USER=root DB_PASS=secret \
-  vendor/bin/phpunit --group integration
+  vendor/bin/phpunit --testsuite Integration
 ```
