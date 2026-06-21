@@ -16,4 +16,8 @@ interface AvailabilityRepositoryInterface
 
     /** @return AvailabilityOverride[] */
     public function findOverridesForResource(ResourceId $resourceId, DateTimeImmutable $from, DateTimeImmutable $to): array;
+
+    public function saveRule(AvailabilityRule $rule): void;
+
+    public function saveOverride(AvailabilityOverride $override): void;
 }

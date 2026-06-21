@@ -281,8 +281,118 @@ paths:
               schema:
                 $ref: '#/components/schemas/AvailabilityWindow'
 
+  /resources/{id}/availability/rules:
+    put:
+      summary: Save an availability rule for a resource
+      operationId: saveAvailabilityRule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [day_of_week, open_time, close_time]
+              properties:
+                day_of_week:
+                  type: string
+                  enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+                open_time:
+                  type: string
+                  pattern: '^\d{2}:\d{2}$'
+                  example: '09:00'
+                close_time:
+                  type: string
+                  pattern: '^\d{2}:\d{2}$'
+                  example: '17:00'
+      responses:
+        '200':
+          description: Rule saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityRule'
+        '404':
+          description: Resource not found
+        '422':
+          description: Invalid times (close_time must be after open_time)
+
+  /resources/{id}/availability/overrides/{date}:
+    put:
+      summary: Save an availability override for a specific date
+      operationId: saveAvailabilityOverride
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2024-06-08'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [available]
+              properties:
+                available:
+                  type: boolean
+                  description: true = open, false = closed (overrides the weekly rule)
+      responses:
+        '200':
+          description: Override saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityOverride'
+        '404':
+          description: Resource not found
+
 components:
   schemas:
+
+    AvailabilityRule:
+      type: object
+      properties:
+        resource_id:
+          type: string
+          format: uuid
+        day_of_week:
+          type: string
+          enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+        open_time:
+          type: string
+          example: '09:00'
+        close_time:
+          type: string
+          example: '17:00'
+
+    AvailabilityOverride:
+      type: object
+      properties:
+        resource_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        available:
+          type: boolean
+
 
     Resource:
       type: object

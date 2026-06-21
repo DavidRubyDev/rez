@@ -505,8 +505,25 @@ Both expose a `*UseCaseInterface` registered in `config/container.php`.
 
 ---
 
+### 25. Availability Write Use Cases + Handlers
+
+**`AvailabilityRepositoryInterface`** extended with two write methods: `saveRule(AvailabilityRule $rule): void` and `saveOverride(AvailabilityOverride $override): void`.
+
+**`SaveAvailabilityRuleUseCase`** — validates resource exists via `resourceRepository->findById()`, constructs `AvailabilityRule`, delegates to `availabilityRepository->saveRule()`.
+
+**`SaveAvailabilityOverrideUseCase`** — same pattern with `AvailabilityOverride` and `saveOverride()`.
+
+Both handlers use typed `array{...}` shapes. `SaveAvailabilityRuleHandler` instantiates `DayOfWeekMapper` internally for string ↔ enum conversion.
+
+`docs/openapi.yaml` updated with `PUT /resources/{id}/availability/rules` and `PUT /resources/{id}/availability/overrides/{date}`, plus `AvailabilityRule` and `AvailabilityOverride` component schemas.
+
+Both use case interfaces registered in `config/container.php`.
+
+9 new tests (4 use case, 5 handler). Total: 183 unit tests passing, PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-- **25.** Availability write use cases + handlers (`SaveAvailabilityRule`, `SaveAvailabilityOverride`)
 - **26.** `UpdateResource` use case + handler
 - **27.** Integration test — `MysqlDatabaseSeeder`
