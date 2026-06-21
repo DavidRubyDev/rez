@@ -74,4 +74,43 @@ class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
 
         $this->assertCount(0, $overrides);
     }
+
+    public function testSaveRuleIsIdempotent(): void
+    {
+        $this->repository->saveRule(new AvailabilityRule($this->resourceId, DayOfWeek::Monday, '09:00', '17:00'));
+        $this->repository->saveRule(new AvailabilityRule($this->resourceId, DayOfWeek::Monday, '10:00', '18:00'));
+
+        $rules = $this->repository->findRulesForResource($this->resourceId);
+
+        $this->assertCount(1, $rules);
+        $this->assertSame('10:00', $rules[0]->openTime);
+        $this->assertSame('18:00', $rules[0]->closeTime);
+    }
+
+    public function testFindRulesForResourceReturnsMultipleRules(): void
+    {
+        $this->repository->saveRule(new AvailabilityRule($this->resourceId, DayOfWeek::Monday, '09:00', '17:00'));
+        $this->repository->saveRule(new AvailabilityRule($this->resourceId, DayOfWeek::Tuesday, '09:00', '17:00'));
+        $this->repository->saveRule(new AvailabilityRule($this->resourceId, DayOfWeek::Saturday, '10:00', '14:00'));
+
+        $rules = $this->repository->findRulesForResource($this->resourceId);
+
+        $this->assertCount(3, $rules);
+    }
+
+    public function testSaveOverrideIsIdempotent(): void
+    {
+        $date = new DateTimeImmutable('2024-01-15');
+        $this->repository->saveOverride(new AvailabilityOverride($this->resourceId, $date, false));
+        $this->repository->saveOverride(new AvailabilityOverride($this->resourceId, $date, true));
+
+        $overrides = $this->repository->findOverridesForResource(
+            $this->resourceId,
+            new DateTimeImmutable('2024-01-14'),
+            new DateTimeImmutable('2024-01-16'),
+        );
+
+        $this->assertCount(1, $overrides);
+        $this->assertTrue($overrides[0]->isAvailable);
+    }
 }

@@ -571,8 +571,19 @@ Uses `tempnam()` for isolated temp files; `tearDown` always cleans up. Skipped l
 
 ---
 
+### 29. Integration Tests — MysqlAvailabilityRepository
+
+`tests/Integration/Persistence/Mysql/MysqlAvailabilityRepositoryTest.php` extended with 3 additional tests (file pre-existed with 4):
+
+- `testSaveRuleIsIdempotent` — saving the same rule (same resource + day) twice overwrites it, no duplicate row
+- `testFindRulesForResourceReturnsMultipleRules` — 3 rules for different days all returned
+- `testSaveOverrideIsIdempotent` — saving the same override twice overwrites `available`, no duplicate row
+
+206 tests (20 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-- **29.** Integration tests — `MysqlAvailabilityRepository`
 - **30.** Slim framework adapter (`examples/slim/`)
 - **31.** API tests
