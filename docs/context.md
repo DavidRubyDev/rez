@@ -491,6 +491,22 @@ Fully hexagonal seed pipeline — data lives in SQL files, the use case orchestr
 
 ---
 
+### 24. ConfirmReservation + MarkNoShow Use Cases + Handlers
+
+**ConfirmReservationUseCase** and **MarkNoShowUseCase** follow the same pattern as `CancelReservationUseCase` — `findById`, transition, `save`, return response.
+
+Both expose a `*UseCaseInterface` registered in `config/container.php`.
+
+**ConfirmReservationHandler** and **MarkNoShowHandler** follow the same pattern as `CancelReservationHandler`.
+
+`docs/openapi.yaml` updated with `POST /reservations/{id}/confirm` and `POST /reservations/{id}/no-show`.
+
+10 new tests (8 use case, 2 handler). Total: 174 unit tests passing, PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-None — all planned steps complete.
+- **25.** Availability write use cases + handlers (`SaveAvailabilityRule`, `SaveAvailabilityOverride`)
+- **26.** `UpdateResource` use case + handler
+- **27.** Integration test — `MysqlDatabaseSeeder`
