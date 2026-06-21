@@ -15,4 +15,6 @@ interface ResourceRepositoryInterface
     public function findAll(): ResourceCollection;
 
     public function save(Resource $resource): void;
+
+    public function delete(ResourceId $id): void;
 }

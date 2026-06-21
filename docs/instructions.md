@@ -1389,3 +1389,150 @@ Tests:
   - `executeFile()` with a valid SQL file executes statements and data is persisted (write a temp SQL file that inserts a known resource row, then assert it exists via a SELECT)
   - `executeFile()` with a multi-statement file (two INSERT statements separated by `;`) executes all statements
   - `executeFile()` with a non-existent path throws `\RuntimeException`
+
+---
+
+### 28. DeleteResource Use Case + Handler
+
+Add `delete(ResourceId $id): void` to `ResourceRepositoryInterface`.
+
+`DeleteResourceRequest` — readonly: `ResourceId $resourceId`
+`DeleteResourceResponse` — empty class (no data to return)
+
+`DeleteResourceUseCase implements DeleteResourceUseCaseInterface`:
+  1. `findById(resourceId)` — throws `ResourceNotFoundException` if missing
+  2. `delete(resourceId)`
+  3. Return response
+
+Test:
+  - Not found throws `ResourceNotFoundException`
+  - Success: `delete()` called with correct id
+  - Success: `findById()` called before `delete()`
+
+`DeleteResourceHandler::handle(array{id: string}): array{}` — returns empty array.
+
+Register in `config/container.php`.
+
+Add to `docs/openapi.yaml`:
+- `DELETE /resources/{id}` → 204 No Content | 404
+
+Update `MysqlResourceRepository` to implement `delete()`:
+  `DELETE FROM resources WHERE id = :id` (cascade handles child rows)
+
+Add to `MysqlResourceRepositoryTest`:
+  - `save()` then `delete()` then `findById()` throws `ResourceNotFoundException`
+
+---
+
+### 29. Integration Tests — MysqlAvailabilityRepository
+
+`MysqlAvailabilityRepository` has no integration test. Add `tests/Integration/Persistence/Mysql/MysqlAvailabilityRepositoryTest.php`.
+
+Extend `MysqlIntegrationTestCase`. Each test creates a resource row first (needed for FK constraints), then exercises the availability repository.
+
+Tests:
+  - `saveRule()` then `findRulesForResource()` returns the saved rule with correct fields
+  - `findRulesForResource()` on a resource with no rules returns empty array
+  - `saveRule()` is idempotent — saving the same rule twice does not duplicate it (ON DUPLICATE KEY UPDATE)
+  - `saveOverride()` then `findOverridesForResource()` for the correct date range returns the override
+  - `findOverridesForResource()` outside the date range returns empty array
+  - `saveOverride()` is idempotent — saving the same override twice does not duplicate it
+
+---
+
+### 30. Slim Framework Adapter
+
+Create a standalone example application at `examples/slim/` that wires all Rez handlers to a Slim 4 HTTP application.
+
+Directory structure:
+
+```
+examples/slim/
+  composer.json       — requires davidrubydev/rez (path repo) + slim/slim + nyholm/psr7 + php-di/slim-bridge
+  public/
+    index.php         — entry point
+  config/
+    container.php     — extends library container.php, adds PDO + MySQL repo bindings
+  routes.php          — all route definitions
+```
+
+`public/index.php`:
+  - Loads `.env` from project root
+  - Boots PHP-DI + Slim bridge
+  - Includes `routes.php`
+  - Runs the app
+
+`config/container.php`:
+  - Merges library `config/container.php` definitions
+  - Adds `PDO`, `ReservationRepositoryInterface`, `ResourceRepositoryInterface`, `AvailabilityRepositoryInterface` bindings pointing to MySQL implementations
+
+`routes.php` — wire every handler to its route:
+
+```
+POST   /resources                                    → CreateResourceHandler
+GET    /resources                                    → ListResourcesHandler
+GET    /resources/{id}                               → GetResourceHandler
+PATCH  /resources/{id}                               → UpdateResourceHandler
+DELETE /resources/{id}                               → DeleteResourceHandler
+PUT    /resources/{id}/availability/rules            → SaveAvailabilityRuleHandler
+PUT    /resources/{id}/availability/overrides/{date} → SaveAvailabilityOverrideHandler
+
+POST   /reservations                   → CreateReservationHandler
+GET    /reservations                   → ListReservationsHandler
+GET    /reservations/{id}              → GetReservationHandler
+POST   /reservations/{id}/cancel       → CancelReservationHandler
+POST   /reservations/{id}/confirm      → ConfirmReservationHandler
+POST   /reservations/{id}/no-show      → MarkNoShowHandler
+
+GET    /availability                   → GetAvailabilityHandler
+```
+
+Each route:
+  - Parses the JSON body (if any) and merges path params into the data array
+  - Calls `$handler->handle($data)`
+  - Returns a JSON response with the appropriate status code (201 for creates, 200 for everything else, 204 for delete)
+  - Catches domain exceptions and maps them to HTTP status codes:
+    - `ResourceNotFoundException` / `ReservationNotFoundException` → 404
+    - `ConflictException` → 409
+    - `InvalidArgumentException` / `DomainException` → 422
+
+No tests at this layer — covered by API tests in step 31.
+
+---
+
+### 31. API Tests
+
+Add a test suite that drives the Slim application over real HTTP using a real database.
+
+`examples/slim/tests/` directory. Uses PHPUnit with a custom bootstrap that boots the Slim app on a test port (or uses Slim's built-in `AppFactory` with a mock server handler — no actual HTTP port needed).
+
+Use the Slim app directly via PSR-7 request/response without a real socket — call `$app->handle(ServerRequest)` directly.
+
+Test classes:
+
+`ResourceApiTest`:
+  - POST /resources → 201 + resource shape
+  - POST /resources with invalid capacity → 422
+  - GET /resources → 200 + array
+  - GET /resources/{id} → 200 + resource
+  - GET /resources/{unknown-id} → 404
+  - PATCH /resources/{id} with name only → 200 + name changed, others preserved
+  - DELETE /resources/{id} → 204
+  - DELETE /resources/{unknown-id} → 404
+
+`ReservationApiTest`:
+  - POST /reservations → 201 + reservation shape with status=pending
+  - POST /reservations conflicting slot → 409
+  - GET /reservations → 200 + array
+  - GET /reservations/{id} → 200 + reservation
+  - POST /reservations/{id}/confirm → 200 + status=confirmed
+  - POST /reservations/{id}/cancel → 200 + status=cancelled
+  - POST /reservations/{id}/no-show (on confirmed) → 200 + status=no_show
+
+`AvailabilityApiTest`:
+  - PUT /resources/{id}/availability/rules → 200 + rule shape
+  - PUT /resources/{id}/availability/overrides/{date} → 200 + override shape
+  - GET /availability → 200 + window with slots
+  - GET /availability on closed day → 200 + empty slots
+
+All test classes extend a base that boots the Slim app and truncates tables before each test.
