@@ -537,6 +537,20 @@ Both use case interfaces registered in `config/container.php`.
 
 ---
 
+### 27. Integration Test — MysqlDatabaseSeeder
+
+`tests/Integration/Persistence/Mysql/MysqlDatabaseSeederTest.php` — 3 integration tests:
+
+- `testExecutesSingleStatementFromFile` — writes an INSERT to a temp SQL file, executes it, verifies the row is in the DB
+- `testExecutesMultipleStatementsFromFile` — file with two statements separated by `;`, verifies both rows inserted
+- `testThrowsWhenFileDoesNotExist` — passes a non-existent path, expects `RuntimeException`
+
+Uses `tempnam()` for isolated temp files; `tearDown` always cleans up. Skipped locally (no DB); runs in CI. `$tmpFile` initialized before `parent::setUp()` to avoid typed property errors when the test is skipped.
+
+197 tests (16 skipped — all integration), PHPStan max clean, CS clean. All roadmap steps complete.
+
+---
+
 ## Pending Steps
 
-- **27.** Integration test — `MysqlDatabaseSeeder`
+None. All planned steps complete.
