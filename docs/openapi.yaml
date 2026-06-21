@@ -201,6 +201,52 @@ paths:
         '422':
           description: Cannot cancel — reservation is already cancelled
 
+  /reservations/{id}/confirm:
+    post:
+      summary: Confirm a reservation
+      operationId: confirmReservation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reservation confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '404':
+          description: Reservation not found
+        '422':
+          description: Cannot confirm — reservation is not pending
+
+  /reservations/{id}/no-show:
+    post:
+      summary: Mark a reservation as no-show
+      operationId: markNoShow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reservation marked as no-show
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '404':
+          description: Reservation not found
+        '422':
+          description: Cannot mark as no-show — reservation is not confirmed
+
   /availability:
     get:
       summary: Get available time slots for a resource on a given date

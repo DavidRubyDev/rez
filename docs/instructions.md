@@ -1224,3 +1224,168 @@ echo "Seed complete.\n";
 The availability repository's `saveRule()` and `saveOverride()` methods are on `MysqlAvailabilityRepository` directly (not on the port interface). Call them via the concrete class or extend the port interface to include write methods before this step.
 
 Note: `AvailabilityRepositoryInterface` currently only defines read methods. Decide in this step whether to add `saveRule()` and `saveOverride()` to the port interface or keep write methods on the concrete class only (preferred if only the seed script needs them).
+
+---
+
+### 24. ConfirmReservation + MarkNoShowReservation Use Cases + Handlers
+
+The domain already supports `confirm()` and `markNoShow()` state transitions but they have no use case, handler, or API surface.
+
+#### ConfirmReservation
+
+`ConfirmReservationRequest` — readonly: `ReservationId $reservationId`
+`ConfirmReservationResponse` — readonly: `Reservation $reservation`
+
+`ConfirmReservationUseCase implements ConfirmReservationUseCaseInterface`:
+  1. `findById()` — throws `ReservationNotFoundException` if missing
+  2. `$reservation->confirm()` — `InvalidReservationStateException` propagates if not Pending
+  3. `save()`
+  4. Return response
+
+Test:
+  - Not found throws `ReservationNotFoundException`
+  - Already confirmed throws `InvalidReservationStateException`
+  - Success: `save()` called with confirmed reservation
+  - Success: response reservation has `Confirmed` status
+
+`ConfirmReservationHandler::handle(array{id: string}): array` — delegates to use case, returns serialized reservation via `ReservationSerializer`.
+
+#### MarkNoShow
+
+`MarkNoShowRequest` — readonly: `ReservationId $reservationId`
+`MarkNoShowResponse` — readonly: `Reservation $reservation`
+
+`MarkNoShowUseCase implements MarkNoShowUseCaseInterface`:
+  1. `findById()` — throws `ReservationNotFoundException` if missing
+  2. `$reservation->markNoShow()` — `InvalidReservationStateException` propagates if not Confirmed
+  3. `save()`
+  4. Return response
+
+Test:
+  - Not found throws `ReservationNotFoundException`
+  - Not confirmed throws `InvalidReservationStateException`
+  - Success: `save()` called with no-show reservation
+  - Success: response reservation has `NoShow` status
+
+`MarkNoShowHandler::handle(array{id: string}): array` — delegates to use case, returns serialized reservation.
+
+Register both interfaces in `config/container.php`.
+
+Add both endpoints to `docs/openapi.yaml`:
+- `POST /reservations/{id}/confirm` → 200 Reservation | 404 | 422
+- `POST /reservations/{id}/no-show` → 200 Reservation | 404 | 422
+
+---
+
+### 25. Availability Write Use Cases + Handlers
+
+`saveRule()` and `saveOverride()` are currently only reachable via the seed script. Expose them as proper use cases.
+
+Add write methods to `AvailabilityRepositoryInterface`:
+```php
+public function saveRule(AvailabilityRule $rule): void;
+public function saveOverride(AvailabilityOverride $override): void;
+```
+
+#### SaveAvailabilityRule
+
+`SaveAvailabilityRuleRequest` — readonly:
+  `ResourceId $resourceId`
+  `DayOfWeek $dayOfWeek`
+  `string $openTime`   — 'HH:MM'
+  `string $closeTime`  — 'HH:MM'
+
+`SaveAvailabilityRuleResponse` — readonly: `AvailabilityRule $rule`
+
+`SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseInterface`:
+  1. `findById(resourceId)` — throws `ResourceNotFoundException` if missing
+  2. Build `AvailabilityRule` — `\InvalidArgumentException` propagates if times invalid
+  3. `saveRule()`
+  4. Return response
+
+Test:
+  - Resource not found throws `ResourceNotFoundException`
+  - Invalid times throw `\InvalidArgumentException`
+  - Success: `saveRule()` called once, response contains correct rule
+
+`SaveAvailabilityRuleHandler::handle(array{resource_id: string, day_of_week: string, open_time: string, close_time: string}): array`
+
+Return shape: `array{resource_id: string, day_of_week: string, open_time: string, close_time: string}`
+
+#### SaveAvailabilityOverride
+
+`SaveAvailabilityOverrideRequest` — readonly:
+  `ResourceId $resourceId`
+  `DateTimeImmutable $date`
+  `bool $available`
+
+`SaveAvailabilityOverrideResponse` — readonly: `AvailabilityOverride $override`
+
+`SaveAvailabilityOverrideUseCase implements SaveAvailabilityOverrideUseCaseInterface`:
+  1. `findById(resourceId)` — throws `ResourceNotFoundException` if missing
+  2. Build `AvailabilityOverride`
+  3. `saveOverride()`
+  4. Return response
+
+Test:
+  - Resource not found throws `ResourceNotFoundException`
+  - Success: `saveOverride()` called once, response contains correct override
+
+`SaveAvailabilityOverrideHandler::handle(array{resource_id: string, date: string, available: bool}): array`
+
+Return shape: `array{resource_id: string, date: string, available: bool}`
+
+Register both interfaces in `config/container.php`.
+
+Add to `docs/openapi.yaml`:
+- `PUT /resources/{id}/availability/rules` — body: `{day_of_week, open_time, close_time}`
+- `PUT /resources/{id}/availability/overrides/{date}` — body: `{available: bool}`
+
+---
+
+### 26. UpdateResource Use Case + Handler
+
+`withAttributes()` exists on `Resource` but there is no use case to update a resource's name, capacity, or attributes.
+
+`UpdateResourceRequest` — readonly:
+  `ResourceId $resourceId`
+  `string $name`
+  `int $capacity`
+  `array $attributes`
+
+`UpdateResourceResponse` — readonly: `Resource $resource`
+
+`UpdateResourceUseCase implements UpdateResourceUseCaseInterface`:
+  1. `findById(resourceId)` — throws `ResourceNotFoundException` if missing
+  2. Build updated `Resource` — `\InvalidArgumentException` propagates for empty name / capacity < 1
+  3. `save()`
+  4. Return response
+
+The updated resource retains its original `id` and `type`. Only `name`, `capacity`, and `attributes` are replaced (not merged — the caller sends the full new state).
+
+Test:
+  - Not found throws `ResourceNotFoundException`
+  - Empty name throws `\InvalidArgumentException`
+  - Capacity < 1 throws `\InvalidArgumentException`
+  - Success: `save()` called with updated resource, response contains updated values
+  - Original `id` and `type` are preserved
+
+`UpdateResourceHandler::handle(array{id: string, name: string, capacity: int, attributes?: array<string, mixed>}): array` — returns serialized resource via `ResourceSerializer`.
+
+Register in `config/container.php`.
+
+Add to `docs/openapi.yaml`:
+- `PATCH /resources/{id}` — body: `{name?, capacity?, attributes?}` → 200 Resource | 404 | 422
+
+---
+
+### 27. Integration Test — MysqlDatabaseSeeder
+
+`MysqlDatabaseSeeder` has no integration test. Add one to `tests/Integration/Persistence/Mysql/MysqlDatabaseSeederTest.php`.
+
+Extend `MysqlIntegrationTestCase`.
+
+Tests:
+  - `executeFile()` with a valid SQL file executes statements and data is persisted (write a temp SQL file that inserts a known resource row, then assert it exists via a SELECT)
+  - `executeFile()` with a multi-statement file (two INSERT statements separated by `;`) executes all statements
+  - `executeFile()` with a non-existent path throws `\RuntimeException`
