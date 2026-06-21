@@ -523,7 +523,20 @@ Both use case interfaces registered in `config/container.php`.
 
 ---
 
+### 26. UpdateResource Use Case + Handler
+
+**`UpdateResourceUseCase`** — PATCH semantics: all fields nullable. `findById` (throws `ResourceNotFoundException` if missing), constructs a new `Resource` with the same `id` and `type`, using `??` to fall back to existing values for any field not provided. Sending `attributes: []` explicitly clears them. Validation (empty name, capacity < 1) is enforced by the `Resource` constructor.
+
+**`UpdateResourceHandler`** — input: `array{id: string, name?: string, capacity?: int, attributes?: array<string, mixed>}`, passes `null` for absent keys, output: serialized resource via `ResourceSerializer::serialize()`.
+
+`docs/openapi.yaml` updated with `PATCH /resources/{id}` (no required fields in body).
+
+`UpdateResourceUseCaseInterface` registered in `config/container.php`.
+
+9 new tests (7 use case, 2 handler). Total: 194 unit tests passing, PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-- **26.** `UpdateResource` use case + handler
 - **27.** Integration test — `MysqlDatabaseSeeder`

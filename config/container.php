@@ -28,6 +28,8 @@ use Rez\Application\UseCase\Resource\GetResource\GetResourceUseCase;
 use Rez\Application\UseCase\Resource\GetResource\GetResourceUseCaseInterface;
 use Rez\Application\UseCase\Resource\ListResources\ListResourcesUseCase;
 use Rez\Application\UseCase\Resource\ListResources\ListResourcesUseCaseInterface;
+use Rez\Application\UseCase\Resource\UpdateResource\UpdateResourceUseCase;
+use Rez\Application\UseCase\Resource\UpdateResource\UpdateResourceUseCaseInterface;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCase;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCaseInterface;
 use Rez\Application\Port\DatabaseSeederInterface;
@@ -49,6 +51,7 @@ return [
     CreateResourceUseCaseInterface::class     => autowire(CreateResourceUseCase::class),
     GetResourceUseCaseInterface::class        => autowire(GetResourceUseCase::class),
     ListResourcesUseCaseInterface::class      => autowire(ListResourcesUseCase::class),
+    UpdateResourceUseCaseInterface::class     => autowire(UpdateResourceUseCase::class),
     DatabaseSeederInterface::class            => autowire(MysqlDatabaseSeeder::class),
     SeedDatabaseUseCaseInterface::class       => autowire(SeedDatabaseUseCase::class),
 ];
