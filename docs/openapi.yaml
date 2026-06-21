@@ -82,6 +82,47 @@ paths:
         '404':
           description: Resource not found
 
+    patch:
+      summary: Partially update a resource
+      operationId: updateResource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Table One
+                capacity:
+                  type: integer
+                  minimum: 1
+                  example: 6
+                attributes:
+                  type: object
+                  additionalProperties: true
+                  description: Arbitrary key-value metadata (replaces existing; omit to keep current)
+                  example: { location: terrace }
+      responses:
+        '200':
+          description: Resource updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '404':
+          description: Resource not found
+        '422':
+          description: Validation error (capacity < 1, empty name)
+
   /reservations:
     post:
       summary: Create a reservation
