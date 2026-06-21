@@ -444,8 +444,53 @@ All three expose a `*UseCaseInterface` registered in `config/container.php`.
 
 ---
 
+### 21. Database Setup
+
+`database/seeds/000_schema.sql` — authoritative DDL for all five tables, safe to re-run (`IF NOT EXISTS`). Lives in the seeds directory so `bin/seed.php` applies it automatically before data files.
+
+Tables: `resources`, `reservations`, `reservation_resources`, `availability_rules`, `availability_overrides`.
+
+Foreign key constraints with `ON DELETE CASCADE` on all child tables. `open_time`/`close_time` stored as `CHAR(5)` (`HH:MM`). `attributes` as `JSON`. All PKs are UUID v4 strings. All timestamps in UTC, no timezone stored.
+
+---
+
+### 22. OpenAPI Spec
+
+`docs/openapi.yaml` — OpenAPI 3.0.3 spec describing the full HTTP surface.
+
+8 endpoints:
+- `POST /resources`, `GET /resources`, `GET /resources/{id}`
+- `POST /reservations`, `GET /reservations`, `GET /reservations/{id}`, `POST /reservations/{id}/cancel`
+- `GET /availability`
+
+Schemas: `Resource`, `Reservation`, `Party`, `PartyInput`, `TimeSlot`, `AvailabilityWindow`.
+
+---
+
+### 23. CLI Seed Script
+
+Fully hexagonal seed pipeline — data lives in SQL files, the use case orchestrates execution via a port.
+
+**`DatabaseSeederInterface`** (`src/Application/Port/`) — `executeFile(string $filePath): void`
+
+**`SeedDatabaseUseCase`** (`src/Application/UseCase/Seed/SeedDatabase/`) — receives a `SeedDatabaseRequest(string $seedsDirectory)`, globs `*.sql` files, sorts by filename, delegates each to the port. Returns `SeedDatabaseResponse(int $filesExecuted)`.
+
+**`MysqlDatabaseSeeder`** (`src/Infrastructure/Persistence/Mysql/`) — reads a file, splits on `;`, executes each non-empty statement via `PDO::exec()`.
+
+**`database/seeds/`** — four idempotent SQL files with hardcoded UUIDs:
+- `001_resources.sql` — 3 tables (UUIDs `aaaaaaaa-…-001/002/003`)
+- `002_availability_rules.sql` — Mon–Fri 09:00–17:00, Sat 10:00–14:00 for all three
+- `003_availability_overrides.sql` — Table 1 unavailable on 2024-06-08
+- `004_reservations.sql` — 3 reservations (Mon/Tue 2024-06-03/04) + reservation_resources rows
+
+**`bin/seed.php`** — thin CLI entry point: loads `.env`, boots PHP-DI container, calls `SeedDatabaseUseCaseInterface` with `__DIR__ . '/../database/seeds'`.
+
+`DatabaseSeederInterface` and `SeedDatabaseUseCaseInterface` registered in `config/container.php`.
+
+4 new tests in `SeedDatabaseUseCaseTest` (file count, filename order, non-sql ignored, empty dir). Total: 164 unit tests passing, PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-- **21.** Database setup — `database/schema.sql`
-- **22.** OpenAPI spec — `docs/openapi.yaml`
-- **23.** CLI seed script — `bin/seed.php`
+None — all planned steps complete.

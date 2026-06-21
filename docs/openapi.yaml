@@ -1,0 +1,342 @@
+openapi: 3.0.3
+
+info:
+  title: Rez Reservation API
+  description: >
+    Framework-agnostic reservation engine. This spec describes the HTTP surface
+    a client application exposes by wiring Rez handlers to routes. The library
+    itself has no HTTP dependency.
+  version: 1.0.0
+
+paths:
+
+  /resources:
+    post:
+      summary: Create a resource
+      operationId: createResource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, name, capacity]
+              properties:
+                type:
+                  type: string
+                  description: Lowercase alphanumeric slug (e.g. "table", "meeting-room")
+                  example: table
+                name:
+                  type: string
+                  example: Table 1
+                capacity:
+                  type: integer
+                  minimum: 1
+                  example: 4
+                attributes:
+                  type: object
+                  additionalProperties: true
+                  description: Arbitrary key-value metadata
+                  example: { location: window }
+      responses:
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '422':
+          description: Validation error (invalid type slug, capacity < 1, empty name)
+
+    get:
+      summary: List all resources
+      operationId: listResources
+      responses:
+        '200':
+          description: Array of all resources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Resource'
+
+  /resources/{id}:
+    get:
+      summary: Get a resource by ID
+      operationId: getResource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Resource found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '404':
+          description: Resource not found
+
+  /reservations:
+    post:
+      summary: Create a reservation
+      operationId: createReservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource_ids, start, end, party]
+              properties:
+                resource_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                  minItems: 1
+                  description: One or more resource IDs to reserve simultaneously
+                start:
+                  type: string
+                  format: date-time
+                  example: '2024-06-01 10:00:00'
+                end:
+                  type: string
+                  format: date-time
+                  example: '2024-06-01 11:00:00'
+                party:
+                  $ref: '#/components/schemas/PartyInput'
+      responses:
+        '201':
+          description: Reservation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '404':
+          description: One or more resources not found
+        '409':
+          description: Conflict — slot already taken or outside availability window
+        '422':
+          description: Validation error (invalid time slot, empty party, etc.)
+
+    get:
+      summary: List reservations
+      operationId: listReservations
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter reservations starting on or after this datetime
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter reservations ending on or before this datetime
+        - name: resource_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by resource ID
+      responses:
+        '200':
+          description: Array of matching reservations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reservation'
+
+  /reservations/{id}:
+    get:
+      summary: Get a reservation by ID
+      operationId: getReservation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reservation found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '404':
+          description: Reservation not found
+
+  /reservations/{id}/cancel:
+    post:
+      summary: Cancel a reservation
+      operationId: cancelReservation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reservation cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '404':
+          description: Reservation not found
+        '422':
+          description: Cannot cancel — reservation is already cancelled
+
+  /availability:
+    get:
+      summary: Get available time slots for a resource on a given date
+      operationId: getAvailability
+      parameters:
+        - name: resource_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2024-06-01'
+        - name: slot_duration_minutes
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 60
+          description: Duration of each slot in minutes
+      responses:
+        '200':
+          description: Availability window with free slots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityWindow'
+
+components:
+  schemas:
+
+    Resource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          example: table
+        name:
+          type: string
+          example: Table 1
+        capacity:
+          type: integer
+          example: 4
+        attributes:
+          type: object
+          additionalProperties: true
+
+    PartyInput:
+      type: object
+      required: [name, email, size]
+      properties:
+        name:
+          type: string
+          example: Jane Smith
+        email:
+          type: string
+          format: email
+          example: jane@example.com
+        size:
+          type: integer
+          minimum: 1
+          example: 2
+        phone:
+          type: string
+          nullable: true
+          example: '+1234567890'
+
+    Party:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        size:
+          type: integer
+        phone:
+          type: string
+          nullable: true
+
+    Reservation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled, no_show]
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        resource_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        party:
+          $ref: '#/components/schemas/Party'
+        created_at:
+          type: string
+          format: date-time
+
+    TimeSlot:
+      type: object
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+
+    AvailabilityWindow:
+      type: object
+      properties:
+        resource_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimeSlot'
