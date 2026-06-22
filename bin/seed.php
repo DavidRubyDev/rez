@@ -3,10 +3,15 @@
 
 declare(strict_types=1);
 
-require __DIR__ . '/../vendor/autoload.php';
+$autoload = file_exists(__DIR__ . '/../vendor/autoload.php')
+    ? __DIR__ . '/../vendor/autoload.php'
+    : __DIR__ . '/../../../autoload.php';
+require $autoload;
 
 // Load .env if present
-$envFile = __DIR__ . '/../.env';
+$envFile = file_exists(__DIR__ . '/../.env')
+    ? __DIR__ . '/../.env'
+    : __DIR__ . '/../../../../.env';
 if (file_exists($envFile)) {
     foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
         if (str_starts_with(trim($line), '#') || !str_contains($line, '=')) {
