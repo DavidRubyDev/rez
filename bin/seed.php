@@ -18,7 +18,10 @@ if (file_exists($envFile)) {
             continue;
         }
         [$key, $value] = explode('=', $line, 2);
-        $_ENV[trim($key)] = trim($value);
+        $k = trim($key);
+        if (!isset($_ENV[$k])) {
+            $_ENV[$k] = trim($value);
+        }
     }
 }
 
@@ -38,12 +41,12 @@ use function DI\factory;
 $pdo = new PDO(
     sprintf(
         'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
-        $_ENV['DB_HOST'] ?? 'localhost',
-        $_ENV['DB_PORT'] ?? '3306',
-        $_ENV['DB_NAME'] ?? 'rez',
+        getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? 'localhost'),
+        getenv('DB_PORT') ?: ($_ENV['DB_PORT'] ?? '3306'),
+        getenv('DB_NAME') ?: ($_ENV['DB_NAME'] ?? 'rez'),
     ),
-    $_ENV['DB_USER'] ?? 'root',
-    $_ENV['DB_PASS'] ?? '',
+    getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? 'root'),
+    getenv('DB_PASS') ?: ($_ENV['DB_PASS'] ?? ''),
     [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
 );
 
