@@ -739,3 +739,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `tests/Application/Config/UsersConfigTest.php` — 5 cases: valid construction with custom values, defaults applied, empty secret throws, TTL below 1 throws (both fields).
 
 248 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 43. CreditsConfig (`02_rez-config.md` step 5)
+
+`src/Application/Config/CreditsConfig.php` — immutable config value object. `public readonly int $minimumTopUpAmount` (haléře/cents, min 1), `public readonly string $currency` (non-empty). Throws `\InvalidArgumentException` if either constraint is violated.
+
+`tests/Application/Config/CreditsConfigTest.php` — 3 cases: valid construction, amount below 1 throws, empty currency throws.
+
+251 tests (22 skipped — all integration), PHPStan max clean, CS clean.
