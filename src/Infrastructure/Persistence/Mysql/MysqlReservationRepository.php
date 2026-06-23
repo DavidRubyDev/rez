@@ -92,28 +92,30 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     public function save(Reservation $reservation): void
     {
         $stmt = $this->pdo->prepare('
-            INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, created_at)
-            VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :created_at)
+            INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, external_ref, created_at)
+            VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :external_ref, :created_at)
             ON DUPLICATE KEY UPDATE
-                status      = VALUES(status),
-                start_at    = VALUES(start_at),
-                end_at      = VALUES(end_at),
-                party_name  = VALUES(party_name),
-                party_email = VALUES(party_email),
-                party_size  = VALUES(party_size),
-                party_phone = VALUES(party_phone)
+                status       = VALUES(status),
+                start_at     = VALUES(start_at),
+                end_at       = VALUES(end_at),
+                party_name   = VALUES(party_name),
+                party_email  = VALUES(party_email),
+                party_size   = VALUES(party_size),
+                party_phone  = VALUES(party_phone),
+                external_ref = VALUES(external_ref)
         ');
 
         $stmt->execute([
-            ':id'          => $reservation->id->toString(),
-            ':status'      => $this->statusMapper->toString($reservation->status),
-            ':start_at'    => $reservation->slot->start->format('Y-m-d H:i:s'),
-            ':end_at'      => $reservation->slot->end->format('Y-m-d H:i:s'),
-            ':party_name'  => $reservation->party->name,
-            ':party_email' => $reservation->party->email,
-            ':party_size'  => $reservation->party->size,
-            ':party_phone' => $reservation->party->phone,
-            ':created_at'  => $reservation->createdAt->format('Y-m-d H:i:s'),
+            ':id'           => $reservation->id->toString(),
+            ':status'       => $this->statusMapper->toString($reservation->status),
+            ':start_at'     => $reservation->slot->start->format('Y-m-d H:i:s'),
+            ':end_at'       => $reservation->slot->end->format('Y-m-d H:i:s'),
+            ':party_name'   => $reservation->party->name,
+            ':party_email'  => $reservation->party->email,
+            ':party_size'   => $reservation->party->size,
+            ':party_phone'  => $reservation->party->phone,
+            ':external_ref' => $reservation->party->externalRef,
+            ':created_at'   => $reservation->createdAt->format('Y-m-d H:i:s'),
         ]);
 
         $delete = $this->pdo->prepare('DELETE FROM reservation_resources WHERE reservation_id = :id');
@@ -146,6 +148,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
                 $this->str($row['party_email']),
                 $this->int($row['party_size']),
                 $this->nullStr($row['party_phone']),
+                $this->nullStr($row['external_ref']),
             ),
             $this->statusMapper->fromString($this->str($row['status'])),
             new DateTimeImmutable($this->str($row['created_at'])),

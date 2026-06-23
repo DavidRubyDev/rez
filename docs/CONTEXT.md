@@ -622,11 +622,25 @@ Main suite unaffected: 206 tests (20 skipped), PHPStan max clean, CS clean.
 
 ---
 
+### 33. MysqlReservationRepository `external_ref` (platform-readiness Step 3)
+
+`src/Infrastructure/Persistence/Mysql/MysqlReservationRepository.php` — `external_ref` now fully persisted and hydrated.
+
+- `save()` — `external_ref` added to INSERT column list, VALUES, and `ON DUPLICATE KEY UPDATE`
+- `hydrate()` — `$this->nullStr($row['external_ref'])` passed as fifth `Party` constructor argument
+
+`tests/Integration/Persistence/Mysql/MysqlReservationRepositoryTest.php` — 2 new integration tests:
+- `testExternalRefIsPersistedAndHydrated` — saves a reservation with `externalRef: 'user-uuid-123'`, asserts it round-trips
+- `testNullExternalRefRoundtrips` — saves a reservation with null `externalRef`, asserts `null` returned
+
+210 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
 From `docs/rez-platform-modifications.md`:
 
-- **Step 3** — `MysqlReservationRepository`: read/write `external_ref` in `save()` and hydration
 - **Step 4** — `ReservationSerializer`: include `external_ref` in output; update OpenAPI spec
 - **Step 5** — `SeedDatabaseRequest`: change `string $seedsDirectory` → `array $seedsDirectories` (breaking)
 - **Step 6** — `SeedDatabaseUseCase`: iterate multiple directories, update tests
