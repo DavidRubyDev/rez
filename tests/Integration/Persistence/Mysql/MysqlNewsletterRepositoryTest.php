@@ -8,6 +8,7 @@ use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
 use Rez\Domain\Newsletter\NewsletterSubscriber;
 use Rez\Domain\Newsletter\NewsletterSubscriberId;
 use Rez\Domain\Newsletter\SubscriberSource;
+use Rez\Infrastructure\Mapper\SubscriberSourceMapper;
 use Rez\Infrastructure\Persistence\Mysql\MysqlNewsletterRepository;
 
 class MysqlNewsletterRepositoryTest extends MysqlIntegrationTestCase
@@ -17,7 +18,7 @@ class MysqlNewsletterRepositoryTest extends MysqlIntegrationTestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->repository = new MysqlNewsletterRepository($this->pdo());
+        $this->repository = new MysqlNewsletterRepository($this->pdo(), new SubscriberSourceMapper());
     }
 
     public function testSaveAndFindByEmail(): void

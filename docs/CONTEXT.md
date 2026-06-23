@@ -826,6 +826,22 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 
 306 tests (22 skipped — all integration), PHPStan max clean, CS clean.
 
+### 57. MysqlNewsletterRepository (`03_rez-mailer-newsletter.md` step 9)
+
+`src/Infrastructure/Persistence/Mysql/MysqlNewsletterRepository.php` — implements `NewsletterRepositoryInterface`. Constructor: `PDO`, `SubscriberSourceMapper`. Methods: `findByEmail()` (throws `NewsletterSubscriberNotFoundException`), `findAll()` (ordered by `opted_in_at ASC`), `save()` (upsert by email — updates `name`/`source` only, preserves `opted_in_at`), `delete()`. Private `hydrate()` uses `NewsletterSubscriber::reconstruct()`.
+
+`src/Infrastructure/Mapper/SubscriberSourceMapper.php` — maps `SubscriberSource` pure enum to/from string (`'guest'`/`'registered'`). Same pattern as `ReservationStatusMapper`.
+
+`tests/Infrastructure/Mapper/SubscriberSourceMapperTest.php` — 5 cases: toString for each case, fromString for each case, unknown string throws.
+
+`NewsletterSubscriber::reconstruct()` added — static factory for hydration, bypasses `create()` which sets `optedInAt` to UTC now.
+
+`MysqlIntegrationTestCase` updated — `newsletter_subscribers` table added to schema creation and truncation.
+
+`tests/Integration/Persistence/Mysql/MysqlNewsletterRepositoryTest.php` — 5 integration tests (skipped locally): save+findByEmail, findByEmail throws, save is idempotent, findAll returns all, delete removes.
+
+316 tests (27 skipped — all integration), PHPStan max clean, CS clean.
+
 ### 55. Newsletter use cases (`03_rez-mailer-newsletter.md` step 7)
 
 All three use cases follow Request/Response/UseCase/Interface pattern under `src/Application/UseCase/Newsletter/`.

@@ -9,12 +9,13 @@ use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
 use Rez\Domain\Newsletter\NewsletterSubscriber;
 use Rez\Domain\Newsletter\NewsletterSubscriberId;
-use Rez\Domain\Newsletter\SubscriberSource;
+use Rez\Infrastructure\Mapper\SubscriberSourceMapper;
 
 final class MysqlNewsletterRepository extends MysqlRepository implements NewsletterRepositoryInterface
 {
     public function __construct(
         private readonly PDO $pdo,
+        private readonly SubscriberSourceMapper $sourceMapper,
     ) {
     }
 
@@ -59,7 +60,7 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
             ':id'         => $subscriber->id->toString(),
             ':email'      => $subscriber->email,
             ':name'       => $subscriber->name,
-            ':source'     => $this->sourceToString($subscriber->source),
+            ':source'     => $this->sourceMapper->toString($subscriber->source),
             ':opted_in_at' => $subscriber->optedInAt->format('Y-m-d H:i:s'),
         ]);
     }
@@ -77,25 +78,10 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
             NewsletterSubscriberId::fromString($this->str($row['id'])),
             $this->str($row['email']),
             $this->nullStr($row['name']),
-            $this->sourceFromString($this->str($row['source'])),
+            $this->sourceMapper->fromString($this->str($row['source'])),
             new \DateTimeImmutable($this->str($row['opted_in_at']), new \DateTimeZone('UTC')),
         );
     }
 
-    private function sourceToString(SubscriberSource $source): string
-    {
-        return match ($source) {
-            SubscriberSource::Guest      => 'guest',
-            SubscriberSource::Registered => 'registered',
-        };
-    }
 
-    private function sourceFromString(string $source): SubscriberSource
-    {
-        return match ($source) {
-            'guest'      => SubscriberSource::Guest,
-            'registered' => SubscriberSource::Registered,
-            default      => throw new \InvalidArgumentException("Unknown subscriber source: '{$source}'."),
-        };
-    }
 }
