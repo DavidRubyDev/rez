@@ -677,8 +677,14 @@ All 4 existing tests updated to pass `[$tempDir]` (array). 2 new tests added:
 
 ---
 
-## Pending Steps
+### 37. MysqlDatabaseSeeder::seedsPath() (platform-readiness Step 9)
 
-From `docs/rez-platform-modifications.md`:
+`src/Infrastructure/Persistence/Mysql/MysqlDatabaseSeeder.php` — added `public static function seedsPath(): string` returning `dirname(__DIR__, 4) . '/database/seeds'`.
 
-- **Step 9** — Add `MysqlDatabaseSeeder::seedsPath(): string` static method
+Allows client repos and `rez-platform` to reference the rez seeds path without hardcoding vendor paths.
+
+No test — trivial path computation.
+
+213 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+All `docs/rez-platform-modifications.md` steps complete.
