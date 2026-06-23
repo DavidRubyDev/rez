@@ -688,3 +688,22 @@ No test — trivial path computation.
 213 tests (22 skipped — all integration), PHPStan max clean, CS clean.
 
 All `docs/rez-platform-modifications.md` steps complete.
+
+---
+
+### 38. Currency + CurrencyMapper + Money + InsufficientFundsException
+
+Pre-step before `02_rez-config.md` — shared financial domain types needed across config, payments, credits, subscriptions, and booking.
+
+`src/Domain/Shared/Currency.php` — pure enum: `Czk`, `Eur`, `Usd`. `getCode(): string` returns uppercase ISO code (`'CZK'`, `'EUR'`, `'USD'`). No test — same convention as other pure enums.
+
+`src/Infrastructure/Mapper/CurrencyMapper.php` — maps `Currency` to/from lowercase string (`'czk'`, `'eur'`, `'usd'`) for persistence and Stripe payloads. Throws `\InvalidArgumentException` for unknown values.
+
+`src/Domain/Exception/InsufficientFundsException.php` — extends `DomainException`. Constructor: `int $required, int $available, Currency $currency`. No test — trivial constructor.
+
+`src/Domain/Shared/Money.php` — immutable value object. `int $amount` (smallest currency unit — never floats), `Currency $currency`. Throws `\InvalidArgumentException` if amount < 0. Methods: `getAmount()`, `getCurrency()`, `add()`, `subtract()` (throws `InsufficientFundsException`), `isZero()`, `equals()`, `isGreaterThan()`, `__toString()` (e.g. `'150000 CZK'`). Cross-currency operations throw `\InvalidArgumentException`.
+
+`tests/Infrastructure/Mapper/CurrencyMapperTest.php` — 7 cases passing.
+`tests/Domain/Shared/MoneyTest.php` — 16 cases passing.
+
+236 tests (22 skipped — all integration), PHPStan max clean, CS clean.
