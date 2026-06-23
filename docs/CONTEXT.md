@@ -723,3 +723,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `tests/Application/Config/MailerConfigTest.php` — 3 cases: valid construction, invalid email throws, empty name throws.
 
 240 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 41. PaymentsConfig (`02_rez-config.md` step 3)
+
+`src/Application/Config/PaymentsConfig.php` — immutable config value object. `public readonly string $currency`, `public readonly string $webhookSecret`. Throws `\InvalidArgumentException` if either is empty.
+
+`tests/Application/Config/PaymentsConfigTest.php` — 3 cases: valid construction, empty currency throws, empty webhook secret throws.
+
+243 tests (22 skipped — all integration), PHPStan max clean, CS clean.

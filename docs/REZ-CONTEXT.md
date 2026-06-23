@@ -228,6 +228,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 `PlatformConfig` is constructed by the client app and injected via PHP-DI. It is the single root of all feature configuration.
 
 `MailerConfig` — COMPLETE. `fromAddress` (validated email), `fromName` (non-empty string).
+`PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
 
 ```
 PlatformConfig
