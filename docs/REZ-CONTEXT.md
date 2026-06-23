@@ -515,7 +515,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 
 | Module | Domain | Use cases | Infrastructure | Tests |
 |---|---|---|---|---|
-| Reservations | ✅ | ✅ | ✅ | ✅ 206 unit + 17 integration |
+| Reservations | ✅ | ✅ | ✅ | ✅ 188 unit + 22 integration |
 | Resources | ✅ | ✅ | ✅ | ✅ |
 | Availability | ✅ | ✅ | ✅ | ✅ |
 | Seeder | ✅ | ✅ | ✅ | ✅ |
@@ -530,7 +530,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Handler deprecation | ❌ | — | — | — |
 
 ### Pending scaffold documents (run in this order)
-1. `rez-core-changes` — externalRef on Party, SeedDatabaseRequest accepts string[]
+1. `rez-core-changes` — externalRef on Party (done), MysqlReservationRepository external_ref (done), SeedDatabaseRequest accepts string[] (pending)
 2. `rez-config` — PlatformConfig, all sub-configs, FeatureGuard
 3. `rez-mailer-newsletter` — MailerInterface, newsletter domain + repository + use cases
 4. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
