@@ -85,6 +85,8 @@ declare(strict_types=1);
 
 Write self-commenting code — well-named classes, methods, and variables should make the intent obvious. Add comments only where the *why* cannot be expressed in code (e.g. non-obvious business rules, edge cases that would surprise a reader). Never add comments that just restate what the code does.
 
+Every public method that directly throws or propagates an exception must have a `@throws` PHPDoc tag — one tag per exception type. This includes constructors, static factories, and `execute()` methods on use cases. See `docs/instructions/04_rez-throws-phpdoc.md` for the full backfill list.
+
 ---
 
 ## Before Every Commit
