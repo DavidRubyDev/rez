@@ -13,6 +13,7 @@ final class Party
         public readonly string $email,
         public readonly int $size,
         public readonly ?string $phone,
+        public readonly ?string $externalRef = null,
     ) {
         if ($name === '') {
             throw new InvalidPartyException('Party name must not be empty.');
