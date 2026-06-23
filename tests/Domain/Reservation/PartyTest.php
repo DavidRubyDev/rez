@@ -50,4 +50,18 @@ class PartyTest extends TestCase
 
         $this->assertNull($party->phone);
     }
+
+    public function testNullExternalRefIsAccepted(): void
+    {
+        $party = new Party('John Doe', 'john@example.com', 1, null, externalRef: null);
+
+        $this->assertNull($party->externalRef);
+    }
+
+    public function testExternalRefIsStoredAndReturned(): void
+    {
+        $party = new Party('John Doe', 'john@example.com', 1, null, externalRef: 'some-uuid');
+
+        $this->assertSame('some-uuid', $party->externalRef);
+    }
 }
