@@ -55,3 +55,13 @@ CREATE TABLE IF NOT EXISTS availability_overrides (
     PRIMARY KEY (resource_id, date),
     FOREIGN KEY (resource_id) REFERENCES resources (id) ON DELETE CASCADE
 );
+
+-- Newsletter opt-in subscribers (guests and registered users).
+-- source: 'guest' | 'registered' (see SubscriberSource enum)
+CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+    id          CHAR(36)     NOT NULL PRIMARY KEY,
+    email       VARCHAR(255) NOT NULL UNIQUE,
+    name        VARCHAR(255) NULL,
+    source      VARCHAR(20)  NOT NULL,
+    opted_in_at DATETIME     NOT NULL
+);
