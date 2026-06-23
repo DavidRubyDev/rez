@@ -4,6 +4,14 @@ These instructions apply to every task in this repository. Follow them without b
 
 ---
 
+## Stack Overview
+
+- **rez** (this package) — the full reservation engine, including all core and platform features. Everything lives here.
+- **rez-starter** — a client app template that consumes `rez` as a Composer dependency.
+- **rez-demo / rez-app** — instances of `rez-starter`. They require `rez` and add no engine logic.
+
+---
+
 ## Architecture
 
 This is a full PHP reservation engine built with **Domain-Driven Design (DDD)** and **Hexagonal Architecture** (Ports & Adapters). The layers are:
@@ -83,7 +91,10 @@ This runs `cs-fix`, `test`, and `stan` in sequence. Do not commit if any of thes
 
 ## Branch Workflow
 
-- **Before starting any new task:** checkout a new branch with a descriptive name using the `feature/` prefix
+- **Before starting any new task:** checkout a new branch with a descriptive prefix:
+  - `feature/` for new functionality
+  - `docs/` for documentation-only changes
+  - `fix/` for bug fixes
   ```bash
   git checkout -b feature/your-task-name
   ```
@@ -94,6 +105,16 @@ This runs `cs-fix`, `test`, and `stan` in sequence. Do not commit if any of thes
   ```
 
 **Never run `git push` or `git pull`** — these are always done by the user.
+
+---
+
+## Multi-Step Implementation Workflow
+
+When working through a numbered plan (e.g. `docs/rez-platform-modifications.md`):
+
+- **Do one step at a time** — complete the step, commit it, then stop
+- **Wait for the user** to push, review, merge to main, and pull before starting the next step
+- **Never start the next step** until the user confirms main is pulled
 
 ---
 
