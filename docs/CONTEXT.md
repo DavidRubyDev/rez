@@ -820,6 +820,12 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 
 297 tests (22 skipped — all integration), PHPStan max clean, CS clean.
 
+### 56. Newsletter schema (`03_rez-mailer-newsletter.md` step 8)
+
+`database/seeds/000_schema.sql` — added `newsletter_subscribers` table: `id CHAR(36) PK`, `email VARCHAR(255) UNIQUE NOT NULL`, `name VARCHAR(255) NULL`, `source VARCHAR(20) NOT NULL`, `opted_in_at DATETIME NOT NULL`. No new tests (DDL-only).
+
+306 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
 ### 55. Newsletter use cases (`03_rez-mailer-newsletter.md` step 7)
 
 All three use cases follow Request/Response/UseCase/Interface pattern under `src/Application/UseCase/Newsletter/`.
