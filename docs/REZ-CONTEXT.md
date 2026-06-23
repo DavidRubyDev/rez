@@ -134,7 +134,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 | Interface | Where implementation lives | Why |
 |---|---|---|
-| `MailerInterface` | `client-*/src/Infrastructure/Mailer/SymfonyMailer.php` | `symfony/mailer` must not be a hard dep on `rez` |
+| `MailerInterface` ✅ | `client-*/src/Infrastructure/Mailer/SymfonyMailer.php` | `symfony/mailer` must not be a hard dep on `rez` |
 | `StripeGatewayInterface` | `client-*/src/Infrastructure/Stripe/StripeGateway.php` | `stripe/stripe-php` must not be a hard dep on `rez` |
 
 #### Implemented in `rez` application layer
