@@ -148,7 +148,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | Service | Purpose | Status |
 |---|---|---|
 | `AvailabilityService` | Shared slot availability logic used by CreateReservation + GetAvailability | COMPLETE |
-| `FeatureGuard` | Throws `FeatureDisabledException` if a gated feature is not configured | NOT YET BUILT (PlatformConfig COMPLETE) |
+| `FeatureGuard` | Throws `FeatureDisabledException` if a gated feature is not configured | COMPLETE |
 | `JwtService` | JWT generation and validation using `firebase/php-jwt` | NOT YET BUILT |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |

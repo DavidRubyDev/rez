@@ -771,3 +771,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `tests/Application/Config/PlatformConfigTest.php` — 16 cases: valid mailer-only, valid all features, 5 dependency chain violations, hasMailer always true, has* false/true for each nullable feature.
 
 278 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 47. FeatureGuard (`02_rez-config.md` step 9)
+
+`src/Application/Service/FeatureGuard.php` — accepts `PlatformConfig` in constructor. Methods: `requirePayments()`, `requireUsers()`, `requireCredits()`, `requireSubscriptions()` — each throws `FeatureDisabledException(Feature::X)` if the corresponding config is null. No `requireMailer()` — mailer is always present.
+
+`tests/Application/Service/FeatureGuardTest.php` — 8 cases: passes/throws for each of the 4 gated features. Uses `expectNotToPerformAssertions()` for the passing cases (avoids PHPStan `method.alreadyNarrowedType` error from `assertTrue(true)`).
+
+286 tests (22 skipped — all integration), PHPStan max clean, CS clean.
