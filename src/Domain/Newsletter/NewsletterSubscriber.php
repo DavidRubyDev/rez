@@ -15,6 +15,16 @@ final class NewsletterSubscriber
     ) {
     }
 
+    public static function reconstruct(
+        NewsletterSubscriberId $id,
+        string $email,
+        ?string $name,
+        SubscriberSource $source,
+        \DateTimeImmutable $optedInAt,
+    ): self {
+        return new self($id, $email, $name, $source, $optedInAt);
+    }
+
     public static function create(
         NewsletterSubscriberId $id,
         string $email,
