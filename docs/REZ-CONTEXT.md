@@ -543,7 +543,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 ### Pending scaffold documents (run in this order)
 1. `rez-core-changes` — **COMPLETE**
 2. `rez-config` — **COMPLETE** (PlatformConfig, all sub-configs, FeatureGuard, container wiring)
-3. `rez-mailer-newsletter` — MailerInterface, newsletter domain + repository + use cases
+3. `rez-mailer-newsletter` — **COMPLETE**
 4. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
 5. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
 6. `rez-credits` — Wallet, WalletTransaction, wallet use cases

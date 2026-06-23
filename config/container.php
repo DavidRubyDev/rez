@@ -36,6 +36,12 @@ use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCase;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCaseInterface;
 use Rez\Application\Port\DatabaseSeederInterface;
 use Rez\Application\Service\FeatureGuard;
+use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCase;
+use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCaseInterface;
+use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCase;
+use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
+use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCase;
+use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCaseInterface;
 use Rez\Infrastructure\Persistence\Mysql\MysqlDatabaseSeeder;
 
 use function DI\autowire;
@@ -61,4 +67,8 @@ return [
     // PlatformConfig must be bound by the client app — not defined here.
     // FeatureGuard is autowired — PHP-DI resolves PlatformConfig from client binding.
     FeatureGuard::class                       => autowire(),
+    // MailerInterface and NewsletterRepositoryInterface must be bound by the client app.
+    SubscribeUseCaseInterface::class          => autowire(SubscribeUseCase::class),
+    UnsubscribeUseCaseInterface::class        => autowire(UnsubscribeUseCase::class),
+    BroadcastUseCaseInterface::class          => autowire(BroadcastUseCase::class),
 ];
