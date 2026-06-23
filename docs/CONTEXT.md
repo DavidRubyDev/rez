@@ -819,3 +819,15 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `src/Application/Port/MailerInterface.php` — port contract. Methods: `sendBookingConfirmation(string, string, Reservation): void`, `sendBookingCancellation(string, string, Reservation): void`, `sendPasswordReset(string, string): void`, `sendNewClassNotification(string, string, DateTimeImmutable): void`. Recipient details are plain strings (not User objects) so the interface is usable without the users feature. No test — interface only.
 
 297 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 55. Newsletter use cases (`03_rez-mailer-newsletter.md` step 7)
+
+All three use cases follow Request/Response/UseCase/Interface pattern under `src/Application/UseCase/Newsletter/`.
+
+**SubscribeUseCase** — idempotent: `findByEmail()` first; if not found creates new subscriber via `NewsletterSubscriber::create()`, saves, returns. If found returns existing without saving. 4 tests.
+
+**UnsubscribeUseCase** — silent: `findByEmail()` first; if not found returns `removed: false`. If found calls `delete($subscriber->id)`, returns `removed: true`. 2 tests.
+
+**BroadcastUseCase** — `findAll()` subscribers, calls `mailer->sendNewClassNotification()` for each, returns sent count. 3 tests.
+
+306 tests (22 skipped — all integration), PHPStan max clean, CS clean.

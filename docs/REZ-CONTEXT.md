@@ -193,9 +193,9 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `GetSubscriptionUseCase` | Subscriptions | |
 | `CreateSubscriptionCheckoutSessionUseCase` | Subscriptions | Returns Stripe checkout URL |
 | `CancelSubscriptionUseCase` | Subscriptions | Marks cancelled in DB. Stripe cancel called separately by route. |
-| `SubscribeUseCase` | Newsletter | Idempotent — returns existing if email already subscribed |
-| `UnsubscribeUseCase` | Newsletter | Silent success if email not found |
-| `BroadcastUseCase` | Newsletter | Sends new-class email to all opted-in subscribers |
+| `SubscribeUseCase` ✅ | Newsletter | Idempotent — returns existing if email already subscribed |
+| `UnsubscribeUseCase` ✅ | Newsletter | Silent success if email not found |
+| `BroadcastUseCase` ✅ | Newsletter | Sends new-class email to all opted-in subscribers |
 | `CreateTopUpCheckoutSessionUseCase` | Payments | Returns Stripe checkout URL for credit top-up |
 | `HandleWebhookUseCase` | Payments | Idempotency via stripe_events table. Dispatches by event type |
 | `CreateBookingUseCase` | Booking | Platform orchestrator. See critical ordering below. |
