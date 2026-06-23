@@ -842,6 +842,12 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 
 316 tests (27 skipped — all integration), PHPStan max clean, CS clean.
 
+### 58. Newsletter container (`03_rez-mailer-newsletter.md` step 10)
+
+`config/container.php` — `SubscribeUseCaseInterface`, `UnsubscribeUseCaseInterface`, `BroadcastUseCaseInterface` all registered via `autowire()`. Comment documents that `MailerInterface` and `NewsletterRepositoryInterface` must be bound by the client app. `03_rez-mailer-newsletter.md` fully complete.
+
+316 tests (27 skipped — all integration), PHPStan max clean, CS clean.
+
 ### 55. Newsletter use cases (`03_rez-mailer-newsletter.md` step 7)
 
 All three use cases follow Request/Response/UseCase/Interface pattern under `src/Application/UseCase/Newsletter/`.
