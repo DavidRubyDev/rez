@@ -39,7 +39,7 @@ class SeedDatabaseUseCaseTest extends TestCase
 
         $this->seeder->expects($this->exactly(2))->method('executeFile');
 
-        $response = $this->useCase->execute(new SeedDatabaseRequest($this->tempDir));
+        $response = $this->useCase->execute(new SeedDatabaseRequest([$this->tempDir]));
 
         $this->assertSame(2, $response->filesExecuted);
     }
@@ -58,7 +58,7 @@ class SeedDatabaseUseCaseTest extends TestCase
                 $executedPaths[] = basename($path);
             });
 
-        $this->useCase->execute(new SeedDatabaseRequest($this->tempDir));
+        $this->useCase->execute(new SeedDatabaseRequest([$this->tempDir]));
 
         $this->assertSame(['001_a.sql', '002_b.sql', '003_c.sql'], $executedPaths);
     }
@@ -70,7 +70,7 @@ class SeedDatabaseUseCaseTest extends TestCase
 
         $this->seeder->expects($this->once())->method('executeFile');
 
-        $response = $this->useCase->execute(new SeedDatabaseRequest($this->tempDir));
+        $response = $this->useCase->execute(new SeedDatabaseRequest([$this->tempDir]));
 
         $this->assertSame(1, $response->filesExecuted);
     }
@@ -79,8 +79,53 @@ class SeedDatabaseUseCaseTest extends TestCase
     {
         $this->seeder->expects($this->never())->method('executeFile');
 
-        $response = $this->useCase->execute(new SeedDatabaseRequest($this->tempDir));
+        $response = $this->useCase->execute(new SeedDatabaseRequest([$this->tempDir]));
 
         $this->assertSame(0, $response->filesExecuted);
+    }
+
+    public function testExecutesMultipleDirectoriesInOrder(): void
+    {
+        $dirA = sys_get_temp_dir() . '/rez_seed_a_' . uniqid();
+        $dirB = sys_get_temp_dir() . '/rez_seed_b_' . uniqid();
+        mkdir($dirA);
+        mkdir($dirB);
+
+        file_put_contents($dirA . '/001_a.sql', 'SELECT 1');
+        file_put_contents($dirB . '/001_b.sql', 'SELECT 2');
+
+        $executedPaths = [];
+
+        $this->seeder
+            ->method('executeFile')
+            ->willReturnCallback(function (string $path) use (&$executedPaths): void {
+                $executedPaths[] = basename($path);
+            });
+
+        $response = $this->useCase->execute(new SeedDatabaseRequest([$dirA, $dirB]));
+
+        $this->assertSame(['001_a.sql', '001_b.sql'], $executedPaths);
+        $this->assertSame(2, $response->filesExecuted);
+
+        unlink($dirA . '/001_a.sql');
+        rmdir($dirA);
+        unlink($dirB . '/001_b.sql');
+        rmdir($dirB);
+    }
+
+    public function testEmptyDirectoryInListIsSkipped(): void
+    {
+        $emptyDir = sys_get_temp_dir() . '/rez_seed_empty_' . uniqid();
+        mkdir($emptyDir);
+
+        file_put_contents($this->tempDir . '/001_a.sql', 'SELECT 1');
+
+        $this->seeder->expects($this->once())->method('executeFile');
+
+        $response = $this->useCase->execute(new SeedDatabaseRequest([$this->tempDir, $emptyDir]));
+
+        $this->assertSame(1, $response->filesExecuted);
+
+        rmdir($emptyDir);
     }
 }
