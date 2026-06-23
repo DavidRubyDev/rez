@@ -15,13 +15,18 @@ final class SeedDatabaseUseCase implements SeedDatabaseUseCaseInterface
 
     public function execute(SeedDatabaseRequest $request): SeedDatabaseResponse
     {
-        $files = glob($request->seedsDirectory . '/*.sql') ?: [];
-        sort($files);
+        $total = 0;
 
-        foreach ($files as $file) {
-            $this->seeder->executeFile($file);
+        foreach ($request->seedsDirectories as $directory) {
+            $files = glob($directory . '/*.sql') ?: [];
+            sort($files);
+
+            foreach ($files as $file) {
+                $this->seeder->executeFile($file);
+                $total++;
+            }
         }
 
-        return new SeedDatabaseResponse(count($files));
+        return new SeedDatabaseResponse($total);
     }
 }

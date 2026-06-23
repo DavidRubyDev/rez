@@ -7,7 +7,8 @@ namespace Rez\Application\UseCase\Seed\SeedDatabase;
 final class SeedDatabaseRequest
 {
     public function __construct(
-        public readonly string $seedsDirectory,
+        /** @var string[] */
+        public readonly array $seedsDirectories,
     ) {
     }
 }

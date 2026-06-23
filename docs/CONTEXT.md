@@ -653,12 +653,25 @@ All five reservation handlers updated with matching `@return` type annotation (`
 
 ---
 
+### 35. SeedDatabase multi-directory support (platform-readiness Steps 5–7)
+
+**Step 5** — `src/Application/UseCase/Seed/SeedDatabase/SeedDatabaseRequest.php`: `string $seedsDirectory` → `array $seedsDirectories` (`string[]`).
+
+**Step 6** — `src/Application/UseCase/Seed/SeedDatabase/SeedDatabaseUseCase.php`: iterates all directories in order, globs `*.sql` per directory, sorts within each, executes across all. Returns total file count.
+
+All 4 existing tests updated to pass `[$tempDir]` (array). 2 new tests added:
+- `testExecutesMultipleDirectoriesInOrder` — two dirs, asserts dir-A files run before dir-B files
+- `testEmptyDirectoryInListIsSkipped` — empty dir in array causes no error, only valid files counted
+
+**Step 7** — `bin/seed.php`: updated to `new SeedDatabaseRequest(seedsDirectories: [__DIR__ . '/../database/seeds'])`.
+
+213 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
 From `docs/rez-platform-modifications.md`:
 
-- **Step 5** — `SeedDatabaseRequest`: change `string $seedsDirectory` → `array $seedsDirectories` (breaking)
-- **Step 6** — `SeedDatabaseUseCase`: iterate multiple directories, update tests
-- **Step 7** — `bin/seed.php`: pass array syntax
 - **Step 8** — Document seed directory naming convention in `database/seeds/README.md`
 - **Step 9** — Add `MysqlDatabaseSeeder::seedsPath(): string` static method
