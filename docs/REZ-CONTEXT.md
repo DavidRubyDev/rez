@@ -229,6 +229,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 `MailerConfig` — COMPLETE. `fromAddress` (validated email), `fromName` (non-empty string).
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
+`UsersConfig` — COMPLETE. `jwtSecret` (non-empty string), `jwtTtlSeconds` (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1).
 
 ```
 PlatformConfig
