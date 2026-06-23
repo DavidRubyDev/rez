@@ -541,8 +541,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Handler deprecation | ❌ | — | — | — |
 
 ### Pending scaffold documents (run in this order)
-1. `rez-core-changes` — **COMPLETE** (externalRef on Party, MysqlReservationRepository + ReservationSerializer external_ref, SeedDatabaseRequest multi-directory, seed README, MysqlDatabaseSeeder::seedsPath())
-2. `rez-config` — PlatformConfig, all sub-configs, FeatureGuard
+1. `rez-core-changes` — **COMPLETE**
+2. `rez-config` — **COMPLETE** (PlatformConfig, all sub-configs, FeatureGuard, container wiring)
 3. `rez-mailer-newsletter` — MailerInterface, newsletter domain + repository + use cases
 4. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
 5. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
