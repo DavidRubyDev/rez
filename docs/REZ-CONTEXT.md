@@ -126,7 +126,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `StripeEventRepositoryInterface` | `MysqlStripeEventRepository` | NOT YET BUILT |
 | `WalletRepositoryInterface` | `MysqlWalletRepository` | NOT YET BUILT |
 | `SubscriptionRepositoryInterface` | `MysqlSubscriptionRepository` | NOT YET BUILT |
-| `NewsletterRepositoryInterface` | `MysqlNewsletterRepository` | NOT YET BUILT |
+| `NewsletterRepositoryInterface` ✅ | `MysqlNewsletterRepository` | NOT YET BUILT |
 | `UserRepositoryInterface` | `MysqlUserRepository` | NOT YET BUILT |
 | `PasswordResetRepositoryInterface` | `MysqlPasswordResetRepository` | NOT YET BUILT |
 

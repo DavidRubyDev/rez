@@ -808,6 +808,12 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 
 291 tests (22 skipped — all integration), PHPStan max clean, CS clean.
 
+### 54. NewsletterRepositoryInterface (`03_rez-mailer-newsletter.md` step 6)
+
+`src/Application/Port/NewsletterRepositoryInterface.php` — port contract. Methods: `findByEmail(string): NewsletterSubscriber` (throws `NewsletterSubscriberNotFoundException`), `findAll(): NewsletterSubscriber[]`, `save(NewsletterSubscriber): void` (upsert by email), `delete(NewsletterSubscriberId): void`. No test — interface only.
+
+297 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
 ### 53. MailerInterface (`03_rez-mailer-newsletter.md` step 5)
 
 `src/Application/Port/MailerInterface.php` — port contract. Methods: `sendBookingConfirmation(string, string, Reservation): void`, `sendBookingCancellation(string, string, Reservation): void`, `sendPasswordReset(string, string): void`, `sendNewClassNotification(string, string, DateTimeImmutable): void`. Recipient details are plain strings (not User objects) so the interface is usable without the users feature. No test — interface only.
