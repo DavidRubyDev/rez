@@ -4,6 +4,17 @@ These instructions apply to every task in this repository. Follow them without b
 
 ---
 
+## Session Start
+
+At the start of every session, read both context documents before doing anything else:
+
+```
+docs/CONTEXT.md      — implementation progress and completed steps
+docs/REZ-CONTEXT.md  — full system architecture, modules, invariants, delivery plan
+```
+
+---
+
 ## Stack Overview
 
 - **rez** (this package) — the full reservation engine, including all core and platform features. Everything lives here.
@@ -131,5 +142,5 @@ When working through a numbered plan (e.g. `docs/rez-platform-modifications.md`)
 - Every class, method, and property has correct visibility
 - No static state except in ID `generate()` methods
 - Do not create files outside the `rez/` directory
-- Keep `docs/context.md` up to date after completing each step
+- Keep `docs/CONTEXT.md` and `docs/REZ-CONTEXT.md` up to date after every code modification
 - Keep `docs/instructions.md` up to date if architecture or scope changes
