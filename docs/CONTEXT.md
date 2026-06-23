@@ -779,3 +779,7 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `tests/Application/Service/FeatureGuardTest.php` — 8 cases: passes/throws for each of the 4 gated features. Uses `expectNotToPerformAssertions()` for the passing cases (avoids PHPStan `method.alreadyNarrowedType` error from `assertTrue(true)`).
 
 286 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 48. Container update (`02_rez-config.md` step 10)
+
+`config/container.php` — `FeatureGuard::class => autowire()` added. Comment documents that `PlatformConfig` must be bound by the client app. `02_rez-config.md` fully complete.
