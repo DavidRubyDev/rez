@@ -19,8 +19,9 @@ CREATE TABLE IF NOT EXISTS reservations (
     party_name  VARCHAR(255) NOT NULL,
     party_email VARCHAR(255) NOT NULL,
     party_size  INT          NOT NULL,
-    party_phone VARCHAR(50)  NULL,
-    created_at  DATETIME     NOT NULL,
+    party_phone  VARCHAR(50)  NULL,
+    external_ref VARCHAR(255) NULL,
+    created_at   DATETIME     NOT NULL,
     PRIMARY KEY (id)
 );
 
