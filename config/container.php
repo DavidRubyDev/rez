@@ -35,6 +35,7 @@ use Rez\Application\UseCase\Resource\UpdateResource\UpdateResourceUseCaseInterfa
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCase;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCaseInterface;
 use Rez\Application\Port\DatabaseSeederInterface;
+use Rez\Application\Service\FeatureGuard;
 use Rez\Infrastructure\Persistence\Mysql\MysqlDatabaseSeeder;
 
 use function DI\autowire;
@@ -57,4 +58,7 @@ return [
     DeleteResourceUseCaseInterface::class     => autowire(DeleteResourceUseCase::class),
     DatabaseSeederInterface::class            => autowire(MysqlDatabaseSeeder::class),
     SeedDatabaseUseCaseInterface::class       => autowire(SeedDatabaseUseCase::class),
+    // PlatformConfig must be bound by the client app — not defined here.
+    // FeatureGuard is autowired — PHP-DI resolves PlatformConfig from client binding.
+    FeatureGuard::class                       => autowire(),
 ];
