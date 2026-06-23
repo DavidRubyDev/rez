@@ -489,6 +489,10 @@ components:
           type: string
           nullable: true
           example: '+1234567890'
+        external_ref:
+          type: string
+          nullable: true
+          description: Opaque reference set by the platform layer (e.g. authenticated user ID). Never interpreted by the library.
 
     Party:
       type: object
@@ -503,6 +507,10 @@ components:
         phone:
           type: string
           nullable: true
+        external_ref:
+          type: string
+          nullable: true
+          description: Opaque reference set by the platform layer (e.g. authenticated user ID). Never interpreted by the library.
 
     Reservation:
       type: object

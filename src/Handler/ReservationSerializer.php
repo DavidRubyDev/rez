@@ -16,7 +16,7 @@ final class ReservationSerializer
      *     start: string,
      *     end: string,
      *     resource_ids: string[],
-     *     party: array{name: string, email: string, size: int, phone: string|null},
+     *     party: array{name: string, email: string, size: int, phone: string|null, external_ref: string|null},
      *     created_at: string
      * }
      */
@@ -34,10 +34,11 @@ final class ReservationSerializer
                 $reservation->resourceIds->toArray(),
             ),
             'party'        => [
-                'name'  => $reservation->party->name,
-                'email' => $reservation->party->email,
-                'size'  => $reservation->party->size,
-                'phone' => $reservation->party->phone,
+                'name'         => $reservation->party->name,
+                'email'        => $reservation->party->email,
+                'size'         => $reservation->party->size,
+                'phone'        => $reservation->party->phone,
+                'external_ref' => $reservation->party->externalRef,
             ],
             'created_at'   => $reservation->createdAt->format('Y-m-d H:i:s'),
         ];
