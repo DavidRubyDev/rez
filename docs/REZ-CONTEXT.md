@@ -106,7 +106,8 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 - `SubscriberSource` — pure enum: `Guest`, `Registered`
 
 #### Shared
-- `Money` — immutable value object. `amount: int` (haléře/cents — NEVER floats), `currency: string` (uppercase). (NOT YET BUILT)
+- `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code. String mapping in `CurrencyMapper`.
+- `Money` — immutable value object. `amount: int` (haléře/cents — NEVER floats), `currency: Currency`. Methods: `add()`, `subtract()` (throws `InsufficientFundsException`), `isZero()`, `equals()`, `isGreaterThan()`, `__toString()`.
 - `DateTimeRange` — shared utility, not a domain concept
 
 ### 3.3 Port interfaces (Application/Port/)
@@ -519,6 +520,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Resources | ✅ | ✅ | ✅ | ✅ |
 | Availability | ✅ | ✅ | ✅ | ✅ |
 | Seeder | ✅ | ✅ | ✅ | ✅ |
+| Currency + Money | ✅ | — | ✅ CurrencyMapper | ✅ |
 | Config / FeatureGuard | ❌ | — | — | — |
 | Mailer port | ❌ | — | — | — |
 | Newsletter | ❌ | ❌ | ❌ | — |
