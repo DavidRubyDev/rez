@@ -50,8 +50,7 @@ Handler       — Driving adapters. Entry points that call use cases.
 - Application must never depend on Infrastructure or Handler
 - Enums are pure (no backing values) — string serialization lives in Infrastructure mappers
 - All entities and value objects are immutable
-- No public mutable properties anywhere
-- Use `readonly` where appropriate
+- Use `public readonly` properties — they are the public interface. Never add getter methods (`getName()`, `getAmount()`, etc.) when a `public readonly` property suffices. Getters are only appropriate on interfaces or when additional logic is needed.
 - All `DateTimeImmutable` values in UTC
 
 ---

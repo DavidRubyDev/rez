@@ -17,39 +17,30 @@ class CurrencyMapperTest extends TestCase
         $this->mapper = new CurrencyMapper();
     }
 
-    public function testCzkMapsToString(): void
-    {
-        $this->assertSame('czk', $this->mapper->toString(Currency::Czk));
-    }
-
-    public function testEurMapsToString(): void
-    {
-        $this->assertSame('eur', $this->mapper->toString(Currency::Eur));
-    }
-
-    public function testUsdMapsToString(): void
-    {
-        $this->assertSame('usd', $this->mapper->toString(Currency::Usd));
-    }
-
     public function testFromStringReturnsCzk(): void
     {
-        $this->assertSame(Currency::Czk, $this->mapper->fromString('czk'));
+        $this->assertSame(Currency::Czk, $this->mapper->fromString('CZK'));
     }
 
     public function testFromStringReturnsEur(): void
     {
-        $this->assertSame(Currency::Eur, $this->mapper->fromString('eur'));
+        $this->assertSame(Currency::Eur, $this->mapper->fromString('EUR'));
     }
 
     public function testFromStringReturnsUsd(): void
     {
-        $this->assertSame(Currency::Usd, $this->mapper->fromString('usd'));
+        $this->assertSame(Currency::Usd, $this->mapper->fromString('USD'));
+    }
+
+    public function testFromStringIsCaseInsensitive(): void
+    {
+        $this->assertSame(Currency::Czk, $this->mapper->fromString('czk'));
+        $this->assertSame(Currency::Eur, $this->mapper->fromString('eur'));
     }
 
     public function testFromStringThrowsForUnknownValue(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->mapper->fromString('gbp');
+        $this->mapper->fromString('GBP');
     }
 }
