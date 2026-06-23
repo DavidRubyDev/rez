@@ -148,7 +148,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | Service | Purpose | Status |
 |---|---|---|
 | `AvailabilityService` | Shared slot availability logic used by CreateReservation + GetAvailability | COMPLETE |
-| `FeatureGuard` | Throws `FeatureDisabledException` if a gated feature is not configured | NOT YET BUILT |
+| `FeatureGuard` | Throws `FeatureDisabledException` if a gated feature is not configured | NOT YET BUILT (PlatformConfig COMPLETE) |
 | `JwtService` | JWT generation and validation using `firebase/php-jwt` | NOT YET BUILT |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
@@ -227,12 +227,13 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 `PlatformConfig` is constructed by the client app and injected via PHP-DI. It is the single root of all feature configuration.
 
+`PlatformConfig` — COMPLETE. Validates dependency chain at construction (users→payments, credits→payments+users, subscriptions→payments+users). `hasMailer/Payments/Users/Credits/Subscriptions(): bool`.
 `MailerConfig` — COMPLETE. `fromAddress` (validated email), `fromName` (non-empty string).
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
 `UsersConfig` — COMPLETE. `jwtSecret` (non-empty string), `jwtTtlSeconds` (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1).
 `CreditsConfig` — COMPLETE. `minimumTopUpAmount` (int, min 1, haléře/cents), `currency` (non-empty string).
 `PlanConfig` — COMPLETE. `id`, `name`, `priceAmount` (≥ 0), `currency`, `intervalDays` (min 1), `stripePriceId`. Named `PlanConfig` (not `Plan`) — it holds primitive Stripe-specific config, not a domain value object.
-`SubscriptionsConfig` — COMPLETE. `PlanConfig[] $plans` (constructor promotion, non-empty validated). `getPlanById(string): PlanConfig`.
+`SubscriptionsConfig` — COMPLETE. `PlanConfig[] $plans` (constructor promotion, no empty guard). `getPlanById(string): PlanConfig`.
 
 ```
 PlatformConfig

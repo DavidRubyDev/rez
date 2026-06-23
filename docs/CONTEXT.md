@@ -763,3 +763,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `tests/Application/Config/SubscriptionsConfigTest.php` — 3 cases: valid construction, getPlanById returns match, getPlanById throws for unknown id.
 
 264 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 46. PlatformConfig (`02_rez-config.md` step 8)
+
+`src/Application/Config/PlatformConfig.php` — immutable config root. Constructor promotion for all five fields (`MailerConfig $mailer`, `?PaymentsConfig`, `?UsersConfig`, `?CreditsConfig`, `?SubscriptionsConfig`). Validates dependency chain at construction: users requires payments; credits requires payments + users; subscriptions requires payments + users. Feature check methods: `hasMailer()` (always true), `hasPayments()`, `hasUsers()`, `hasCredits()`, `hasSubscriptions()`.
+
+`tests/Application/Config/PlatformConfigTest.php` — 16 cases: valid mailer-only, valid all features, 5 dependency chain violations, hasMailer always true, has* false/true for each nullable feature.
+
+278 tests (22 skipped — all integration), PHPStan max clean, CS clean.
