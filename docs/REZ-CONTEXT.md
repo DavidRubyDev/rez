@@ -231,6 +231,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
 `UsersConfig` — COMPLETE. `jwtSecret` (non-empty string), `jwtTtlSeconds` (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1).
 `CreditsConfig` — COMPLETE. `minimumTopUpAmount` (int, min 1, haléře/cents), `currency` (non-empty string).
+`PlanConfig` — COMPLETE. `id`, `name`, `priceAmount` (≥ 0), `currency`, `intervalDays` (min 1), `stripePriceId`. Named `PlanConfig` (not `Plan`) — it holds primitive Stripe-specific config, not a domain value object.
 
 ```
 PlatformConfig
@@ -238,8 +239,8 @@ PlatformConfig
   ├── PaymentsConfig?       currency, webhookSecret
   ├── UsersConfig?          jwtSecret, jwtTtlSeconds, passwordResetTtlMinutes
   ├── CreditsConfig?        minimumTopUpAmount, currency
-  └── SubscriptionsConfig?  Plan[]
-        └── Plan            id, name, priceAmount, currency, intervalDays, stripePriceId
+  └── SubscriptionsConfig?  PlanConfig[]
+        └── PlanConfig      id, name, priceAmount, currency, intervalDays, stripePriceId
 ```
 
 **Dependency chain enforced at construction time:**
