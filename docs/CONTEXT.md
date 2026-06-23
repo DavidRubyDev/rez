@@ -697,13 +697,13 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 
 `src/Domain/Shared/Currency.php` — pure enum: `Czk`, `Eur`, `Usd`. `getCode(): string` returns uppercase ISO code (`'CZK'`, `'EUR'`, `'USD'`). No test — same convention as other pure enums.
 
-`src/Infrastructure/Mapper/CurrencyMapper.php` — `fromString(string): Currency` only (no `toString()` — callers use `$currency->getCode()` directly). Input normalized via `strtoupper()` so any case is accepted. Throws `\InvalidArgumentException` for unknown values.
+`src/Infrastructure/Mapper/CurrencyMapper.php` — `fromString(string): Currency` (input normalized via `strtoupper()`, throws `\InvalidArgumentException` for unknown values) and `toString(Currency): string` (explicit match, returns uppercase ISO code e.g. `'CZK'`). Domain code uses `Currency::getCode()` directly where the mapper is unreachable (Domain layer only).
 
 `src/Domain/Exception/InsufficientFundsException.php` — extends `DomainException`. Constructor: `int $required, int $available, Currency $currency`. No test — trivial constructor.
 
-`src/Domain/Shared/Money.php` — immutable value object. `public readonly int $amount`, `public readonly Currency $currency` (no getters). Throws `\InvalidArgumentException` if amount < 0. Methods: `add()`, `subtract()` (throws `InsufficientFundsException`), `isZero()`, `equals()`, `isGreaterThan()`, `__toString()` (e.g. `'150000 CZK'`). Cross-currency operations throw `\InvalidArgumentException`.
+`src/Domain/Shared/Money.php` — immutable value object. `public readonly int $amount`, `public readonly Currency $currency` (no getters). Throws `\InvalidArgumentException` if amount < 0. Methods: `add()`, `subtract()` (throws `InsufficientFundsException`), `isZero()`, `equals()`, `isGreaterThan()`, `__toString()` (e.g. `'150000 CZK'`, uses `getCode()`). Cross-currency operations throw `\InvalidArgumentException`.
 
-`tests/Infrastructure/Mapper/CurrencyMapperTest.php` — 7 cases passing.
+`tests/Infrastructure/Mapper/CurrencyMapperTest.php` — 8 cases passing.
 `tests/Domain/Shared/MoneyTest.php` — 16 cases passing.
 
-236 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+237 tests (22 skipped — all integration), PHPStan max clean, CS clean.
