@@ -100,7 +100,7 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 - `SubscriptionStatus` — pure enum
 - `isActive()` returns true ONLY when status is `Active` AND `currentPeriodEnd > now UTC`
 
-#### Newsletter (NOT YET BUILT)
+#### Newsletter (IN PROGRESS — `03_rez-mailer-newsletter.md`)
 - `NewsletterSubscriber` — entity. Fields: `id`, `email`, `name?`, `source`, `optedInAt`
 - `NewsletterSubscriberId` — UUID v4 value object
 - `SubscriberSource` — pure enum: `Guest`, `Registered`
