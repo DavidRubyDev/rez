@@ -669,9 +669,16 @@ All 4 existing tests updated to pass `[$tempDir]` (array). 2 new tests added:
 
 ---
 
+### 36. Seed directory naming convention (platform-readiness Step 8)
+
+`database/seeds/README.md` — created. Documents numeric prefix ranges (000–099 rez, 100–199 rez-platform, 200+ client) and explains that files execute in filename order within each directory.
+
+213 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
 From `docs/rez-platform-modifications.md`:
 
-- **Step 8** — Document seed directory naming convention in `database/seeds/README.md`
 - **Step 9** — Add `MysqlDatabaseSeeder::seedsPath(): string` static method
