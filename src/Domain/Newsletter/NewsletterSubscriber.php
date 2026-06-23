@@ -7,11 +7,11 @@ namespace Rez\Domain\Newsletter;
 final class NewsletterSubscriber
 {
     private function __construct(
-        private readonly NewsletterSubscriberId $id,
-        private readonly string $email,
-        private readonly ?string $name,
-        private readonly SubscriberSource $source,
-        private readonly \DateTimeImmutable $optedInAt,
+        public readonly NewsletterSubscriberId $id,
+        public readonly string $email,
+        public readonly ?string $name,
+        public readonly SubscriberSource $source,
+        public readonly \DateTimeImmutable $optedInAt,
     ) {
     }
 
@@ -28,28 +28,5 @@ final class NewsletterSubscriber
         return new self($id, $email, $name, $source, new \DateTimeImmutable('now', new \DateTimeZone('UTC')));
     }
 
-    public function getId(): NewsletterSubscriberId
-    {
-        return $this->id;
-    }
 
-    public function getEmail(): string
-    {
-        return $this->email;
-    }
-
-    public function getName(): ?string
-    {
-        return $this->name;
-    }
-
-    public function getSource(): SubscriberSource
-    {
-        return $this->source;
-    }
-
-    public function getOptedInAt(): \DateTimeImmutable
-    {
-        return $this->optedInAt;
-    }
 }

@@ -16,10 +16,10 @@ class NewsletterSubscriberTest extends TestCase
         $id         = NewsletterSubscriberId::fromString('f47ac10b-58cc-4372-a567-0e02b2c3d479');
         $subscriber = NewsletterSubscriber::create($id, 'jan@example.com', 'Jan Novák', SubscriberSource::Guest);
 
-        $this->assertSame($id, $subscriber->getId());
-        $this->assertSame('jan@example.com', $subscriber->getEmail());
-        $this->assertSame('Jan Novák', $subscriber->getName());
-        $this->assertSame(SubscriberSource::Guest, $subscriber->getSource());
+        $this->assertSame($id, $subscriber->id);
+        $this->assertSame('jan@example.com', $subscriber->email);
+        $this->assertSame('Jan Novák', $subscriber->name);
+        $this->assertSame(SubscriberSource::Guest, $subscriber->source);
     }
 
     public function testInvalidEmailThrowsInvalidArgumentException(): void
@@ -35,7 +35,7 @@ class NewsletterSubscriberTest extends TestCase
         $id         = NewsletterSubscriberId::fromString('f47ac10b-58cc-4372-a567-0e02b2c3d479');
         $subscriber = NewsletterSubscriber::create($id, 'jan@example.com', null, SubscriberSource::Guest);
 
-        $this->assertNull($subscriber->getName());
+        $this->assertNull($subscriber->name);
     }
 
     public function testOptedInAtIsApproximatelyUtcNow(): void
@@ -45,8 +45,8 @@ class NewsletterSubscriberTest extends TestCase
         $subscriber = NewsletterSubscriber::create($id, 'jan@example.com', null, SubscriberSource::Guest);
         $after      = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
 
-        $this->assertGreaterThanOrEqual($before->getTimestamp(), $subscriber->getOptedInAt()->getTimestamp());
-        $this->assertLessThanOrEqual($after->getTimestamp(), $subscriber->getOptedInAt()->getTimestamp());
+        $this->assertGreaterThanOrEqual($before->getTimestamp(), $subscriber->optedInAt->getTimestamp());
+        $this->assertLessThanOrEqual($after->getTimestamp(), $subscriber->optedInAt->getTimestamp());
     }
 
     public function testGuestSourceStoredAndReturned(): void
@@ -54,7 +54,7 @@ class NewsletterSubscriberTest extends TestCase
         $id         = NewsletterSubscriberId::fromString('f47ac10b-58cc-4372-a567-0e02b2c3d479');
         $subscriber = NewsletterSubscriber::create($id, 'jan@example.com', null, SubscriberSource::Guest);
 
-        $this->assertSame(SubscriberSource::Guest, $subscriber->getSource());
+        $this->assertSame(SubscriberSource::Guest, $subscriber->source);
     }
 
     public function testRegisteredSourceStoredAndReturned(): void
@@ -62,6 +62,6 @@ class NewsletterSubscriberTest extends TestCase
         $id         = NewsletterSubscriberId::fromString('f47ac10b-58cc-4372-a567-0e02b2c3d479');
         $subscriber = NewsletterSubscriber::create($id, 'jan@example.com', null, SubscriberSource::Registered);
 
-        $this->assertSame(SubscriberSource::Registered, $subscriber->getSource());
+        $this->assertSame(SubscriberSource::Registered, $subscriber->source);
     }
 }
