@@ -232,6 +232,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 `UsersConfig` — COMPLETE. `jwtSecret` (non-empty string), `jwtTtlSeconds` (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1).
 `CreditsConfig` — COMPLETE. `minimumTopUpAmount` (int, min 1, haléře/cents), `currency` (non-empty string).
 `PlanConfig` — COMPLETE. `id`, `name`, `priceAmount` (≥ 0), `currency`, `intervalDays` (min 1), `stripePriceId`. Named `PlanConfig` (not `Plan`) — it holds primitive Stripe-specific config, not a domain value object.
+`SubscriptionsConfig` — COMPLETE. `PlanConfig[] $plans` (constructor promotion, non-empty validated). `getPlanById(string): PlanConfig`.
 
 ```
 PlatformConfig

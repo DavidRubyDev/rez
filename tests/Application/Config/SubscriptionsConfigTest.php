@@ -26,18 +26,6 @@ class SubscriptionsConfigTest extends TestCase
         $this->assertSame([$this->monthly, $this->yearly], $config->plans);
     }
 
-    public function testEmptyPlansArrayThrows(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        new SubscriptionsConfig([]);
-    }
-
-    public function testNonPlanConfigElementThrows(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        new SubscriptionsConfig([$this->monthly, 'not-a-plan']);
-    }
-
     public function testGetPlanByIdReturnsMatchingPlan(): void
     {
         $config = new SubscriptionsConfig([$this->monthly, $this->yearly]);

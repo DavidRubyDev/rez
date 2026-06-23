@@ -755,3 +755,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `tests/Application/Config/PlanConfigTest.php` — 8 cases: valid construction, zero price valid, empty id/name/currency/stripePriceId throws, negative price throws, intervalDays below 1 throws.
 
 259 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 45. SubscriptionsConfig (`02_rez-config.md` step 7)
+
+`src/Application/Config/SubscriptionsConfig.php` — immutable config. Constructor promotion: `@param PlanConfig[] $plans`. No empty guard — empty plans is valid (subscriptions enabled but none configured yet; no getPlanById call will be made if frontend has no plans to show). Element type enforced by PHPStan at max level. `getPlanById(string $id): PlanConfig` — throws if not found. No `getPlans()` — `->plans` is public readonly.
+
+`tests/Application/Config/SubscriptionsConfigTest.php` — 3 cases: valid construction, getPlanById returns match, getPlanById throws for unknown id.
+
+264 tests (22 skipped — all integration), PHPStan max clean, CS clean.
