@@ -792,6 +792,14 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 
 `src/Domain/Newsletter/SubscriberSource.php` — pure enum: `Guest`, `Registered`. String serialization handled by infrastructure mapper. No test — same convention as other pure enums.
 
+### 52. NewsletterSubscriber (`03_rez-mailer-newsletter.md` step 4)
+
+`src/Domain/Newsletter/NewsletterSubscriber.php` — immutable entity, static factory only. `create(NewsletterSubscriberId, string $email, ?string $name, SubscriberSource): self`. Throws `\InvalidArgumentException` for invalid email. `$optedInAt` set to UTC now on `create()`. Getters: `getId()`, `getEmail()`, `getName()`, `getSource()`, `getOptedInAt()`.
+
+`tests/Domain/Newsletter/NewsletterSubscriberTest.php` — 6 cases: valid construction, invalid email throws, null name accepted, optedInAt ≈ UTC now, guest source, registered source.
+
+297 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
 ### 51. NewsletterSubscriberId (`03_rez-mailer-newsletter.md` step 3)
 
 `src/Domain/Newsletter/NewsletterSubscriberId.php` — UUID v4 value object, same pattern as `ReservationId` and `ResourceId`. Methods: `generate()`, `fromString()` (throws `\InvalidArgumentException` for invalid UUID), `toString()`, `equals()`, `__toString()`.
