@@ -43,4 +43,19 @@ class CurrencyMapperTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->mapper->fromString('GBP');
     }
+
+    public function testToStringReturnsCzkUppercase(): void
+    {
+        $this->assertSame('CZK', $this->mapper->toString(Currency::Czk));
+    }
+
+    public function testToStringReturnsEurUppercase(): void
+    {
+        $this->assertSame('EUR', $this->mapper->toString(Currency::Eur));
+    }
+
+    public function testToStringReturnsUsdUppercase(): void
+    {
+        $this->assertSame('USD', $this->mapper->toString(Currency::Usd));
+    }
 }

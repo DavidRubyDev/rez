@@ -17,4 +17,13 @@ final class CurrencyMapper
             default => throw new \InvalidArgumentException("Unknown currency: '{$currency}'."),
         };
     }
+
+    public function toString(Currency $currency): string
+    {
+        return match ($currency) {
+            Currency::Czk => 'CZK',
+            Currency::Eur => 'EUR',
+            Currency::Usd => 'USD',
+        };
+    }
 }
