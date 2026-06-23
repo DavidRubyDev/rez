@@ -747,3 +747,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `tests/Application/Config/CreditsConfigTest.php` — 3 cases: valid construction, amount below 1 throws, empty currency throws.
 
 251 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 44. Plan (`02_rez-config.md` step 6)
+
+`src/Application/Config/Plan.php` — immutable config value object. Fields: `id` (non-empty slug), `name` (non-empty), `priceAmount` (int ≥ 0, zero allowed for free plans), `currency` (non-empty), `intervalDays` (min 1), `stripePriceId` (non-empty — added per `07_rez-subscriptions.md`). Throws `\InvalidArgumentException` for each violated constraint.
+
+`tests/Application/Config/PlanTest.php` — 8 cases: valid construction, zero price valid, empty id/name/currency/stripePriceId throws, negative price throws, intervalDays below 1 throws.
+
+259 tests (22 skipped — all integration), PHPStan max clean, CS clean.
