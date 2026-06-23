@@ -715,3 +715,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `src/Domain/Shared/Feature.php` — pure enum: `Payments`, `Users`, `Credits`, `Subscriptions`. Centralises all gated feature names so use cases never pass raw strings to `FeatureDisabledException`. No test — same convention as other pure enums.
 
 237 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 40. MailerConfig (`02_rez-config.md` step 2)
+
+`src/Application/Config/MailerConfig.php` — immutable config value object. `public readonly string $fromAddress`, `public readonly string $fromName`. Throws `\InvalidArgumentException` if `$fromAddress` is not a valid email (`filter_var`) or `$fromName` is empty.
+
+`tests/Application/Config/MailerConfigTest.php` — 3 cases: valid construction, invalid email throws, empty name throws.
+
+240 tests (22 skipped — all integration), PHPStan max clean, CS clean.
