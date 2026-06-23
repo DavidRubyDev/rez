@@ -103,7 +103,7 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 #### Newsletter (IN PROGRESS — `03_rez-mailer-newsletter.md`)
 - `NewsletterSubscriber` — entity. Fields: `id`, `email`, `name?`, `source`, `optedInAt`
 - `NewsletterSubscriberId` — UUID v4 value object
-- `SubscriberSource` — pure enum: `Guest`, `Registered`
+- `SubscriberSource` — pure enum: `Guest`, `Registered` ✅
 
 #### Shared
 - `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code — used only in Domain (exceptions, `Money::__toString()`). Infrastructure serialization goes through `CurrencyMapper::toString()`.

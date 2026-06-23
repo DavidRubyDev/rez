@@ -787,3 +787,7 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 ### 49. NewsletterSubscriberNotFoundException (`03_rez-mailer-newsletter.md` step 1)
 
 `src/Domain/Exception/NewsletterSubscriberNotFoundException.php` — extends `DomainException`. Constructor: `string $email`. Message: `"Newsletter subscriber with email '{$email}' not found."`. No test — trivial constructor.
+
+### 50. SubscriberSource (`03_rez-mailer-newsletter.md` step 2)
+
+`src/Domain/Newsletter/SubscriberSource.php` — pure enum: `Guest`, `Registered`. String serialization handled by infrastructure mapper. No test — same convention as other pure enums.
