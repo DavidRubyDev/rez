@@ -731,3 +731,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `tests/Application/Config/PaymentsConfigTest.php` — 3 cases: valid construction, empty currency throws, empty webhook secret throws.
 
 243 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 42. UsersConfig (`02_rez-config.md` step 4)
+
+`src/Application/Config/UsersConfig.php` — immutable config value object. `public readonly string $jwtSecret`, `public readonly int $jwtTtlSeconds = 3600`, `public readonly int $passwordResetTtlMinutes = 60`. Throws `\InvalidArgumentException` if `$jwtSecret` is empty or either TTL is less than 1.
+
+`tests/Application/Config/UsersConfigTest.php` — 5 cases: valid construction with custom values, defaults applied, empty secret throws, TTL below 1 throws (both fields).
+
+248 tests (22 skipped — all integration), PHPStan max clean, CS clean.
