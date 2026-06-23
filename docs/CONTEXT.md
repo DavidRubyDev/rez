@@ -707,3 +707,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `tests/Domain/Shared/MoneyTest.php` — 16 cases passing.
 
 237 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 39. FeatureDisabledException + Feature enum (`02_rez-config.md` pre-steps)
+
+`src/Domain/Exception/FeatureDisabledException.php` — extends `DomainException`. Constructor: `Feature $feature`. Message: `"Feature '{$feature->name}' is not enabled in PlatformConfig."`. No test — trivial constructor.
+
+`src/Domain/Shared/Feature.php` — pure enum: `Payments`, `Users`, `Credits`, `Subscriptions`. Centralises all gated feature names so use cases never pass raw strings to `FeatureDisabledException`. No test — same convention as other pure enums.
+
+237 tests (22 skipped — all integration), PHPStan max clean, CS clean.
