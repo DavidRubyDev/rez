@@ -61,6 +61,6 @@ $container = (new ContainerBuilder())
     ->build();
 
 $useCase  = $container->get(SeedDatabaseUseCaseInterface::class);
-$response = $useCase->execute(new SeedDatabaseRequest(__DIR__ . '/../database/seeds'));
+$response = $useCase->execute(new SeedDatabaseRequest(seedsDirectories: [__DIR__ . '/../database/seeds']));
 
 echo "Seeded {$response->filesExecuted} file(s).\n";
