@@ -101,6 +101,16 @@ abstract class MysqlIntegrationTestCase extends TestCase
                 PRIMARY KEY (resource_id, date)
             )
         ');
+
+        $pdo->exec('
+            CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+                id          CHAR(36)     NOT NULL PRIMARY KEY,
+                email       VARCHAR(255) NOT NULL UNIQUE,
+                name        VARCHAR(255) NULL,
+                source      VARCHAR(20)  NOT NULL,
+                opted_in_at DATETIME     NOT NULL
+            )
+        ');
     }
 
     private function truncateTables(PDO $pdo): void
@@ -111,6 +121,7 @@ abstract class MysqlIntegrationTestCase extends TestCase
         $pdo->exec('TRUNCATE TABLE resources');
         $pdo->exec('TRUNCATE TABLE availability_rules');
         $pdo->exec('TRUNCATE TABLE availability_overrides');
+        $pdo->exec('TRUNCATE TABLE newsletter_subscribers');
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
     }
 }
