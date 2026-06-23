@@ -14,6 +14,11 @@ final class MysqlDatabaseSeeder implements DatabaseSeederInterface
     ) {
     }
 
+    public static function seedsPath(): string
+    {
+        return dirname(__DIR__, 4) . '/database/seeds';
+    }
+
     public function executeFile(string $filePath): void
     {
         $sql = file_get_contents($filePath);
