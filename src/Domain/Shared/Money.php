@@ -9,22 +9,12 @@ use Rez\Domain\Exception\InsufficientFundsException;
 final class Money
 {
     public function __construct(
-        private readonly int $amount,
-        private readonly Currency $currency,
+        public readonly int $amount,
+        public readonly Currency $currency,
     ) {
         if ($amount < 0) {
             throw new \InvalidArgumentException("Money amount must not be negative, got {$amount}.");
         }
-    }
-
-    public function getAmount(): int
-    {
-        return $this->amount;
-    }
-
-    public function getCurrency(): Currency
-    {
-        return $this->currency;
     }
 
     public function add(Money $other): self

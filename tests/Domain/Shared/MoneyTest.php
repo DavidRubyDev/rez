@@ -15,8 +15,8 @@ class MoneyTest extends TestCase
     {
         $money = new Money(15000, Currency::Czk);
 
-        $this->assertSame(15000, $money->getAmount());
-        $this->assertSame(Currency::Czk, $money->getCurrency());
+        $this->assertSame(15000, $money->amount);
+        $this->assertSame(Currency::Czk, $money->currency);
     }
 
     public function testNegativeAmountThrows(): void
@@ -32,8 +32,8 @@ class MoneyTest extends TestCase
 
         $result = $a->add($b);
 
-        $this->assertSame(15000, $result->getAmount());
-        $this->assertSame(Currency::Czk, $result->getCurrency());
+        $this->assertSame(15000, $result->amount);
+        $this->assertSame(Currency::Czk, $result->currency);
     }
 
     public function testAddWithDifferentCurrenciesThrows(): void
@@ -49,7 +49,7 @@ class MoneyTest extends TestCase
 
         $result = $a->subtract($b);
 
-        $this->assertSame(7000, $result->getAmount());
+        $this->assertSame(7000, $result->amount);
     }
 
     public function testSubtractResultingInZeroIsValid(): void
@@ -59,7 +59,7 @@ class MoneyTest extends TestCase
 
         $result = $a->subtract($b);
 
-        $this->assertSame(0, $result->getAmount());
+        $this->assertSame(0, $result->amount);
         $this->assertTrue($result->isZero());
     }
 

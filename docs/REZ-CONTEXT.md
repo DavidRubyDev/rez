@@ -106,7 +106,7 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 - `SubscriberSource` — pure enum: `Guest`, `Registered`
 
 #### Shared
-- `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code. String mapping in `CurrencyMapper`.
+- `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code — used only in Domain (exceptions, `Money::__toString()`). Infrastructure serialization goes through `CurrencyMapper::toString()`.
 - `Money` — immutable value object. `amount: int` (haléře/cents — NEVER floats), `currency: Currency`. Methods: `add()`, `subtract()` (throws `InsufficientFundsException`), `isZero()`, `equals()`, `isGreaterThan()`, `__toString()`.
 - `DateTimeRange` — shared utility, not a domain concept
 
@@ -536,7 +536,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 2. `rez-config` — PlatformConfig, all sub-configs, FeatureGuard
 3. `rez-mailer-newsletter` — MailerInterface, newsletter domain + repository + use cases
 4. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
-5. `rez-payments` — Money, StripeGatewayInterface, StripeEventRepository, webhook use case
+5. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
 6. `rez-credits` — Wallet, WalletTransaction, wallet use cases
 7. `rez-subscriptions` — Subscription, Plan, subscription use cases
 8. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver

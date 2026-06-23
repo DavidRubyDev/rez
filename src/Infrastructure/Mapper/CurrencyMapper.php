@@ -8,22 +8,22 @@ use Rez\Domain\Shared\Currency;
 
 final class CurrencyMapper
 {
-    public function toString(Currency $currency): string
+    public function fromString(string $currency): Currency
     {
-        return match ($currency) {
-            Currency::Czk => 'czk',
-            Currency::Eur => 'eur',
-            Currency::Usd => 'usd',
+        return match (strtoupper($currency)) {
+            'CZK' => Currency::Czk,
+            'EUR' => Currency::Eur,
+            'USD' => Currency::Usd,
+            default => throw new \InvalidArgumentException("Unknown currency: '{$currency}'."),
         };
     }
 
-    public function fromString(string $currency): Currency
+    public function toString(Currency $currency): string
     {
         return match ($currency) {
-            'czk' => Currency::Czk,
-            'eur' => Currency::Eur,
-            'usd' => Currency::Usd,
-            default => throw new \InvalidArgumentException("Unknown currency: '{$currency}'."),
+            Currency::Czk => 'CZK',
+            Currency::Eur => 'EUR',
+            Currency::Usd => 'USD',
         };
     }
 }
