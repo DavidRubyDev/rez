@@ -783,3 +783,7 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 ### 48. Container update (`02_rez-config.md` step 10)
 
 `config/container.php` — `FeatureGuard::class => autowire()` added. Comment documents that `PlatformConfig` must be bound by the client app. `02_rez-config.md` fully complete.
+
+### 49. NewsletterSubscriberNotFoundException (`03_rez-mailer-newsletter.md` step 1)
+
+`src/Domain/Exception/NewsletterSubscriberNotFoundException.php` — extends `DomainException`. Constructor: `string $email`. Message: `"Newsletter subscriber with email '{$email}' not found."`. No test — trivial constructor.
