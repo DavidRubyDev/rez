@@ -18,7 +18,7 @@ final class MarkNoShowHandler
 
     /**
      * @param array{id: string} $data
-     * @return array{id: string, status: string, start: string, end: string, resource_ids: string[], party: array{name: string, email: string, size: int, phone: string|null}, created_at: string}
+     * @return array{id: string, status: string, start: string, end: string, resource_ids: string[], party: array{name: string, email: string, size: int, phone: string|null, external_ref: string|null}, created_at: string}
      */
     public function handle(array $data): array
     {

@@ -637,11 +637,26 @@ Main suite unaffected: 206 tests (20 skipped), PHPStan max clean, CS clean.
 
 ---
 
+### 34. ReservationSerializer `external_ref` + OpenAPI (platform-readiness Step 4)
+
+`src/Handler/ReservationSerializer.php` — `external_ref` added to `party` array in `serialize()` output and `@return` type annotation.
+
+All five reservation handlers updated with matching `@return` type annotation (`external_ref: string|null` in the `party` shape).
+
+`docs/openapi.yaml` — `external_ref` (nullable string) added to both `Party` and `PartyInput` component schemas.
+
+`tests/Handler/Reservation/GetReservationHandlerTest.php` — 2 new tests:
+- `testHandleReturnsSerializedReservation` extended to assert `external_ref: null`
+- `testHandleIncludesExternalRefInParty` — creates a party with `externalRef: 'user-uuid-456'`, asserts it appears in serialized output
+
+211 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
 From `docs/rez-platform-modifications.md`:
 
-- **Step 4** — `ReservationSerializer`: include `external_ref` in output; update OpenAPI spec
 - **Step 5** — `SeedDatabaseRequest`: change `string $seedsDirectory` → `array $seedsDirectories` (breaking)
 - **Step 6** — `SeedDatabaseUseCase`: iterate multiple directories, update tests
 - **Step 7** — `bin/seed.php`: pass array syntax

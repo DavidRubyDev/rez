@@ -24,7 +24,7 @@ final class GetReservationHandler
      *     start: string,
      *     end: string,
      *     resource_ids: string[],
-     *     party: array{name: string, email: string, size: int, phone: string|null},
+     *     party: array{name: string, email: string, size: int, phone: string|null, external_ref: string|null},
      *     created_at: string
      * }
      */
