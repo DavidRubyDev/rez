@@ -107,6 +107,7 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 
 #### Shared
 - `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code — used only in Domain (exceptions, `Money::__toString()`). Infrastructure serialization goes through `CurrencyMapper::toString()`.
+- `Feature` — pure enum: `Payments`, `Users`, `Credits`, `Subscriptions`. Passed to `FeatureDisabledException` so gated feature names are never raw strings in use cases.
 - `Money` — immutable value object. `amount: int` (haléře/cents — NEVER floats), `currency: Currency`. Methods: `add()`, `subtract()` (throws `InsufficientFundsException`), `isZero()`, `equals()`, `isGreaterThan()`, `__toString()`.
 - `DateTimeRange` — shared utility, not a domain concept
 
