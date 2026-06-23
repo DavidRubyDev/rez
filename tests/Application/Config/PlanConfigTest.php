@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Rez\Tests\Application\Config;
 
 use PHPUnit\Framework\TestCase;
-use Rez\Application\Config\Plan;
+use Rez\Application\Config\PlanConfig;
 
-class PlanTest extends TestCase
+class PlanConfigTest extends TestCase
 {
     public function testValidConstructionStoresValues(): void
     {
-        $plan = new Plan('monthly', 'Měsíční členství', 99000, 'CZK', 30, 'price_1ABC');
+        $plan = new PlanConfig('monthly', 'Měsíční členství', 99000, 'CZK', 30, 'price_1ABC');
 
         $this->assertSame('monthly', $plan->id);
         $this->assertSame('Měsíční členství', $plan->name);
@@ -23,7 +23,7 @@ class PlanTest extends TestCase
 
     public function testZeroPriceAmountIsValid(): void
     {
-        $plan = new Plan('free', 'Free Plan', 0, 'CZK', 30, 'price_free');
+        $plan = new PlanConfig('free', 'Free Plan', 0, 'CZK', 30, 'price_free');
 
         $this->assertSame(0, $plan->priceAmount);
     }
@@ -31,36 +31,36 @@ class PlanTest extends TestCase
     public function testEmptyIdThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new Plan('', 'Měsíční členství', 99000, 'CZK', 30, 'price_1ABC');
+        new PlanConfig('', 'Měsíční členství', 99000, 'CZK', 30, 'price_1ABC');
     }
 
     public function testEmptyNameThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new Plan('monthly', '', 99000, 'CZK', 30, 'price_1ABC');
+        new PlanConfig('monthly', '', 99000, 'CZK', 30, 'price_1ABC');
     }
 
     public function testNegativePriceAmountThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new Plan('monthly', 'Měsíční členství', -1, 'CZK', 30, 'price_1ABC');
+        new PlanConfig('monthly', 'Měsíční členství', -1, 'CZK', 30, 'price_1ABC');
     }
 
     public function testEmptyCurrencyThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new Plan('monthly', 'Měsíční členství', 99000, '', 30, 'price_1ABC');
+        new PlanConfig('monthly', 'Měsíční členství', 99000, '', 30, 'price_1ABC');
     }
 
     public function testIntervalDaysBelowOneThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new Plan('monthly', 'Měsíční členství', 99000, 'CZK', 0, 'price_1ABC');
+        new PlanConfig('monthly', 'Měsíční členství', 99000, 'CZK', 0, 'price_1ABC');
     }
 
     public function testEmptyStripePriceIdThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new Plan('monthly', 'Měsíční členství', 99000, 'CZK', 30, '');
+        new PlanConfig('monthly', 'Měsíční členství', 99000, 'CZK', 30, '');
     }
 }
