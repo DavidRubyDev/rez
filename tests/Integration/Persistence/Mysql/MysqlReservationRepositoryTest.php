@@ -131,4 +131,33 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $this->assertSame(1, $result->count());
         $this->assertTrue($result->toArray()[0]->id->equals($inside->id));
     }
+
+    public function testExternalRefIsPersistedAndHydrated(): void
+    {
+        $party = new Party('Jane Doe', 'jane@example.com', 1, null, 'user-uuid-123');
+        $reservation = Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            new TimeSlot(
+                new DateTimeImmutable('2024-01-15 10:00:00'),
+                new DateTimeImmutable('2024-01-15 11:00:00'),
+            ),
+            $party,
+        );
+
+        $this->repository->save($reservation);
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertSame('user-uuid-123', $found->party->externalRef);
+    }
+
+    public function testNullExternalRefRoundtrips(): void
+    {
+        $reservation = $this->makeReservation();
+        $this->repository->save($reservation);
+
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertNull($found->party->externalRef);
+    }
 }
