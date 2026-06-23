@@ -597,6 +597,39 @@ Main suite unaffected: 206 tests (20 skipped), PHPStan max clean, CS clean.
 
 ---
 
+### 31. Party `externalRef` field (platform-readiness Step 1)
+
+`src/Domain/Reservation/Party.php` — added optional `externalRef` field.
+
+- New constructor parameter: `public readonly ?string $externalRef = null` (appended after `$phone` — defaults to `null`, backwards-compatible)
+
+`tests/Domain/Reservation/PartyTest.php` — 2 new tests:
+- `testNullExternalRefIsAccepted` — constructs with `externalRef: null`, asserts `null`
+- `testExternalRefIsStoredAndReturned` — constructs with `externalRef: 'some-uuid'`, asserts value round-trips
+
+208 unit tests passing (20 skipped), PHPStan max clean, CS clean.
+
+---
+
+### 32. Schema `external_ref` column (platform-readiness Step 2)
+
+`database/seeds/000_schema.sql` — added `external_ref` column to `reservations` table.
+
+- `external_ref VARCHAR(255) NULL` — inserted after `party_phone`, before `created_at`
+- No new tests (DDL-only change)
+
+208 unit tests passing (20 skipped), PHPStan max clean, CS clean.
+
+---
+
 ## Pending Steps
 
-None. All planned steps complete.
+From `docs/rez-platform-modifications.md`:
+
+- **Step 3** — `MysqlReservationRepository`: read/write `external_ref` in `save()` and hydration
+- **Step 4** — `ReservationSerializer`: include `external_ref` in output; update OpenAPI spec
+- **Step 5** — `SeedDatabaseRequest`: change `string $seedsDirectory` → `array $seedsDirectories` (breaking)
+- **Step 6** — `SeedDatabaseUseCase`: iterate multiple directories, update tests
+- **Step 7** — `bin/seed.php`: pass array syntax
+- **Step 8** — Document seed directory naming convention in `database/seeds/README.md`
+- **Step 9** — Add `MysqlDatabaseSeeder::seedsPath(): string` static method
