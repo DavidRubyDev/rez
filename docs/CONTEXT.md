@@ -791,3 +791,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 ### 50. SubscriberSource (`03_rez-mailer-newsletter.md` step 2)
 
 `src/Domain/Newsletter/SubscriberSource.php` — pure enum: `Guest`, `Registered`. String serialization handled by infrastructure mapper. No test — same convention as other pure enums.
+
+### 51. NewsletterSubscriberId (`03_rez-mailer-newsletter.md` step 3)
+
+`src/Domain/Newsletter/NewsletterSubscriberId.php` — UUID v4 value object, same pattern as `ReservationId` and `ResourceId`. Methods: `generate()`, `fromString()` (throws `\InvalidArgumentException` for invalid UUID), `toString()`, `equals()`, `__toString()`.
+
+`tests/Domain/Newsletter/NewsletterSubscriberIdTest.php` — 5 cases: generate produces valid UUID v4, fromString roundtrips, fromString with invalid UUID throws, equals true for same, equals false for different.
+
+291 tests (22 skipped — all integration), PHPStan max clean, CS clean.
