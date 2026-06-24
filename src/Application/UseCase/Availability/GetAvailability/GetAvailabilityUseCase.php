@@ -14,7 +14,6 @@ final class GetAvailabilityUseCase implements GetAvailabilityUseCaseInterface
     ) {
     }
 
-    /** @throws DatabaseException */
     public function execute(GetAvailabilityRequest $request): GetAvailabilityResponse
     {
         try {

@@ -17,7 +17,6 @@ final class MarkNoShowUseCase implements MarkNoShowUseCaseInterface
     /**
      * @throws \Rez\Domain\Exception\ReservationNotFoundException
      * @throws \Rez\Domain\Exception\InvalidReservationStateException
-     * @throws DatabaseException
      */
     public function execute(MarkNoShowRequest $request): MarkNoShowResponse
     {

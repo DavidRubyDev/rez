@@ -17,7 +17,6 @@ final class ConfirmReservationUseCase implements ConfirmReservationUseCaseInterf
     /**
      * @throws \Rez\Domain\Exception\ReservationNotFoundException
      * @throws \Rez\Domain\Exception\InvalidReservationStateException
-     * @throws DatabaseException
      */
     public function execute(ConfirmReservationRequest $request): ConfirmReservationResponse
     {

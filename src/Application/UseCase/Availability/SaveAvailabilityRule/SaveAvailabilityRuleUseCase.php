@@ -17,10 +17,7 @@ final class SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseIn
     ) {
     }
 
-    /**
-     * @throws \Rez\Domain\Exception\ResourceNotFoundException
-     * @throws DatabaseException
-     */
+    /** @throws \Rez\Domain\Exception\ResourceNotFoundException */
     public function execute(SaveAvailabilityRuleRequest $request): SaveAvailabilityRuleResponse
     {
         try {

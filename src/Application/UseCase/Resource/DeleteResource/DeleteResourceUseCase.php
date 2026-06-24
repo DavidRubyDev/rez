@@ -14,10 +14,7 @@ final class DeleteResourceUseCase implements DeleteResourceUseCaseInterface
     ) {
     }
 
-    /**
-     * @throws \Rez\Domain\Exception\ResourceNotFoundException
-     * @throws DatabaseException
-     */
+    /** @throws \Rez\Domain\Exception\ResourceNotFoundException */
     public function execute(DeleteResourceRequest $request): DeleteResourceResponse
     {
         try {

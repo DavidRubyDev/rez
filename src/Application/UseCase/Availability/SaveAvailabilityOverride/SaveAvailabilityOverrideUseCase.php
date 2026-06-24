@@ -17,10 +17,7 @@ final class SaveAvailabilityOverrideUseCase implements SaveAvailabilityOverrideU
     ) {
     }
 
-    /**
-     * @throws \Rez\Domain\Exception\ResourceNotFoundException
-     * @throws DatabaseException
-     */
+    /** @throws \Rez\Domain\Exception\ResourceNotFoundException */
     public function execute(SaveAvailabilityOverrideRequest $request): SaveAvailabilityOverrideResponse
     {
         try {
