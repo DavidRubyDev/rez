@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Seed\SeedDatabase;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\DatabaseSeederInterface;
 
 final class SeedDatabaseUseCase implements SeedDatabaseUseCaseInterface
@@ -25,7 +26,11 @@ final class SeedDatabaseUseCase implements SeedDatabaseUseCaseInterface
             sort($files);
 
             foreach ($files as $file) {
-                $this->seeder->executeFile($file);
+                try {
+                    $this->seeder->executeFile($file);
+                } catch (DatabaseException $e) {
+                    throw new DatabaseException('Failed to seed database.', 0, $e);
+                }
                 $total++;
             }
         }

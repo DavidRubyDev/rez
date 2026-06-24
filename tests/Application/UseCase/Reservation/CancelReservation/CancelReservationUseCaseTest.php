@@ -7,6 +7,7 @@ namespace Rez\Tests\Application\UseCase\Reservation\CancelReservation;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationRequest;
 use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationUseCase;
@@ -46,6 +47,18 @@ class CancelReservationUseCaseTest extends TestCase
             ->willThrowException(new ReservationNotFoundException());
 
         $this->expectException(ReservationNotFoundException::class);
+
+        $this->useCase->execute(new CancelReservationRequest(ReservationId::generate()));
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->reservationRepository
+            ->method('findById')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to load reservation.');
 
         $this->useCase->execute(new CancelReservationRequest(ReservationId::generate()));
     }

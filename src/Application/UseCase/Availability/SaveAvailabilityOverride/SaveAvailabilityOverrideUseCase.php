@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Availability\SaveAvailabilityOverride;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Domain\Availability\AvailabilityOverride;
@@ -21,7 +22,11 @@ final class SaveAvailabilityOverrideUseCase implements SaveAvailabilityOverrideU
      */
     public function execute(SaveAvailabilityOverrideRequest $request): SaveAvailabilityOverrideResponse
     {
-        $this->resourceRepository->findById($request->resourceId);
+        try {
+            $this->resourceRepository->findById($request->resourceId);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load resource.', 0, $e);
+        }
 
         $override = new AvailabilityOverride(
             $request->resourceId,
@@ -29,7 +34,11 @@ final class SaveAvailabilityOverrideUseCase implements SaveAvailabilityOverrideU
             $request->available,
         );
 
-        $this->availabilityRepository->saveOverride($override);
+        try {
+            $this->availabilityRepository->saveOverride($override);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to save availability override.', 0, $e);
+        }
 
         return new SaveAvailabilityOverrideResponse($override);
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Resource\UpdateResource;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Domain\Resource\Resource;
 
@@ -19,7 +20,11 @@ final class UpdateResourceUseCase implements UpdateResourceUseCaseInterface
      */
     public function execute(UpdateResourceRequest $request): UpdateResourceResponse
     {
-        $existing = $this->resourceRepository->findById($request->resourceId);
+        try {
+            $existing = $this->resourceRepository->findById($request->resourceId);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load resource.', 0, $e);
+        }
 
         $updated = new Resource(
             $existing->id,
@@ -29,7 +34,11 @@ final class UpdateResourceUseCase implements UpdateResourceUseCaseInterface
             $request->attributes ?? $existing->attributes,
         );
 
-        $this->resourceRepository->save($updated);
+        try {
+            $this->resourceRepository->save($updated);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to save resource.', 0, $e);
+        }
 
         return new UpdateResourceResponse($updated);
     }

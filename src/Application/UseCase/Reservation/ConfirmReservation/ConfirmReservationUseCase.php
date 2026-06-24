@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Reservation\ConfirmReservation;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 
 final class ConfirmReservationUseCase implements ConfirmReservationUseCaseInterface
@@ -19,10 +20,19 @@ final class ConfirmReservationUseCase implements ConfirmReservationUseCaseInterf
      */
     public function execute(ConfirmReservationRequest $request): ConfirmReservationResponse
     {
-        $reservation = $this->reservationRepository->findById($request->reservationId);
-        $confirmed   = $reservation->confirm();
+        try {
+            $reservation = $this->reservationRepository->findById($request->reservationId);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load reservation.', 0, $e);
+        }
 
-        $this->reservationRepository->save($confirmed);
+        $confirmed = $reservation->confirm();
+
+        try {
+            $this->reservationRepository->save($confirmed);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to save reservation.', 0, $e);
+        }
 
         return new ConfirmReservationResponse($confirmed);
     }

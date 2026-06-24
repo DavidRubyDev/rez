@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Resource\CreateResource;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
@@ -29,7 +30,11 @@ final class CreateResourceUseCase implements CreateResourceUseCaseInterface
             $request->attributes,
         );
 
-        $this->resourceRepository->save($resource);
+        try {
+            $this->resourceRepository->save($resource);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to save resource.', 0, $e);
+        }
 
         return new CreateResourceResponse($resource);
     }

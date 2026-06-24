@@ -7,6 +7,7 @@ namespace Rez\Tests\Application\UseCase\Availability\GetAvailability;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Service\AvailabilityServiceInterface;
 use Rez\Application\UseCase\Availability\GetAvailability\GetAvailabilityRequest;
 use Rez\Application\UseCase\Availability\GetAvailability\GetAvailabilityUseCase;
@@ -24,6 +25,18 @@ class GetAvailabilityUseCaseTest extends TestCase
         $this->availabilityService = $this->createMock(AvailabilityServiceInterface::class);
         $this->useCase             = new GetAvailabilityUseCase($this->availabilityService);
         $this->resourceId          = ResourceId::generate();
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->availabilityService
+            ->method('getAvailableSlots')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to get availability.');
+
+        $this->useCase->execute(new GetAvailabilityRequest($this->resourceId, new DateTimeImmutable('2024-01-15'), 60));
     }
 
     public function testDelegatesWindowToAvailabilityService(): void

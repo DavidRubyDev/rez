@@ -6,6 +6,7 @@ namespace Rez\Tests\Application\UseCase\Resource\DeleteResource;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\UseCase\Resource\DeleteResource\DeleteResourceRequest;
 use Rez\Application\UseCase\Resource\DeleteResource\DeleteResourceUseCase;
@@ -25,6 +26,18 @@ class DeleteResourceUseCaseTest extends TestCase
         $this->repository = $this->createMock(ResourceRepositoryInterface::class);
         $this->useCase    = new DeleteResourceUseCase($this->repository);
         $this->resourceId = ResourceId::generate();
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->repository
+            ->method('findById')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to load resource.');
+
+        $this->useCase->execute(new DeleteResourceRequest($this->resourceId));
     }
 
     public function testThrowsWhenResourceNotFound(): void

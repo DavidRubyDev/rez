@@ -6,6 +6,7 @@ namespace Rez\Tests\Application\UseCase\Resource\CreateResource;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\UseCase\Resource\CreateResource\CreateResourceRequest;
 use Rez\Application\UseCase\Resource\CreateResource\CreateResourceUseCase;
@@ -20,6 +21,18 @@ class CreateResourceUseCaseTest extends TestCase
     {
         $this->repository = $this->createMock(ResourceRepositoryInterface::class);
         $this->useCase    = new CreateResourceUseCase($this->repository);
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->repository
+            ->method('save')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to save resource.');
+
+        $this->useCase->execute(new CreateResourceRequest('table', 'Table 1', 4));
     }
 
     public function testSavesAndReturnsResource(): void

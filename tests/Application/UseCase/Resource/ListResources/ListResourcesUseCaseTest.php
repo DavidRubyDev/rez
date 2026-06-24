@@ -6,6 +6,7 @@ namespace Rez\Tests\Application\UseCase\Resource\ListResources;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\UseCase\Resource\ListResources\ListResourcesRequest;
 use Rez\Application\UseCase\Resource\ListResources\ListResourcesUseCase;
@@ -23,6 +24,18 @@ class ListResourcesUseCaseTest extends TestCase
     {
         $this->repository = $this->createMock(ResourceRepositoryInterface::class);
         $this->useCase    = new ListResourcesUseCase($this->repository);
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->repository
+            ->method('findAll')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to list resources.');
+
+        $this->useCase->execute(new ListResourcesRequest());
     }
 
     public function testReturnsAllResources(): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Availability\GetAvailability;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Service\AvailabilityServiceInterface;
 
 final class GetAvailabilityUseCase implements GetAvailabilityUseCaseInterface
@@ -15,11 +16,15 @@ final class GetAvailabilityUseCase implements GetAvailabilityUseCaseInterface
 
     public function execute(GetAvailabilityRequest $request): GetAvailabilityResponse
     {
-        $window = $this->availabilityService->getAvailableSlots(
-            $request->resourceId,
-            $request->date,
-            $request->slotDurationMinutes,
-        );
+        try {
+            $window = $this->availabilityService->getAvailableSlots(
+                $request->resourceId,
+                $request->date,
+                $request->slotDurationMinutes,
+            );
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to get availability.', 0, $e);
+        }
 
         return new GetAvailabilityResponse($window);
     }

@@ -6,6 +6,7 @@ namespace Rez\Tests\Application\UseCase\Newsletter;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeRequest;
 use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCase;
@@ -23,6 +24,18 @@ class UnsubscribeUseCaseTest extends TestCase
     {
         $this->repository = $this->createMock(NewsletterRepositoryInterface::class);
         $this->useCase    = new UnsubscribeUseCase($this->repository);
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->repository
+            ->method('findByEmail')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to load subscriber.');
+
+        $this->useCase->execute(new UnsubscribeRequest('test@example.com'));
     }
 
     public function testUnknownEmailReturnsFalseWithoutThrowing(): void
