@@ -19,6 +19,9 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
     ) {
     }
 
+    /**
+     * @throws NewsletterSubscriberNotFoundException
+     */
     public function findByEmail(string $email): NewsletterSubscriber
     {
         $stmt = $this->pdo->prepare('SELECT * FROM newsletter_subscribers WHERE email = :email');

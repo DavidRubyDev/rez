@@ -25,6 +25,9 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     ) {
     }
 
+    /**
+     * @throws ReservationNotFoundException
+     */
     public function findById(ReservationId $id): Reservation
     {
         $stmt = $this->pdo->prepare('SELECT * FROM reservations WHERE id = :id');
