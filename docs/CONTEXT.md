@@ -883,3 +883,25 @@ All three use cases follow Request/Response/UseCase/Interface pattern under `src
 **Step 8 — Infrastructure repositories and seeder:** `MysqlReservationRepository::findById()`, `MysqlResourceRepository::findById()`, `MysqlNewsletterRepository::findByEmail()`, `MysqlDatabaseSeeder::executeFile()`.
 
 316 tests (27 skipped — all integration), PHPStan max clean, CS clean. `04_rez-throws-phpdoc.md` fully complete.
+
+---
+
+### 60. `DatabaseException` and PDO wrapping (`05_rez-pdo-exceptions.md`)
+
+`05_rez-pdo-exceptions.md` fully complete. All 6 sub-steps implemented in branch `feature/rez-pdo-exceptions`, one commit per sub-step.
+
+**Sub-step 1 — `DatabaseException`:** `src/Application/Exception/DatabaseException.php` — final class extending `\RuntimeException`. No custom constructor (marker class). No test needed.
+
+**Sub-step 2 — Wrap PDO calls in MySQL repositories:** All `$pdo->prepare()` + `$stmt->execute()` pairs (and standalone `$pdo->exec()`) wrapped in `try { ... } catch (\PDOException $e) { throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e); }`. `fetch()`/`fetchAll()` after successful `execute()` remain outside the try/catch. Files: `MysqlReservationRepository` (findById, findByTimeSlotAndResource, findAll, save), `MysqlResourceRepository` (findById, findAll, save, delete), `MysqlAvailabilityRepository` (findRulesForResource, findOverridesForResource, saveRule, saveOverride), `MysqlNewsletterRepository` (findByEmail, findAll, save, delete), `MysqlDatabaseSeeder` (executeFile — each `$pdo->exec()`).
+
+**Sub-step 3 — `@throws DatabaseException` on port interfaces:** All 4 methods on `ReservationRepositoryInterface`, `ResourceRepositoryInterface`, `AvailabilityRepositoryInterface`, `NewsletterRepositoryInterface`; `executeFile()` on `DatabaseSeederInterface`. FQNs used.
+
+**Sub-step 4 — Handle `DatabaseException` in use cases (TDD):** Tests written first (`testRepositoryDatabaseExceptionPropagates` in each of 18 use case test classes), confirmed RED, then implementation added and amend-committed. Pattern: `try { $repo->... } catch (DatabaseException $e) { throw new DatabaseException('Failed to {verb} {entity}.', 0, $e); }`. Each repository call gets its own try/catch with its own context message. `SubscribeUseCase`/`UnsubscribeUseCase` had existing `NewsletterSubscriberNotFoundException` catch — `DatabaseException` added as a separate catch clause.
+
+Context messages: "Failed to load reservation.", "Failed to save reservation.", "Failed to list reservations.", "Failed to load resource.", "Failed to save resource.", "Failed to delete resource.", "Failed to list resources.", "Failed to get availability.", "Failed to save availability rule.", "Failed to save availability override.", "Failed to load subscriber.", "Failed to save subscriber.", "Failed to delete subscriber.", "Failed to load newsletter subscribers.", "Failed to seed database."
+
+**Sub-step 5 — `@throws DatabaseException` on use case interfaces and implementations:** Added `@throws \Rez\Application\Exception\DatabaseException` (FQN) to all 18 `*UseCaseInterface` files; added `@throws DatabaseException` (short name, imported) to all 18 `execute()` implementations.
+
+**Sub-step 6 — Document `DatabaseException → 503` mapping:** Added `DatabaseException → 503` row to the exception/HTTP mapping table in `docs/REZ-CONTEXT.md`. Marked `rez-pdo-exceptions` as COMPLETE in pending scaffold list.
+
+334 tests (27 skipped — all integration), PHPStan max clean, CS clean. `05_rez-pdo-exceptions.md` fully complete.
