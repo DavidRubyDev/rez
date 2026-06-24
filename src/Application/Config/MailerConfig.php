@@ -6,6 +6,9 @@ namespace Rez\Application\Config;
 
 final class MailerConfig
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly string $fromAddress,
         public readonly string $fromName,

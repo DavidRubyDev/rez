@@ -6,6 +6,9 @@ namespace Rez\Application\Config;
 
 final class CreditsConfig
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly int $minimumTopUpAmount,
         public readonly string $currency,
