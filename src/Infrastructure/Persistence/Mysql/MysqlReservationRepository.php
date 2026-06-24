@@ -6,6 +6,7 @@ namespace Rez\Infrastructure\Persistence\Mysql;
 
 use DateTimeImmutable;
 use PDO;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Domain\Exception\ReservationNotFoundException;
 use Rez\Domain\Reservation\Party;
@@ -27,11 +28,16 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
 
     /**
      * @throws ReservationNotFoundException
+     * @throws DatabaseException
      */
     public function findById(ReservationId $id): Reservation
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM reservations WHERE id = :id');
-        $stmt->execute([':id' => $id->toString()]);
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM reservations WHERE id = :id');
+            $stmt->execute([':id' => $id->toString()]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
 
         /** @var array<string, mixed>|false $row */
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -45,19 +51,23 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
 
     public function findByTimeSlotAndResource(TimeSlot $slot, ResourceId $resourceId): ReservationCollection
     {
-        $stmt = $this->pdo->prepare('
-            SELECT r.* FROM reservations r
-            INNER JOIN reservation_resources rr ON rr.reservation_id = r.id
-            WHERE rr.resource_id = :resource_id
-              AND r.start_at < :end_at
-              AND r.end_at   > :start_at
-        ');
+        try {
+            $stmt = $this->pdo->prepare('
+                SELECT r.* FROM reservations r
+                INNER JOIN reservation_resources rr ON rr.reservation_id = r.id
+                WHERE rr.resource_id = :resource_id
+                  AND r.start_at < :end_at
+                  AND r.end_at   > :start_at
+            ');
 
-        $stmt->execute([
-            ':resource_id' => $resourceId->toString(),
-            ':start_at'    => $slot->start->format('Y-m-d H:i:s'),
-            ':end_at'      => $slot->end->format('Y-m-d H:i:s'),
-        ]);
+            $stmt->execute([
+                ':resource_id' => $resourceId->toString(),
+                ':start_at'    => $slot->start->format('Y-m-d H:i:s'),
+                ':end_at'      => $slot->end->format('Y-m-d H:i:s'),
+            ]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
 
         /** @var array<int, array<string, mixed>> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -83,8 +93,12 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         $sql  = 'SELECT * FROM reservations';
         $sql .= $where !== [] ? ' WHERE ' . implode(' AND ', $where) : '';
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
 
         /** @var array<int, array<string, mixed>> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -94,45 +108,49 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
 
     public function save(Reservation $reservation): void
     {
-        $stmt = $this->pdo->prepare('
-            INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, external_ref, created_at)
-            VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :external_ref, :created_at)
-            ON DUPLICATE KEY UPDATE
-                status       = VALUES(status),
-                start_at     = VALUES(start_at),
-                end_at       = VALUES(end_at),
-                party_name   = VALUES(party_name),
-                party_email  = VALUES(party_email),
-                party_size   = VALUES(party_size),
-                party_phone  = VALUES(party_phone),
-                external_ref = VALUES(external_ref)
-        ');
+        try {
+            $stmt = $this->pdo->prepare('
+                INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, external_ref, created_at)
+                VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :external_ref, :created_at)
+                ON DUPLICATE KEY UPDATE
+                    status       = VALUES(status),
+                    start_at     = VALUES(start_at),
+                    end_at       = VALUES(end_at),
+                    party_name   = VALUES(party_name),
+                    party_email  = VALUES(party_email),
+                    party_size   = VALUES(party_size),
+                    party_phone  = VALUES(party_phone),
+                    external_ref = VALUES(external_ref)
+            ');
 
-        $stmt->execute([
-            ':id'           => $reservation->id->toString(),
-            ':status'       => $this->statusMapper->toString($reservation->status),
-            ':start_at'     => $reservation->slot->start->format('Y-m-d H:i:s'),
-            ':end_at'       => $reservation->slot->end->format('Y-m-d H:i:s'),
-            ':party_name'   => $reservation->party->name,
-            ':party_email'  => $reservation->party->email,
-            ':party_size'   => $reservation->party->size,
-            ':party_phone'  => $reservation->party->phone,
-            ':external_ref' => $reservation->party->externalRef,
-            ':created_at'   => $reservation->createdAt->format('Y-m-d H:i:s'),
-        ]);
-
-        $delete = $this->pdo->prepare('DELETE FROM reservation_resources WHERE reservation_id = :id');
-        $delete->execute([':id' => $reservation->id->toString()]);
-
-        $insert = $this->pdo->prepare('
-            INSERT INTO reservation_resources (reservation_id, resource_id) VALUES (:reservation_id, :resource_id)
-        ');
-
-        foreach ($reservation->resourceIds->toArray() as $resourceId) {
-            $insert->execute([
-                ':reservation_id' => $reservation->id->toString(),
-                ':resource_id'    => $resourceId->toString(),
+            $stmt->execute([
+                ':id'           => $reservation->id->toString(),
+                ':status'       => $this->statusMapper->toString($reservation->status),
+                ':start_at'     => $reservation->slot->start->format('Y-m-d H:i:s'),
+                ':end_at'       => $reservation->slot->end->format('Y-m-d H:i:s'),
+                ':party_name'   => $reservation->party->name,
+                ':party_email'  => $reservation->party->email,
+                ':party_size'   => $reservation->party->size,
+                ':party_phone'  => $reservation->party->phone,
+                ':external_ref' => $reservation->party->externalRef,
+                ':created_at'   => $reservation->createdAt->format('Y-m-d H:i:s'),
             ]);
+
+            $delete = $this->pdo->prepare('DELETE FROM reservation_resources WHERE reservation_id = :id');
+            $delete->execute([':id' => $reservation->id->toString()]);
+
+            $insert = $this->pdo->prepare('
+                INSERT INTO reservation_resources (reservation_id, resource_id) VALUES (:reservation_id, :resource_id)
+            ');
+
+            foreach ($reservation->resourceIds->toArray() as $resourceId) {
+                $insert->execute([
+                    ':reservation_id' => $reservation->id->toString(),
+                    ':resource_id'    => $resourceId->toString(),
+                ]);
+            }
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }
 
