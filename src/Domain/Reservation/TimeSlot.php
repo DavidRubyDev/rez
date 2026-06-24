@@ -10,6 +10,9 @@ use Rez\Domain\Exception\InvalidTimeSlotException;
 
 final class TimeSlot
 {
+    /**
+     * @throws InvalidTimeSlotException
+     */
     public function __construct(
         public readonly DateTimeImmutable $start,
         public readonly DateTimeImmutable $end,

@@ -17,7 +17,10 @@ final class ResourceIdCollection
         return new self([]);
     }
 
-    /** @param ResourceId[] $ids */
+    /**
+     * @param ResourceId[] $ids
+     * @throws \InvalidArgumentException
+     */
     public static function fromArray(array $ids): self
     {
         if ($ids === []) {

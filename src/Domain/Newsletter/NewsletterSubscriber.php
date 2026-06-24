@@ -25,6 +25,9 @@ final class NewsletterSubscriber
         return new self($id, $email, $name, $source, $optedInAt);
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public static function create(
         NewsletterSubscriberId $id,
         string $email,

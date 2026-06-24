@@ -8,6 +8,9 @@ use Rez\Domain\Exception\InvalidPartyException;
 
 final class Party
 {
+    /**
+     * @throws InvalidPartyException
+     */
     public function __construct(
         public readonly string $name,
         public readonly string $email,
