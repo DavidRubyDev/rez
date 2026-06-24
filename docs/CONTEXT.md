@@ -859,3 +859,27 @@ All three use cases follow Request/Response/UseCase/Interface pattern under `src
 `config/container.php` — `SubscribeUseCaseInterface`, `UnsubscribeUseCaseInterface`, `BroadcastUseCaseInterface` all registered via `autowire()`. Comment documents that `MailerInterface` and `NewsletterRepositoryInterface` must be bound by the client app. `03_rez-mailer-newsletter.md` fully complete.
 
 316 tests (27 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 59. `@throws` PHPDoc backfill (`04_rez-throws-phpdoc.md`)
+
+`@throws` PHPDoc added to every public method that directly throws or propagates an exception. All 8 steps of the instruction file completed in a single branch (`feature/throws-phpdoc`), one commit per step.
+
+**Step 1 — Domain value objects and entities:** `TimeSlot`, `ReservationId`, `Party`, `Reservation` (create/confirm/cancel/markNoShow), `ResourceId`, `ResourceType`, `ResourceIdCollection`, `Resource`, `Money` (construct/add/subtract/isGreaterThan), `DateTimeRange` (construct/toTimeSlot), `NewsletterSubscriberId`, `NewsletterSubscriber::create()`, `AvailabilityRule`.
+
+**Step 2 — Application config classes:** `MailerConfig`, `PaymentsConfig`, `UsersConfig`, `CreditsConfig`, `PlanConfig` constructors + `SubscriptionsConfig::getPlanById()` + `PlatformConfig` constructor.
+
+**Step 3 — Application request classes:** `GetAvailabilityRequest` constructor.
+
+**Step 4 — Application service:** `FeatureGuard::requirePayments/Users/Credits/Subscriptions()`.
+
+**Step 5 — Port interfaces:** `ReservationRepositoryInterface::findById()`, `ResourceRepositoryInterface::findById()`, `NewsletterRepositoryInterface::findByEmail()`.
+
+**Step 6 — Use case interfaces and implementations:** All 12 throwing use cases tagged on both interface and concrete class — CreateReservation, CancelReservation, ConfirmReservation, MarkNoShow, GetReservation, SaveAvailabilityRule, SaveAvailabilityOverride, CreateResource, GetResource, UpdateResource, DeleteResource, SeedDatabase.
+
+**Step 7 — Infrastructure mappers:** `ReservationStatusMapper`, `DayOfWeekMapper`, `ResourceTypeMapper`, `CurrencyMapper`, `SubscriberSourceMapper` — all `fromString()` methods.
+
+**Step 8 — Infrastructure repositories and seeder:** `MysqlReservationRepository::findById()`, `MysqlResourceRepository::findById()`, `MysqlNewsletterRepository::findByEmail()`, `MysqlDatabaseSeeder::executeFile()`.
+
+316 tests (27 skipped — all integration), PHPStan max clean, CS clean. `04_rez-throws-phpdoc.md` fully complete.
