@@ -19,6 +19,7 @@ final class SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseIn
 
     /**
      * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     * @throws DatabaseException
      */
     public function execute(SaveAvailabilityRuleRequest $request): SaveAvailabilityRuleResponse
     {

@@ -8,6 +8,7 @@ interface SeedDatabaseUseCaseInterface
 {
     /**
      * @throws \RuntimeException
+     * @throws \Rez\Application\Exception\DatabaseException
      */
     public function execute(SeedDatabaseRequest $request): SeedDatabaseResponse;
 }

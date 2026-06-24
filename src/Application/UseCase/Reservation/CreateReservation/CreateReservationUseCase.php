@@ -28,6 +28,7 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
      * @throws \Rez\Domain\Exception\ResourceNotFoundException
      * @throws \Rez\Domain\Exception\InvalidTimeSlotException
      * @throws ConflictException
+     * @throws DatabaseException
      */
     public function execute(CreateReservationRequest $request): CreateReservationResponse
     {

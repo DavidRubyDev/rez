@@ -17,6 +17,7 @@ final class SubscribeUseCase implements SubscribeUseCaseInterface
     ) {
     }
 
+    /** @throws DatabaseException */
     public function execute(SubscribeRequest $request): SubscribeResponse
     {
         try {

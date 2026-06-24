@@ -17,6 +17,7 @@ final class CancelReservationUseCase implements CancelReservationUseCaseInterfac
     /**
      * @throws \Rez\Domain\Exception\ReservationNotFoundException
      * @throws \Rez\Domain\Exception\InvalidReservationStateException
+     * @throws DatabaseException
      */
     public function execute(CancelReservationRequest $request): CancelReservationResponse
     {

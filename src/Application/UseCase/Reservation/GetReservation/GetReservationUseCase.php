@@ -16,6 +16,7 @@ final class GetReservationUseCase implements GetReservationUseCaseInterface
 
     /**
      * @throws \Rez\Domain\Exception\ReservationNotFoundException
+     * @throws DatabaseException
      */
     public function execute(GetReservationRequest $request): GetReservationResponse
     {

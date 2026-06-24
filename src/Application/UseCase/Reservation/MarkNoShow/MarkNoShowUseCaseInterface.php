@@ -9,6 +9,7 @@ interface MarkNoShowUseCaseInterface
     /**
      * @throws \Rez\Domain\Exception\ReservationNotFoundException
      * @throws \Rez\Domain\Exception\InvalidReservationStateException
+     * @throws \Rez\Application\Exception\DatabaseException
      */
     public function execute(MarkNoShowRequest $request): MarkNoShowResponse;
 }

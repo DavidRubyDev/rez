@@ -8,6 +8,7 @@ interface GetResourceUseCaseInterface
 {
     /**
      * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     * @throws \Rez\Application\Exception\DatabaseException
      */
     public function execute(GetResourceRequest $request): GetResourceResponse;
 }
