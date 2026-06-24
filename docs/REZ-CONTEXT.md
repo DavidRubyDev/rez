@@ -545,7 +545,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 1. `rez-core-changes` — **COMPLETE**
 2. `rez-config` — **COMPLETE** (PlatformConfig, all sub-configs, FeatureGuard, container wiring)
 3. `rez-mailer-newsletter` — **COMPLETE**
-4. `rez-throws-phpdoc` — `@throws` PHPDoc backfill across all public methods
+4. `rez-throws-phpdoc` — **COMPLETE** (`@throws` PHPDoc backfill across all public methods)
 5. `rez-pdo-exceptions` — DatabaseException, PDO wrapping in repositories, use case re-throw
 6. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB)
 7. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator

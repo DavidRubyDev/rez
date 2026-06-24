@@ -12,6 +12,9 @@ final class SubscriptionsConfig
     ) {
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function getPlanById(string $id): PlanConfig
     {
         foreach ($this->plans as $plan) {

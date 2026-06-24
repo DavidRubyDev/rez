@@ -20,6 +20,9 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     ) {
     }
 
+    /**
+     * @throws ResourceNotFoundException
+     */
     public function findById(ResourceId $id): Resource
     {
         $stmt = $this->pdo->prepare('SELECT * FROM resources WHERE id = :id');

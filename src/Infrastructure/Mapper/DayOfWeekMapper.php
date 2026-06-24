@@ -21,6 +21,9 @@ final class DayOfWeekMapper
         };
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function fromString(string $day): DayOfWeek
     {
         return match($day) {

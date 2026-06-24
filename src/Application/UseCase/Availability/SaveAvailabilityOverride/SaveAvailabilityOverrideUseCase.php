@@ -16,6 +16,9 @@ final class SaveAvailabilityOverrideUseCase implements SaveAvailabilityOverrideU
     ) {
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     */
     public function execute(SaveAvailabilityOverrideRequest $request): SaveAvailabilityOverrideResponse
     {
         $this->resourceRepository->findById($request->resourceId);

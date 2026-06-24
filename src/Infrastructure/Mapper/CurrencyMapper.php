@@ -8,6 +8,9 @@ use Rez\Domain\Shared\Currency;
 
 final class CurrencyMapper
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function fromString(string $currency): Currency
     {
         return match (strtoupper($currency)) {

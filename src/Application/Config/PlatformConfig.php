@@ -6,6 +6,9 @@ namespace Rez\Application\Config;
 
 final class PlatformConfig
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly MailerConfig $mailer,
         public readonly ?PaymentsConfig $payments = null,

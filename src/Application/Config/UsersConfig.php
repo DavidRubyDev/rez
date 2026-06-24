@@ -6,6 +6,9 @@ namespace Rez\Application\Config;
 
 final class UsersConfig
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly string $jwtSecret,
         public readonly int $jwtTtlSeconds = 3600,

@@ -19,6 +19,9 @@ final class MysqlDatabaseSeeder implements DatabaseSeederInterface
         return dirname(__DIR__, 4) . '/database/seeds';
     }
 
+    /**
+     * @throws \RuntimeException
+     */
     public function executeFile(string $filePath): void
     {
         $sql = file_get_contents($filePath);

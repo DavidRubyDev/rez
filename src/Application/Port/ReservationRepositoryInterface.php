@@ -13,6 +13,9 @@ use Rez\Domain\Resource\ResourceId;
 
 interface ReservationRepositoryInterface
 {
+    /**
+     * @throws \Rez\Domain\Exception\ReservationNotFoundException
+     */
     public function findById(ReservationId $id): Reservation;
 
     public function findByTimeSlotAndResource(TimeSlot $slot, ResourceId $resourceId): ReservationCollection;

@@ -18,6 +18,9 @@ final class ReservationStatusMapper
         };
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function fromString(string $value): ReservationStatus
     {
         return match ($value) {

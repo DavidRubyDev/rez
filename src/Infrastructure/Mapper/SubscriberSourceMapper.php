@@ -16,6 +16,9 @@ final class SubscriberSourceMapper
         };
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function fromString(string $value): SubscriberSource
     {
         return match ($value) {

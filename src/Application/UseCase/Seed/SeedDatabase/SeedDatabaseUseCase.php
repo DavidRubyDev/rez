@@ -13,6 +13,9 @@ final class SeedDatabaseUseCase implements SeedDatabaseUseCaseInterface
     ) {
     }
 
+    /**
+     * @throws \RuntimeException
+     */
     public function execute(SeedDatabaseRequest $request): SeedDatabaseResponse
     {
         $total = 0;

@@ -14,6 +14,9 @@ final class UpdateResourceUseCase implements UpdateResourceUseCaseInterface
     ) {
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     */
     public function execute(UpdateResourceRequest $request): UpdateResourceResponse
     {
         $existing = $this->resourceRepository->findById($request->resourceId);

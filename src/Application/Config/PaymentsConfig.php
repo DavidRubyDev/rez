@@ -6,6 +6,9 @@ namespace Rez\Application\Config;
 
 final class PaymentsConfig
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly string $currency,
         public readonly string $webhookSecret,

@@ -6,6 +6,9 @@ namespace Rez\Application\Config;
 
 final class PlanConfig
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly string $id,
         public readonly string $name,

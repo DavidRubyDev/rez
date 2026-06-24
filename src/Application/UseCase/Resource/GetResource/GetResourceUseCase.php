@@ -13,6 +13,9 @@ final class GetResourceUseCase implements GetResourceUseCaseInterface
     ) {
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     */
     public function execute(GetResourceRequest $request): GetResourceResponse
     {
         return new GetResourceResponse(

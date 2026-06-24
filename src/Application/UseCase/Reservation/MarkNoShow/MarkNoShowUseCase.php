@@ -13,6 +13,10 @@ final class MarkNoShowUseCase implements MarkNoShowUseCaseInterface
     ) {
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\ReservationNotFoundException
+     * @throws \Rez\Domain\Exception\InvalidReservationStateException
+     */
     public function execute(MarkNoShowRequest $request): MarkNoShowResponse
     {
         $reservation = $this->reservationRepository->findById($request->reservationId);

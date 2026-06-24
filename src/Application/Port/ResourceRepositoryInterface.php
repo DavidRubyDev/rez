@@ -10,6 +10,9 @@ use Rez\Domain\Resource\ResourceId;
 
 interface ResourceRepositoryInterface
 {
+    /**
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     */
     public function findById(ResourceId $id): Resource;
 
     public function findAll(): ResourceCollection;
