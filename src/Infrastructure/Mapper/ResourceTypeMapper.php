@@ -13,6 +13,9 @@ final class ResourceTypeMapper
         return $type->toString();
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function fromString(string $value): ResourceType
     {
         return ResourceType::fromString($value);
