@@ -9,6 +9,9 @@ use Rez\Domain\Newsletter\NewsletterSubscriberId;
 
 interface NewsletterRepositoryInterface
 {
+    /**
+     * @throws \Rez\Domain\Exception\NewsletterSubscriberNotFoundException
+     */
     public function findByEmail(string $email): NewsletterSubscriber;
 
     /** @return NewsletterSubscriber[] */
