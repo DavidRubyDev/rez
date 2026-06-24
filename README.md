@@ -17,16 +17,18 @@ composer require davidrubydev/rez
 
 ```
 Domain         Entities, value objects, domain exceptions, pure enums. No dependencies.
-Application    Use cases and port interfaces.
+Application    Use cases, port interfaces, config classes, and application services.
 Infrastructure MySQL repository implementations and mappers.
-Handler        Driving adapters — pure PHP arrays in, arrays out. No HTTP dependency.
+Handler        Legacy driving adapters — pure PHP arrays in, arrays out. Deprecated; use use cases directly.
 ```
 
-The library ends at the Handler layer. Your application owns the HTTP wiring.
+Your application owns the HTTP wiring. The library exposes use case interfaces — call them from your routes.
 
 ## Handlers
 
-Every operation is exposed through a handler with a single `handle(array $data): array` method.
+> **Deprecated.** Handlers are legacy adapters from before use cases were exposed directly. New code should call use case interfaces via your DI container. Handlers will be annotated `@deprecated` in a future release.
+
+Every operation is also exposed through a handler with a single `handle(array $data): array` method:
 
 | Handler | Input keys | Returns |
 |---|---|---|
@@ -45,18 +47,41 @@ Every operation is exposed through a handler with a single `handle(array $data):
 | `ConfirmReservationHandler` | `id` | Reservation |
 | `MarkNoShowHandler` | `id` | Reservation |
 
+## Platform configuration
+
+`rez` supports optional platform features (mailer, payments, users, credits, subscriptions) controlled by a `PlatformConfig` object constructed by your application and injected via PHP-DI. At minimum, `MailerConfig` is required.
+
+```php
+use Rez\Application\Config\PlatformConfig;
+use Rez\Application\Config\MailerConfig;
+
+$platformConfig = new PlatformConfig(
+    mailer: new MailerConfig('noreply@example.com', 'My Studio'),
+    // payments: new PaymentsConfig('CZK', 'whsec_...'),
+    // users:    new UsersConfig('jwt-secret'),
+);
+```
+
+The `FeatureGuard` service reads `PlatformConfig` to gate use cases. Client apps bind `PlatformConfig` in the DI container — the library never constructs it.
+
 ## Wiring with PHP-DI
 
-The library ships `config/container.php` which registers all use cases. Supply a `PDO` instance and bind the three repository interfaces to their MySQL implementations:
+The library ships `config/container.php` which registers all use cases. Supply a `PDO` instance, a `PlatformConfig`, and bind the repository and mailer interfaces:
 
 ```php
 use DI\ContainerBuilder;
 use function DI\autowire;
+use function DI\factory;
 
+use Rez\Application\Config\PlatformConfig;
+use Rez\Application\Config\MailerConfig;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
+use Rez\Application\Port\MailerInterface;
+use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Infrastructure\Persistence\Mysql\MysqlAvailabilityRepository;
+use Rez\Infrastructure\Persistence\Mysql\MysqlNewsletterRepository;
 use Rez\Infrastructure\Persistence\Mysql\MysqlReservationRepository;
 use Rez\Infrastructure\Persistence\Mysql\MysqlResourceRepository;
 
@@ -70,9 +95,17 @@ $container = (new ContainerBuilder())
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
         ),
 
+        PlatformConfig::class => fn () => new PlatformConfig(
+            mailer: new MailerConfig('noreply@example.com', 'My Studio'),
+        ),
+
         ReservationRepositoryInterface::class  => autowire(MysqlReservationRepository::class),
         ResourceRepositoryInterface::class     => autowire(MysqlResourceRepository::class),
         AvailabilityRepositoryInterface::class => autowire(MysqlAvailabilityRepository::class),
+        NewsletterRepositoryInterface::class   => autowire(MysqlNewsletterRepository::class),
+
+        // Implement MailerInterface in your own infrastructure layer:
+        MailerInterface::class => autowire(YourSymfonyMailer::class),
     ])
     ->build();
 ```
@@ -115,11 +148,13 @@ $errorMiddleware->setDefaultErrorHandler(
     function (Psr\Http\Message\ServerRequestInterface $request, Throwable $e) use ($app) {
         $status = match (true) {
             $e instanceof \Rez\Domain\Exception\ResourceNotFoundException,
-            $e instanceof \Rez\Domain\Exception\ReservationNotFoundException => 404,
-            $e instanceof \Rez\Domain\Exception\ConflictException            => 409,
+            $e instanceof \Rez\Domain\Exception\ReservationNotFoundException    => 404,
+            $e instanceof \Rez\Domain\Exception\ConflictException               => 409,
             $e instanceof \InvalidArgumentException,
-            $e instanceof \Rez\Domain\Exception\DomainException              => 422,
-            default                                                          => 500,
+            $e instanceof \Rez\Domain\Exception\DomainException                 => 422,
+            $e instanceof \Rez\Application\Exception\FeatureDisabledException   => 501,
+            $e instanceof \Rez\Application\Exception\DatabaseException          => 503,
+            default                                                              => 500,
         };
         $response = $app->getResponseFactory()->createResponse($status);
         $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
@@ -145,6 +180,12 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Rez\Handler\Resource\{CreateResourceHandler, GetResourceHandler, ListResourcesHandler, UpdateResourceHandler, DeleteResourceHandler};
 use Rez\Handler\Availability\{GetAvailabilityHandler, SaveAvailabilityRuleHandler, SaveAvailabilityOverrideHandler};
 use Rez\Handler\Reservation\{CreateReservationHandler, GetReservationHandler, ListReservationsHandler, CancelReservationHandler, ConfirmReservationHandler, MarkNoShowHandler};
+use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
+use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCaseInterface;
+use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCaseInterface;
+use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeRequest;
+use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeRequest;
+use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastRequest;
 use Slim\App;
 
 return function (App $app): void {
@@ -199,6 +240,22 @@ return function (App $app): void {
             'date'                  => $p['date'] ?? '',
             'slot_duration_minutes' => (int) ($p['slot_duration_minutes'] ?? 60),
         ]));
+    });
+
+    $app->post('/newsletter/subscribe', function (Request $req, Response $res, SubscribeUseCaseInterface $uc): Response {
+        $b = (array) $req->getParsedBody();
+        $response = $uc->execute(new SubscribeRequest($b['email'] ?? '', $b['name'] ?? null, $b['source'] ?? 'guest'));
+        return jsonResponse($res, ['subscribed' => true, 'id' => $response->subscriber->id->toString()], 201);
+    });
+    $app->delete('/newsletter/unsubscribe', function (Request $req, Response $res, UnsubscribeUseCaseInterface $uc): Response {
+        $b = (array) $req->getParsedBody();
+        $response = $uc->execute(new UnsubscribeRequest($b['email'] ?? ''));
+        return jsonResponse($res, ['removed' => $response->removed]);
+    });
+    $app->post('/newsletter/broadcast', function (Request $req, Response $res, BroadcastUseCaseInterface $uc): Response {
+        $b = (array) $req->getParsedBody();
+        $response = $uc->execute(new BroadcastRequest($b['class_name'] ?? '', new \DateTimeImmutable($b['class_date'] ?? 'now')));
+        return jsonResponse($res, ['sent' => $response->sentCount]);
     });
 };
 ```

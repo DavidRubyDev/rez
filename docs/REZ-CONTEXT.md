@@ -6,7 +6,7 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** June 2026
-> **Implementation status:** Core library complete. Platform extensions not yet built.
+> **Implementation status:** Core library complete. Config, Mailer, and Newsletter complete. Platform extensions (users, payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -100,8 +100,8 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 - `SubscriptionStatus` — pure enum
 - `isActive()` returns true ONLY when status is `Active` AND `currentPeriodEnd > now UTC`
 
-#### Newsletter (IN PROGRESS — `03_rez-mailer-newsletter.md`)
-- `NewsletterSubscriber` — entity. Fields: `id`, `email`, `name?`, `source`, `optedInAt` ✅
+#### Newsletter (COMPLETE — `03_rez-mailer-newsletter.md`)
+- `NewsletterSubscriber` — entity. Fields: `id`, `email`, `name?`, `source`, `optedInAt` (all `public readonly`). Factories: `create()` (validates email, sets optedInAt = UTC now) and `reconstruct()` (hydration from DB). ✅
 - `NewsletterSubscriberId` — UUID v4 value object ✅
 - `SubscriberSource` — pure enum: `Guest`, `Registered` ✅
 
@@ -174,11 +174,15 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `SaveAvailabilityRuleUseCase` | `SaveAvailabilityRuleRequest` | `SaveAvailabilityRuleResponse` | |
 | `SaveAvailabilityOverrideUseCase` | `SaveAvailabilityOverrideRequest` | `SaveAvailabilityOverrideResponse` | |
 | `SeedDatabaseUseCase` | `SeedDatabaseRequest(string[] $seedsDirectories)` | `SeedDatabaseResponse` | Globs *.sql, executes in filename order across all directories |
+| `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
+| `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
+| `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count |
 
 #### Not yet built
 
 | Use case | Module | Notes |
 |---|---|---|
+| `GetAdminConfigUseCase` | AdminConfig | Pure read from PlatformConfig — no DB. Returns feature flags + currency + plan summaries for rez-admin |
 | `RegisterUseCase` | Users | Also saves newsletter subscriber if opt-in |
 | `LoginUseCase` | Users | Returns JWT. Unknown email → `InvalidCredentialsException` (never reveal existence) |
 | `RequestPasswordResetUseCase` | Users | Stores hashed token. Unknown email → silent success |
@@ -193,9 +197,6 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `GetSubscriptionUseCase` | Subscriptions | |
 | `CreateSubscriptionCheckoutSessionUseCase` | Subscriptions | Returns Stripe checkout URL |
 | `CancelSubscriptionUseCase` | Subscriptions | Marks cancelled in DB. Stripe cancel called separately by route. |
-| `SubscribeUseCase` ✅ | Newsletter | Idempotent — returns existing if email already subscribed |
-| `UnsubscribeUseCase` ✅ | Newsletter | Silent success if email not found |
-| `BroadcastUseCase` ✅ | Newsletter | Sends new-class email to all opted-in subscribers |
 | `CreateTopUpCheckoutSessionUseCase` | Payments | Returns Stripe checkout URL for credit top-up |
 | `HandleWebhookUseCase` | Payments | Idempotency via stripe_events table. Dispatches by event type |
 | `CreateBookingUseCase` | Booking | Platform orchestrator. See critical ordering below. |
@@ -530,9 +531,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Availability | ✅ | ✅ | ✅ | ✅ |
 | Seeder | ✅ | ✅ | ✅ | ✅ |
 | Currency + Money | ✅ | — | ✅ CurrencyMapper | ✅ |
-| Config / FeatureGuard | ❌ | — | — | — |
-| Mailer port | ❌ | — | — | — |
-| Newsletter | ❌ | ❌ | ❌ | — |
+| Config / FeatureGuard | ✅ | — | — | ✅ |
+| Mailer port | ✅ | — | — | — |
+| Newsletter | ✅ | ✅ | ✅ | ✅ |
 | Users | ❌ | ❌ | ❌ | — |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
@@ -544,12 +545,15 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 1. `rez-core-changes` — **COMPLETE**
 2. `rez-config` — **COMPLETE** (PlatformConfig, all sub-configs, FeatureGuard, container wiring)
 3. `rez-mailer-newsletter` — **COMPLETE**
-4. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
-5. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
-6. `rez-credits` — Wallet, WalletTransaction, wallet use cases
-7. `rez-subscriptions` — Subscription, Plan, subscription use cases
-8. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
-9. `rez-deprecate-handlers` — @deprecated on all Handler classes, update examples/slim/
+4. `rez-throws-phpdoc` — `@throws` PHPDoc backfill across all public methods
+5. `rez-pdo-exceptions` — DatabaseException, PDO wrapping in repositories, use case re-throw
+6. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB)
+7. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
+8. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
+9. `rez-credits` — Wallet, WalletTransaction, wallet use cases
+10. `rez-subscriptions` — Subscription, Plan, subscription use cases
+11. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
+12. `rez-deprecate-handlers` — @deprecated on all Handler classes, update examples/slim/
 
 ### `rez-starter`
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
