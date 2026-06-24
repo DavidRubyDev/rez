@@ -15,6 +15,9 @@ final class FeatureGuard
     ) {
     }
 
+    /**
+     * @throws FeatureDisabledException
+     */
     public function requirePayments(): void
     {
         if (!$this->config->hasPayments()) {
@@ -22,6 +25,9 @@ final class FeatureGuard
         }
     }
 
+    /**
+     * @throws FeatureDisabledException
+     */
     public function requireUsers(): void
     {
         if (!$this->config->hasUsers()) {
@@ -29,6 +35,9 @@ final class FeatureGuard
         }
     }
 
+    /**
+     * @throws FeatureDisabledException
+     */
     public function requireCredits(): void
     {
         if (!$this->config->hasCredits()) {
@@ -36,6 +45,9 @@ final class FeatureGuard
         }
     }
 
+    /**
+     * @throws FeatureDisabledException
+     */
     public function requireSubscriptions(): void
     {
         if (!$this->config->hasSubscriptions()) {
