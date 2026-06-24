@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Infrastructure\Persistence\Mysql;
 
 use PDO;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
 use Rez\Domain\Newsletter\NewsletterSubscriber;
@@ -21,11 +22,16 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
 
     /**
      * @throws NewsletterSubscriberNotFoundException
+     * @throws DatabaseException
      */
     public function findByEmail(string $email): NewsletterSubscriber
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM newsletter_subscribers WHERE email = :email');
-        $stmt->execute([':email' => $email]);
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM newsletter_subscribers WHERE email = :email');
+            $stmt->execute([':email' => $email]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
 
         /** @var array<string, mixed>|false $row */
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -40,8 +46,12 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
     /** @return NewsletterSubscriber[] */
     public function findAll(): array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM newsletter_subscribers ORDER BY opted_in_at ASC');
-        $stmt->execute();
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM newsletter_subscribers ORDER BY opted_in_at ASC');
+            $stmt->execute();
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
 
         /** @var array<int, array<string, mixed>> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -51,27 +61,35 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
 
     public function save(NewsletterSubscriber $subscriber): void
     {
-        $stmt = $this->pdo->prepare('
-            INSERT INTO newsletter_subscribers (id, email, name, source, opted_in_at)
-            VALUES (:id, :email, :name, :source, :opted_in_at)
-            ON DUPLICATE KEY UPDATE
-                name   = VALUES(name),
-                source = VALUES(source)
-        ');
+        try {
+            $stmt = $this->pdo->prepare('
+                INSERT INTO newsletter_subscribers (id, email, name, source, opted_in_at)
+                VALUES (:id, :email, :name, :source, :opted_in_at)
+                ON DUPLICATE KEY UPDATE
+                    name   = VALUES(name),
+                    source = VALUES(source)
+            ');
 
-        $stmt->execute([
-            ':id'         => $subscriber->id->toString(),
-            ':email'      => $subscriber->email,
-            ':name'       => $subscriber->name,
-            ':source'     => $this->sourceMapper->toString($subscriber->source),
-            ':opted_in_at' => $subscriber->optedInAt->format('Y-m-d H:i:s'),
-        ]);
+            $stmt->execute([
+                ':id'          => $subscriber->id->toString(),
+                ':email'       => $subscriber->email,
+                ':name'        => $subscriber->name,
+                ':source'      => $this->sourceMapper->toString($subscriber->source),
+                ':opted_in_at' => $subscriber->optedInAt->format('Y-m-d H:i:s'),
+            ]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
     }
 
     public function delete(NewsletterSubscriberId $id): void
     {
-        $stmt = $this->pdo->prepare('DELETE FROM newsletter_subscribers WHERE id = :id');
-        $stmt->execute([':id' => $id->toString()]);
+        try {
+            $stmt = $this->pdo->prepare('DELETE FROM newsletter_subscribers WHERE id = :id');
+            $stmt->execute([':id' => $id->toString()]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
     }
 
     /** @param array<string, mixed> $row */

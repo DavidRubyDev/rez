@@ -6,6 +6,7 @@ namespace Rez\Infrastructure\Persistence\Mysql;
 
 use DateTimeImmutable;
 use PDO;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Domain\Availability\AvailabilityOverride;
 use Rez\Domain\Availability\AvailabilityRule;
@@ -22,8 +23,12 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
 
     public function findRulesForResource(ResourceId $resourceId): array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM availability_rules WHERE resource_id = :resource_id');
-        $stmt->execute([':resource_id' => $resourceId->toString()]);
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM availability_rules WHERE resource_id = :resource_id');
+            $stmt->execute([':resource_id' => $resourceId->toString()]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
 
         /** @var array<int, array<string, mixed>> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -33,18 +38,22 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
 
     public function findOverridesForResource(ResourceId $resourceId, DateTimeImmutable $from, DateTimeImmutable $to): array
     {
-        $stmt = $this->pdo->prepare('
-            SELECT * FROM availability_overrides
-            WHERE resource_id = :resource_id
-              AND date >= :from
-              AND date < :to
-        ');
+        try {
+            $stmt = $this->pdo->prepare('
+                SELECT * FROM availability_overrides
+                WHERE resource_id = :resource_id
+                  AND date >= :from
+                  AND date < :to
+            ');
 
-        $stmt->execute([
-            ':resource_id' => $resourceId->toString(),
-            ':from'        => $from->format('Y-m-d'),
-            ':to'          => $to->format('Y-m-d'),
-        ]);
+            $stmt->execute([
+                ':resource_id' => $resourceId->toString(),
+                ':from'        => $from->format('Y-m-d'),
+                ':to'          => $to->format('Y-m-d'),
+            ]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
 
         /** @var array<int, array<string, mixed>> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -54,36 +63,44 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
 
     public function saveRule(AvailabilityRule $rule): void
     {
-        $stmt = $this->pdo->prepare('
-            INSERT INTO availability_rules (resource_id, day_of_week, open_time, close_time)
-            VALUES (:resource_id, :day_of_week, :open_time, :close_time)
-            ON DUPLICATE KEY UPDATE
-                open_time  = VALUES(open_time),
-                close_time = VALUES(close_time)
-        ');
+        try {
+            $stmt = $this->pdo->prepare('
+                INSERT INTO availability_rules (resource_id, day_of_week, open_time, close_time)
+                VALUES (:resource_id, :day_of_week, :open_time, :close_time)
+                ON DUPLICATE KEY UPDATE
+                    open_time  = VALUES(open_time),
+                    close_time = VALUES(close_time)
+            ');
 
-        $stmt->execute([
-            ':resource_id' => $rule->resourceId->toString(),
-            ':day_of_week' => $this->dayMapper->toString($rule->dayOfWeek),
-            ':open_time'   => $rule->openTime,
-            ':close_time'  => $rule->closeTime,
-        ]);
+            $stmt->execute([
+                ':resource_id' => $rule->resourceId->toString(),
+                ':day_of_week' => $this->dayMapper->toString($rule->dayOfWeek),
+                ':open_time'   => $rule->openTime,
+                ':close_time'  => $rule->closeTime,
+            ]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
     }
 
     public function saveOverride(AvailabilityOverride $override): void
     {
-        $stmt = $this->pdo->prepare('
-            INSERT INTO availability_overrides (resource_id, date, available)
-            VALUES (:resource_id, :date, :available)
-            ON DUPLICATE KEY UPDATE
-                available = VALUES(available)
-        ');
+        try {
+            $stmt = $this->pdo->prepare('
+                INSERT INTO availability_overrides (resource_id, date, available)
+                VALUES (:resource_id, :date, :available)
+                ON DUPLICATE KEY UPDATE
+                    available = VALUES(available)
+            ');
 
-        $stmt->execute([
-            ':resource_id' => $override->resourceId->toString(),
-            ':date'        => $override->date->format('Y-m-d'),
-            ':available'   => $override->isAvailable ? 1 : 0,
-        ]);
+            $stmt->execute([
+                ':resource_id' => $override->resourceId->toString(),
+                ':date'        => $override->date->format('Y-m-d'),
+                ':available'   => $override->isAvailable ? 1 : 0,
+            ]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
     }
 
     /** @param array<string, mixed> $row */
