@@ -792,14 +792,6 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 
 `src/Domain/Newsletter/SubscriberSource.php` — pure enum: `Guest`, `Registered`. String serialization handled by infrastructure mapper. No test — same convention as other pure enums.
 
-### 52. NewsletterSubscriber (`03_rez-mailer-newsletter.md` step 4)
-
-`src/Domain/Newsletter/NewsletterSubscriber.php` — immutable entity, static factory only. `create(NewsletterSubscriberId, string $email, ?string $name, SubscriberSource): self`. Throws `\InvalidArgumentException` for invalid email. `$optedInAt` set to UTC now on `create()`. Getters: `getId()`, `getEmail()`, `getName()`, `getSource()`, `getOptedInAt()`.
-
-`tests/Domain/Newsletter/NewsletterSubscriberTest.php` — 6 cases: valid construction, invalid email throws, null name accepted, optedInAt ≈ UTC now, guest source, registered source.
-
-297 tests (22 skipped — all integration), PHPStan max clean, CS clean.
-
 ### 51. NewsletterSubscriberId (`03_rez-mailer-newsletter.md` step 3)
 
 `src/Domain/Newsletter/NewsletterSubscriberId.php` — UUID v4 value object, same pattern as `ReservationId` and `ResourceId`. Methods: `generate()`, `fromString()` (throws `\InvalidArgumentException` for invalid UUID), `toString()`, `equals()`, `__toString()`.
@@ -808,9 +800,11 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 
 291 tests (22 skipped — all integration), PHPStan max clean, CS clean.
 
-### 54. NewsletterRepositoryInterface (`03_rez-mailer-newsletter.md` step 6)
+### 52. NewsletterSubscriber (`03_rez-mailer-newsletter.md` step 4)
 
-`src/Application/Port/NewsletterRepositoryInterface.php` — port contract. Methods: `findByEmail(string): NewsletterSubscriber` (throws `NewsletterSubscriberNotFoundException`), `findAll(): NewsletterSubscriber[]`, `save(NewsletterSubscriber): void` (upsert by email), `delete(NewsletterSubscriberId): void`. No test — interface only.
+`src/Domain/Newsletter/NewsletterSubscriber.php` — immutable entity. `create(NewsletterSubscriberId, string $email, ?string $name, SubscriberSource): self` — validates email (throws `\InvalidArgumentException`), sets `$optedInAt` to UTC now. `reconstruct(...)` — static factory for DB hydration with a specific `$optedInAt`, bypasses `create()`. Properties are `public readonly` — no getter methods.
+
+`tests/Domain/Newsletter/NewsletterSubscriberTest.php` — 6 cases: valid construction, invalid email throws, null name accepted, optedInAt ≈ UTC now, guest source, registered source. Tests access `$subscriber->email`, `$subscriber->source`, etc. (direct property access, no getters).
 
 297 tests (22 skipped — all integration), PHPStan max clean, CS clean.
 
@@ -819,6 +813,24 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `src/Application/Port/MailerInterface.php` — port contract. Methods: `sendBookingConfirmation(string, string, Reservation): void`, `sendBookingCancellation(string, string, Reservation): void`, `sendPasswordReset(string, string): void`, `sendNewClassNotification(string, string, DateTimeImmutable): void`. Recipient details are plain strings (not User objects) so the interface is usable without the users feature. No test — interface only.
 
 297 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 54. NewsletterRepositoryInterface (`03_rez-mailer-newsletter.md` step 6)
+
+`src/Application/Port/NewsletterRepositoryInterface.php` — port contract. Methods: `findByEmail(string): NewsletterSubscriber` (throws `NewsletterSubscriberNotFoundException`), `findAll(): NewsletterSubscriber[]`, `save(NewsletterSubscriber): void` (upsert by email), `delete(NewsletterSubscriberId): void`. No test — interface only.
+
+297 tests (22 skipped — all integration), PHPStan max clean, CS clean.
+
+### 55. Newsletter use cases (`03_rez-mailer-newsletter.md` step 7)
+
+All three use cases follow Request/Response/UseCase/Interface pattern under `src/Application/UseCase/Newsletter/`.
+
+**SubscribeUseCase** — idempotent: `findByEmail()` first; if not found creates new subscriber via `NewsletterSubscriber::create()`, saves, returns. If found returns existing without saving. 4 tests.
+
+**UnsubscribeUseCase** — silent: `findByEmail()` first; if not found returns `removed: false`. If found calls `delete($subscriber->id)`, returns `removed: true`. 2 tests.
+
+**BroadcastUseCase** — `findAll()` subscribers, calls `mailer->sendNewClassNotification()` for each, returns sent count. 3 tests.
+
+306 tests (22 skipped — all integration), PHPStan max clean, CS clean.
 
 ### 56. Newsletter schema (`03_rez-mailer-newsletter.md` step 8)
 
@@ -847,15 +859,3 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 `config/container.php` — `SubscribeUseCaseInterface`, `UnsubscribeUseCaseInterface`, `BroadcastUseCaseInterface` all registered via `autowire()`. Comment documents that `MailerInterface` and `NewsletterRepositoryInterface` must be bound by the client app. `03_rez-mailer-newsletter.md` fully complete.
 
 316 tests (27 skipped — all integration), PHPStan max clean, CS clean.
-
-### 55. Newsletter use cases (`03_rez-mailer-newsletter.md` step 7)
-
-All three use cases follow Request/Response/UseCase/Interface pattern under `src/Application/UseCase/Newsletter/`.
-
-**SubscribeUseCase** — idempotent: `findByEmail()` first; if not found creates new subscriber via `NewsletterSubscriber::create()`, saves, returns. If found returns existing without saving. 4 tests.
-
-**UnsubscribeUseCase** — silent: `findByEmail()` first; if not found returns `removed: false`. If found calls `delete($subscriber->id)`, returns `removed: true`. 2 tests.
-
-**BroadcastUseCase** — `findAll()` subscribers, calls `mailer->sendNewClassNotification()` for each, returns sent count. 3 tests.
-
-306 tests (22 skipped — all integration), PHPStan max clean, CS clean.
