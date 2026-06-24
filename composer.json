@@ -2,6 +2,7 @@
   "name": "davidrubydev/rez",
   "description": "Rez reservation engine — domain and application layers",
   "type": "library",
+  "version": "0.0.1",
   "autoload": {
     "psr-4": {
       "Rez\\": "src/"
