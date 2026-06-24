@@ -11,6 +11,9 @@ final class ResourceType
     ) {
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public static function fromString(string $slug): self
     {
         if (!preg_match('/^[a-z0-9]+(-[a-z0-9]+)*$/', $slug)) {

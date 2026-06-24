@@ -20,6 +20,9 @@ final class ResourceId
         return new self(vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4)));
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public static function fromString(string $id): self
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $id)) {

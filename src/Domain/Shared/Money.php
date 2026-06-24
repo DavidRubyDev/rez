@@ -8,6 +8,9 @@ use Rez\Domain\Exception\InsufficientFundsException;
 
 final class Money
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly int $amount,
         public readonly Currency $currency,
@@ -17,6 +20,9 @@ final class Money
         }
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function add(Money $other): self
     {
         $this->assertSameCurrency($other);
@@ -24,6 +30,10 @@ final class Money
         return new self($this->amount + $other->amount, $this->currency);
     }
 
+    /**
+     * @throws InsufficientFundsException
+     * @throws \InvalidArgumentException
+     */
     public function subtract(Money $other): self
     {
         $this->assertSameCurrency($other);
@@ -45,6 +55,9 @@ final class Money
         return $this->amount === $other->amount && $this->currency === $other->currency;
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function isGreaterThan(Money $other): bool
     {
         $this->assertSameCurrency($other);

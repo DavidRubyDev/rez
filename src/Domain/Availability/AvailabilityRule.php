@@ -9,6 +9,9 @@ use Rez\Domain\Resource\ResourceId;
 
 final class AvailabilityRule
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly ResourceId $resourceId,
         public readonly DayOfWeek $dayOfWeek,

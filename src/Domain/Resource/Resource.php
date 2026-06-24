@@ -6,7 +6,10 @@ namespace Rez\Domain\Resource;
 
 final class Resource
 {
-    /** @param array<string, mixed> $attributes */
+    /**
+     * @param array<string, mixed> $attributes
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly ResourceId $id,
         public readonly ResourceType $type,

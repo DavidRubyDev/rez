@@ -9,6 +9,9 @@ use Rez\Domain\Reservation\TimeSlot;
 
 final class DateTimeRange
 {
+    /**
+     * @throws \InvalidArgumentException
+     */
     public function __construct(
         public readonly DateTimeImmutable $start,
         public readonly DateTimeImmutable $end,
@@ -28,6 +31,9 @@ final class DateTimeRange
         return $this->start < $other->end && $this->end > $other->start;
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\InvalidTimeSlotException
+     */
     public function toTimeSlot(): TimeSlot
     {
         return new TimeSlot($this->start, $this->end);

@@ -20,6 +20,9 @@ final class Reservation
     ) {
     }
 
+    /**
+     * @throws \InvalidArgumentException
+     */
     public static function create(
         ReservationId $id,
         ResourceIdCollection $resourceIds,
@@ -44,6 +47,9 @@ final class Reservation
         return new self($id, $resourceIds, $slot, $party, $status, $createdAt);
     }
 
+    /**
+     * @throws InvalidReservationStateException
+     */
     public function cancel(): self
     {
         if ($this->status === ReservationStatus::Cancelled) {
@@ -53,6 +59,9 @@ final class Reservation
         return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Cancelled, $this->createdAt);
     }
 
+    /**
+     * @throws InvalidReservationStateException
+     */
     public function confirm(): self
     {
         if ($this->status !== ReservationStatus::Pending) {
@@ -62,6 +71,9 @@ final class Reservation
         return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Confirmed, $this->createdAt);
     }
 
+    /**
+     * @throws InvalidReservationStateException
+     */
     public function markNoShow(): self
     {
         if ($this->status !== ReservationStatus::Confirmed) {
