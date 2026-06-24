@@ -19,7 +19,6 @@ Run `composer ca` after completing all changes and fix any issues before committ
 {
   "features": {
     "payments":      true,
-    "users":         true,
     "credits":       true,
     "subscriptions": false
   },
@@ -83,7 +82,6 @@ final class GetAdminConfigResponse
 {
     public function __construct(
         public readonly bool $hasPayments,
-        public readonly bool $hasUsers,
         public readonly bool $hasCredits,
         public readonly bool $hasSubscriptions,
         public readonly ?string $currency,
@@ -120,7 +118,7 @@ interface GetAdminConfigUseCaseInterface
 Constructor: `PlatformConfig $config`
 
 Logic:
-1. Read `$config->hasPayments()`, `hasUsers()`, `hasCredits()`, `hasSubscriptions()`
+1. Read `$config->hasPayments()`, `hasCredits()`, `hasSubscriptions()`
 2. `$currency` = `$config->payments->currency` if payments enabled, else `null`
 3. `$plans` = map `$config->subscriptions->plans` to the response shape if subscriptions
    enabled, else `[]`
@@ -144,7 +142,6 @@ array_map(
 
 - `testMinimalConfigReturnsAllFeaturesDisabled` — only mailer configured; all has* false, currency null, plans empty
 - `testPaymentsEnabledReturnsCurrency` — payments configured; hasPayments true, currency matches config
-- `testUsersEnabledReturnsHasUsersTrue`
 - `testCreditsEnabledReturnsHasCreditsTrue`
 - `testSubscriptionsEnabledReturnsPlanSummaries` — one plan configured; plans array has one entry with correct fields
 - `testSubscriptionsPlanDoesNotExposeStripePriceId` — assert `stripePriceId` is not present in any plan entry

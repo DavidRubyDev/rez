@@ -6,7 +6,7 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** June 2026
-> **Implementation status:** Core library complete. Config, Mailer, and Newsletter complete. Platform extensions (users, payments, credits, subscriptions) not yet built.
+> **Implementation status:** Core library complete. Config, Mailer, Newsletter, and Guest Cancellation complete. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -27,10 +27,11 @@ and subscriptions.
 
 | Repo | Lang | Visibility | Status |
 |---|---|---|---|
-| `davidrubydev/rez` | PHP 8.3 | Public — Packagist | Core complete; platform extensions pending |
-| `davidrubydev/rez-starter` | PHP 8.3 | Public — GitHub | Working template |
+| `davidrubydev/rez` | PHP 8.3 | Public — Packagist | Core + users complete; platform extensions pending |
+| `davidrubydev/rez-starter` | PHP 8.3 | Public — GitHub | Working template; being updated |
+| `DavidRubyDev/rez-demo` | PHP 8.3 | Private | Local Docker demo instance for testing |
 | `DavidRubyDev/client-*` | PHP 8.3 | Private | One repo per client |
-| `davidrubydev/rez-components` | TypeScript + Lit | TBD | Not started |
+| `davidrubydev/rez-components` | TypeScript + Lit | TBD | In progress — `<rez-calendar>` first |
 | `davidrubydev/rez-admin` | TypeScript + React | TBD | Not started |
 
 **Dependency direction (no cycles):**
@@ -81,7 +82,12 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 - `AvailabilityWindow` — value object. Resolved available `TimeSlot[]` for a resource on a date.
 - `DayOfWeek` — pure enum. Monday-first (ISO-8601). String mapping in `DayOfWeekMapper`.
 
-#### Users (NOT YET BUILT)
+#### Users (CORE — NOT YET BUILT)
+
+Users are always present regardless of which optional features are enabled. Every client
+deployment requires at least one Admin user to operate rez-admin. `UsersConfig` is a
+required (not optional) part of `PlatformConfig`.
+
 - `User` — entity. Fields: `id`, `name`, `email`, `passwordHash`, `role`, `newsletterOptIn`, `stripeCustomerId`, `createdAt`
 - `UserId` — UUID v4 value object
 - `HashedPassword` — value object wrapping bcrypt hash
@@ -107,9 +113,10 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 
 #### Shared
 - `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code — used only in Domain (exceptions, `Money::__toString()`). Infrastructure serialization goes through `CurrencyMapper::toString()`.
-- `Feature` — pure enum: `Payments`, `Users`, `Credits`, `Subscriptions`. Passed to `FeatureDisabledException` so gated feature names are never raw strings in use cases.
+- `Feature` — pure enum: `Payments`, `Credits`, `Subscriptions`. Users removed — users are always present and never gated. Passed to `FeatureDisabledException` so gated feature names are never raw strings in use cases.
 - `Money` — immutable value object. `amount: int` (haléře/cents — NEVER floats), `currency: Currency`. Methods: `add()`, `subtract()` (throws `InsufficientFundsException`), `isZero()`, `equals()`, `isGreaterThan()`, `__toString()`.
 - `DateTimeRange` — shared utility, not a domain concept
+- `CancellationToken` — value object. Stateless HMAC-SHA256 of `reservationId + secret`. Generated at booking time, embedded in confirmation email. Verified in `CancelReservationUseCase` for unauthenticated guest cancellations. Secret comes from `UsersConfig::$cancellationSecret` (separate from JWT secret).
 
 ### 3.3 Port interfaces (Application/Port/)
 
@@ -159,8 +166,8 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 | Use case | Input | Output | Notes |
 |---|---|---|---|
-| `CreateReservationUseCase` | `CreateReservationRequest` | `CreateReservationResponse` | Checks availability, throws `ConflictException` if slot taken |
-| `CancelReservationUseCase` | `CancelReservationRequest` | `CancelReservationResponse` | |
+| `CreateReservationUseCase` | `CreateReservationRequest` | `CreateReservationResponse` | Checks availability, throws `ConflictException` if slot taken. Generates HMAC cancellation token; fires confirmation email via MailerInterface with cancellation URL containing reservationId + token |
+| `CancelReservationUseCase` | `CancelReservationRequest` | `CancelReservationResponse` | Two paths: (1) admin cancels by reservationId only; (2) guest cancels with reservationId + HMAC cancellation token — verified before cancellation |
 | `ConfirmReservationUseCase` | `ConfirmReservationRequest` | `ConfirmReservationResponse` | |
 | `MarkNoShowUseCase` | `MarkNoShowRequest` | `MarkNoShowResponse` | |
 | `GetReservationUseCase` | `GetReservationRequest` | `GetReservationResponse` | |
@@ -183,14 +190,14 @@ These are the contracts the library defines. Implementations live in infrastruct
 | Use case | Module | Notes |
 |---|---|---|
 | `GetAdminConfigUseCase` | AdminConfig | Pure read from PlatformConfig — no DB. Returns feature flags + currency + plan summaries for rez-admin |
-| `RegisterUseCase` | Users | Also saves newsletter subscriber if opt-in |
-| `LoginUseCase` | Users | Returns JWT. Unknown email → `InvalidCredentialsException` (never reveal existence) |
-| `RequestPasswordResetUseCase` | Users | Stores hashed token. Unknown email → silent success |
-| `ResetPasswordUseCase` | Users | Verifies hashed token, updates password, deletes token |
-| `GetUserUseCase` | Users | |
-| `UpdateUserUseCase` | Users | |
-| `ListUsersUseCase` | Users | Admin only |
-| `AdminUpdateUserUseCase` | Users | Role/newsletter override. Auth enforcement in HTTP layer, not here |
+| `RegisterUseCase` | Users (core) | Also saves newsletter subscriber if opt-in |
+| `LoginUseCase` | Users (core) | Returns JWT. Unknown email → `InvalidCredentialsException` (never reveal existence) |
+| `RequestPasswordResetUseCase` | Users (core) | Stores hashed token. Unknown email → silent success |
+| `ResetPasswordUseCase` | Users (core) | Verifies hashed token, updates password, deletes token |
+| `GetUserUseCase` | Users (core) | |
+| `UpdateUserUseCase` | Users (core) | |
+| `ListUsersUseCase` | Users (core) | Admin only |
+| `AdminUpdateUserUseCase` | Users (core) | Role/newsletter override. Auth enforcement in HTTP layer, not here |
 | `GetWalletUseCase` | Credits | Returns Wallet computed from transactions |
 | `CreditWalletUseCase` | Credits | Saves Credit transaction |
 | `DebitWalletUseCase` | Credits | Checks canAfford() BEFORE saving. Throws InsufficientFundsException if not |
@@ -220,18 +227,20 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 8. **externalRef on Party is opaque.** The `rez` library stores and returns it but never interprets or validates it. Platform layer sets it to `userId.toString()`. Never add logic to `rez` that reads or branches on `externalRef`.
 
-9. **FeatureGuard called at top of every gated use case.** Every use case that requires a feature (payments, users, credits, subscriptions) calls `$guard->require*()` as its first line. This ensures disabled features fail immediately with `FeatureDisabledException`, not mid-operation.
+9. **FeatureGuard called at top of every gated use case.** Every use case that requires an optional feature (payments, credits, subscriptions) calls `$guard->require*()` as its first line. Users are never gated — do not add a `requireUsers()` guard. This ensures disabled features fail immediately with `FeatureDisabledException`, not mid-operation.
 
 10. **Email and newsletter failures never abort a booking.** In `CreateBookingUseCase` and `CancelBookingUseCase`, mailer calls are wrapped in try/catch. A failed email must never roll back a completed booking.
+
+11. **Guest cancellation token is stateless HMAC — never stored.** `CancellationToken` is `HMAC-SHA256(reservationId, cancellationSecret)`. No DB column on `reservations`. Verification is pure computation. The secret lives in `UsersConfig::$cancellationSecret`, separate from `jwtSecret`. Both paths through `CancelReservationUseCase` (admin and guest) ultimately call the same cancellation logic — only the auth check differs.
 
 ### 3.7 Configuration system
 
 `PlatformConfig` is constructed by the client app and injected via PHP-DI. It is the single root of all feature configuration.
 
-`PlatformConfig` — COMPLETE. Validates dependency chain at construction (users→payments, credits→payments+users, subscriptions→payments+users). `hasMailer/Payments/Users/Credits/Subscriptions(): bool`.
+`PlatformConfig` — COMPLETE (needs update). `UsersConfig` becomes required (not optional). Dependency chain simplified — users no longer a prerequisite check since they are always present. `hasMailer/Payments/Credits/Subscriptions(): bool`. `hasUsers()` removed — always true.
 `MailerConfig` — COMPLETE. `fromAddress` (validated email), `fromName` (non-empty string).
+`UsersConfig` — COMPLETE (needs update). Now required. Gains `cancellationSecret` field (non-empty string, separate from `jwtSecret`). Fields: `jwtSecret`, `cancellationSecret`, `jwtTtlSeconds` (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1).
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
-`UsersConfig` — COMPLETE. `jwtSecret` (non-empty string), `jwtTtlSeconds` (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1).
 `CreditsConfig` — COMPLETE. `minimumTopUpAmount` (int, min 1, haléře/cents), `currency` (non-empty string).
 `PlanConfig` — COMPLETE. `id`, `name`, `priceAmount` (≥ 0), `currency`, `intervalDays` (min 1), `stripePriceId`. Named `PlanConfig` (not `Plan`) — it holds primitive Stripe-specific config, not a domain value object.
 `SubscriptionsConfig` — COMPLETE. `PlanConfig[] $plans` (constructor promotion, no empty guard). `getPlanById(string): PlanConfig`.
@@ -239,28 +248,29 @@ These are the contracts the library defines. Implementations live in infrastruct
 ```
 PlatformConfig
   ├── MailerConfig          always required (fromAddress, fromName)
+  ├── UsersConfig           always required (jwtSecret, cancellationSecret, jwtTtlSeconds, passwordResetTtlMinutes)
   ├── PaymentsConfig?       currency, webhookSecret
-  ├── UsersConfig?          jwtSecret, jwtTtlSeconds, passwordResetTtlMinutes
   ├── CreditsConfig?        minimumTopUpAmount, currency
   └── SubscriptionsConfig?  PlanConfig[]
         └── PlanConfig      id, name, priceAmount, currency, intervalDays, stripePriceId
 ```
 
 **Dependency chain enforced at construction time:**
-- `users` requires `payments`
-- `credits` requires `payments` + `users`
-- `subscriptions` requires `payments` + `users`
+- `credits` requires `payments`
+- `subscriptions` requires `payments`
+- `users` — always present, no dependency check needed
 
 **Feature profiles:**
 
-| Profile | mailer | payments | users | credits | subscriptions |
-|---|---|---|---|---|---|
-| 1 | ✓ | | | | |
-| 2 | ✓ | ✓ | | | |
-| 3 | ✓ | ✓ | ✓ | | |
-| 4 | ✓ | ✓ | ✓ | ✓ | |
-| 5 | ✓ | ✓ | ✓ | | ✓ |
-| 6 | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Profile | payments | credits | subscriptions |
+|---|---|---|---|
+| 1 | | | |
+| 2 | ✓ | | |
+| 3 | ✓ | ✓ | |
+| 4 | ✓ | | ✓ |
+| 5 | ✓ | ✓ | ✓ |
+
+Mailer and Users are present in all profiles — they are not optional features.
 
 ### 3.8 Database schema
 
@@ -336,27 +346,55 @@ Thin HTTP delivery layer. Contains no business logic. All logic lives in `rez`.
 
 All routes prefixed `/api/`.
 
-#### Always available (profile 1+)
+#### Authorization model
+
+| Principal | Credential | How identified in rez-starter |
+|---|---|---|
+| Guest (public) | None | No middleware |
+| Guest cancelling own booking | HMAC token in query param | Verified in use case, not middleware |
+| Authenticated user | JWT Bearer token | Auth middleware attaches UserId + UserRole |
+| Admin | JWT Bearer token with `role: Admin` | Admin middleware enforces UserRole::Admin |
+
+#### Always available — public (no auth)
 
 ```
 GET    /api/resources
-POST   /api/resources
 GET    /api/resources/{id}
+GET    /api/availability
+POST   /api/newsletter/subscribe
+DELETE /api/newsletter/unsubscribe
+POST   /api/bookings
+DELETE /api/bookings/{id}?reservation={uuid}&token={hmac}   ← guest cancellation
+```
+
+#### Always available — admin JWT required
+
+```
+POST   /api/resources
 PATCH  /api/resources/{id}
 DELETE /api/resources/{id}
 PUT    /api/resources/{id}/availability/rules
 PUT    /api/resources/{id}/availability/overrides/{date}
-GET    /api/availability
-POST   /api/bookings
-DELETE /api/bookings/{id}
-GET    /api/reservations         (admin)
-GET    /api/reservations/{id}    (admin)
-POST   /api/reservations/{id}/confirm    (admin)
-POST   /api/reservations/{id}/no-show   (admin)
-POST   /api/newsletter/subscribe
-DELETE /api/newsletter/unsubscribe
-POST   /api/newsletter/broadcast (admin)
-GET    /api/admin/config         (admin) — returns enabled features for rez-admin
+GET    /api/reservations
+GET    /api/reservations/{id}
+POST   /api/reservations/{id}/confirm
+POST   /api/reservations/{id}/no-show
+DELETE /api/bookings/{id}                                    ← admin cancellation (no token)
+POST   /api/newsletter/broadcast
+GET    /api/admin/config
+```
+
+#### Always available — auth routes (users are core)
+
+```
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/auth/password-reset/request
+POST   /api/auth/password-reset/confirm
+GET    /api/users/me                      (JWT required)
+PATCH  /api/users/me                      (JWT required)
+GET    /api/users                         (admin)
+PATCH  /api/users/{id}                    (admin)
 ```
 
 #### Profile 2+ (payments)
@@ -364,25 +402,13 @@ GET    /api/admin/config         (admin) — returns enabled features for rez-ad
 POST   /api/stripe/webhook
 ```
 
-#### Profile 3+ (users)
-```
-POST   /api/auth/register
-POST   /api/auth/login
-POST   /api/auth/password-reset/request
-POST   /api/auth/password-reset/confirm
-GET    /api/users/me
-PATCH  /api/users/me
-GET    /api/users              (admin)
-PATCH  /api/users/{id}         (admin)
-```
-
-#### Profile 4+ (credits)
+#### Profile 3+ (credits)
 ```
 GET    /api/wallet
 POST   /api/wallet/topup
 ```
 
-#### Profile 5+ (subscriptions)
+#### Profile 4+ (subscriptions)
 ```
 GET    /api/subscription
 POST   /api/subscription/checkout
@@ -404,16 +430,17 @@ DELETE /api/subscription
 | Component | Responsibility | Profile |
 |---|---|---|
 | `<rez-calendar>` | Slot browser, booking flow, newsletter opt-in | 1+ |
+| `<rez-cancel>` | Guest cancellation confirmation (reads token from URL, calls API) | 1+ |
 | `<rez-checkout>` | Payment method selection, Stripe redirect | 2+ |
-| `<rez-account>` | Register, login, booking history, credits, subscription | 3+ |
+| `<rez-account>` | Register, login, booking history, credits, subscription | 1+ (always, since users are core) |
 
 ### Bundle entry points
 
-| Bundle | Includes | Used by profile |
+| Bundle | Includes | Notes |
 |---|---|---|
-| `rez.calendar.js` | rez-calendar | 1–2 |
-| `rez.calendar-auth.js` | rez-calendar + rez-account | 3 |
-| `rez.full.js` | all three | 4–6 |
+| `rez.core.js` | rez-calendar + rez-cancel + rez-account | Base bundle — all clients |
+| `rez.payments.js` | rez-core + rez-checkout | Clients with payments enabled |
+| `rez.full.js` | all components | Convenience alias for rez.payments.js |
 
 ### Component communication
 
@@ -461,7 +488,6 @@ On login, fetches `GET /api/admin/config`:
 {
   "features": {
     "payments": true,
-    "users": true,
     "credits": true,
     "subscriptions": false
   },
@@ -470,37 +496,52 @@ On login, fetches `GET /api/admin/config`:
 }
 ```
 
-Pages appear/disappear in the sidebar based on this response. One codebase works for all clients.
+Users, mailer, and guest cancellation are always present — they do not appear in the features
+map. Pages that depend on them are always shown. Pages appear/disappear in the sidebar only
+for optional features (payments, credits, subscriptions).
 
 ### Pages per delivery slice
 
 | Slice | Pages |
 |---|---|
-| 1 | Resources (add/edit/cancel classes), Reservations list, Manual booking |
-| 2 | Users list, Edit user |
-| 3 | Payment history, Stripe event log |
-| 4 | User credit balances, Manual credit adjustment |
-| 5 | Subscription management, Override subscription status |
-| 6 | Newsletter broadcast, Full polish |
+| Core | Login, Resources (add/edit), Reservations list, Manual booking, Users list, Edit user, Newsletter broadcast |
+| Payments | Payment history, Stripe event log |
+| Credits | User credit balances, Manual credit adjustment |
+| Subscriptions | Subscription management, Override subscription status |
+| Polish | Full polish, edge cases |
 
 ---
 
 ## 7. Delivery Plan
 
-Six vertical slices. Each slice delivers backend + JS component MVP + admin page simultaneously. Client demos after each slice before the next begins.
+Two tiers. Core tier delivers a fully functional system for any client. Platform extensions add
+optional monetisation on top. Client demos after each tier completes before the next begins.
 
-| Slice | Backend scaffold | Delivers |
+### Core tier
+
+| Step | What gets built |
+|---|---|
+| rez-starter update | Full route surface, SymfonyMailer, middleware stubs, CORS |
+| rez-demo | Local Docker instance for end-to-end API testing (no auth yet) |
+| `<rez-calendar>` | Lit component — slot browser, booking form |
+| Guest cancellation | HMAC token in rez, confirmation email plumbing, `<rez-cancel>` component |
+| Config restructure | UsersConfig required, cancellationSecret added, Feature enum updated, dependency chain simplified |
+| rez-users | User domain, JwtService, auth use cases, password reset |
+| JWT middleware | Auth + admin middleware in rez-starter, full route protection |
+| rez-admin (core) | React SPA — login, resources, reservations, users, newsletter |
+
+### Platform extension tiers
+
+| Tier | Backend | Delivers |
 |---|---|---|
-| 1 | rez-core-changes → rez-config → rez-mailer-newsletter | Reservations, guest booking, confirmation email, newsletter |
-| 2 | rez-users | User accounts, auth, JWT, booking history |
-| 3 | rez-payments | Stripe one-time payments, webhook |
-| 4 | rez-credits | Credit wallet, top-up, debit on booking |
-| 5 | rez-subscriptions | Monthly plans, Stripe billing, free booking |
-| 6 | rez-booking → rez-deprecate-handlers | Full orchestration, polish |
+| Payments | rez-payments | Stripe one-time payments, webhook, payment history in rez-admin |
+| Credits | rez-credits | Credit wallet, top-up, debit on booking, credit management in rez-admin |
+| Subscriptions | rez-subscriptions | Monthly plans, Stripe billing, free booking for subscribers |
+| Orchestration | rez-booking → rez-deprecate-handlers | CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver, handler deprecation |
 
-**Penalty system:** in scope, rules TBD with client after slice 2.
+**Penalty system:** in scope, rules TBD with client after core tier is delivered.
 
-**Client website** (Michaela Urbanová — branding, content pages): separate deliverable, expected 2–3 months after Rez MVP is working.
+**Client website** (Michaela Urbanová — branding, content pages): separate deliverable, expected 2–3 months after Rez core tier is working.
 
 ---
 
@@ -527,15 +568,16 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 
 | Module | Domain | Use cases | Infrastructure | Tests |
 |---|---|---|---|---|
-| Reservations | ✅ | ✅ | ✅ | ✅ 188 unit + 22 integration |
+| Reservations | ✅ | ✅ (needs cancel token update) | ✅ | ✅ 188 unit + 22 integration |
 | Resources | ✅ | ✅ | ✅ | ✅ |
 | Availability | ✅ | ✅ | ✅ | ✅ |
 | Seeder | ✅ | ✅ | ✅ | ✅ |
 | Currency + Money | ✅ | — | ✅ CurrencyMapper | ✅ |
-| Config / FeatureGuard | ✅ | — | — | ✅ |
+| Config / FeatureGuard | ✅ | — | — | ✅ (needs UsersConfig + Feature enum update) |
 | Mailer port | ✅ | — | — | — |
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
-| Users | ❌ | ❌ | ❌ | — |
+| CancellationToken | ❌ | — | — | — |
+| Users (core) | ❌ | ❌ | ❌ | — |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
 | Subscriptions | ❌ | ❌ | ❌ | — |
@@ -544,24 +586,36 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 
 ### Pending scaffold documents (run in this order)
 1. `rez-core-changes` — **COMPLETE**
-2. `rez-config` — **COMPLETE** (PlatformConfig, all sub-configs, FeatureGuard, container wiring)
+2. `rez-config` — **COMPLETE** (needs UsersConfig + Feature enum update — do before rez-users)
 3. `rez-mailer-newsletter` — **COMPLETE**
 4. `rez-throws-phpdoc` — **COMPLETE** (`@throws` PHPDoc backfill across all public methods)
 5. `rez-pdo-exceptions` — **COMPLETE** (DatabaseException, PDO wrapping in all MySQL repositories, use case re-throw with context messages, 503 mapping documented)
-6. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB)
-7. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
-8. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
-9. `rez-credits` — Wallet, WalletTransaction, wallet use cases
-10. `rez-subscriptions` — Subscription, Plan, subscription use cases
-11. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
-12. `rez-deprecate-handlers` — @deprecated on all Handler classes, update examples/slim/
+6. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; Feature enum drops Users; dependency chain update; PlatformConfig constructor update
+7. `rez-guest-cancellation` — CancellationToken value object, HMAC verification in CancelReservationUseCase, cancellationUrl in confirmation email
+8. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
+9. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
+10. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
+11. `rez-credits` — Wallet, WalletTransaction, wallet use cases
+12. `rez-subscriptions` — Subscription, Plan, subscription use cases
+13. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
+14. `rez-deprecate-handlers` — @deprecated on all Handler classes, update examples/slim/
 
 ### `rez-starter`
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
 - ✅ Slim bootstrap, PHP-DI wiring, basic routes
+- ❌ Full public + admin route surface
 - ❌ Auth middleware, admin middleware, CORS middleware
-- ❌ SymfonyMailer, StripeGateway implementations
-- ❌ Full route surface (only core reservation routes exist)
+- ❌ SymfonyMailer implementation
+- ❌ StripeGateway implementation
 
-### `rez-components`, `rez-admin`
+### `rez-demo`
+- ❌ Not initialised (init from rez-starter, local Docker only, for API testing)
+
+### `rez-components`
+- ❌ `<rez-calendar>` — not started
+- ❌ `<rez-cancel>` — not started
+- ❌ `<rez-checkout>` — not started
+- ❌ `<rez-account>` — not started
+
+### `rez-admin`
 - ❌ Not started
