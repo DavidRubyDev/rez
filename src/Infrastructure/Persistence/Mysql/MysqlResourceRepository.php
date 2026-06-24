@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Infrastructure\Persistence\Mysql;
 
 use PDO;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Domain\Exception\ResourceNotFoundException;
 use Rez\Domain\Resource\Resource;
@@ -22,11 +23,16 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
 
     /**
      * @throws ResourceNotFoundException
+     * @throws DatabaseException
      */
     public function findById(ResourceId $id): Resource
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM resources WHERE id = :id');
-        $stmt->execute([':id' => $id->toString()]);
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM resources WHERE id = :id');
+            $stmt->execute([':id' => $id->toString()]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
 
         /** @var array<string, mixed>|false $row */
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -40,8 +46,12 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
 
     public function findAll(): ResourceCollection
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM resources');
-        $stmt->execute();
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM resources');
+            $stmt->execute();
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
 
         /** @var array<int, array<string, mixed>> $rows */
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -51,29 +61,37 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
 
     public function delete(ResourceId $id): void
     {
-        $stmt = $this->pdo->prepare('DELETE FROM resources WHERE id = :id');
-        $stmt->execute([':id' => $id->toString()]);
+        try {
+            $stmt = $this->pdo->prepare('DELETE FROM resources WHERE id = :id');
+            $stmt->execute([':id' => $id->toString()]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
     }
 
     public function save(Resource $resource): void
     {
-        $stmt = $this->pdo->prepare('
-            INSERT INTO resources (id, type, name, capacity, attributes)
-            VALUES (:id, :type, :name, :capacity, :attributes)
-            ON DUPLICATE KEY UPDATE
-                type       = VALUES(type),
-                name       = VALUES(name),
-                capacity   = VALUES(capacity),
-                attributes = VALUES(attributes)
-        ');
+        try {
+            $stmt = $this->pdo->prepare('
+                INSERT INTO resources (id, type, name, capacity, attributes)
+                VALUES (:id, :type, :name, :capacity, :attributes)
+                ON DUPLICATE KEY UPDATE
+                    type       = VALUES(type),
+                    name       = VALUES(name),
+                    capacity   = VALUES(capacity),
+                    attributes = VALUES(attributes)
+            ');
 
-        $stmt->execute([
-            ':id'         => $resource->id->toString(),
-            ':type'       => $this->typeMapper->toString($resource->type),
-            ':name'       => $resource->name,
-            ':capacity'   => $resource->capacity,
-            ':attributes' => json_encode($resource->attributes),
-        ]);
+            $stmt->execute([
+                ':id'         => $resource->id->toString(),
+                ':type'       => $this->typeMapper->toString($resource->type),
+                ':name'       => $resource->name,
+                ':capacity'   => $resource->capacity,
+                ':attributes' => json_encode($resource->attributes),
+            ]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
     }
 
     /** @param array<string, mixed> $row */

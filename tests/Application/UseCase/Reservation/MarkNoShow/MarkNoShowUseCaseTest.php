@@ -7,6 +7,7 @@ namespace Rez\Tests\Application\UseCase\Reservation\MarkNoShow;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowRequest;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowUseCase;
@@ -37,6 +38,18 @@ class MarkNoShowUseCaseTest extends TestCase
             new TimeSlot(new DateTimeImmutable('2024-01-15 10:00:00'), new DateTimeImmutable('2024-01-15 11:00:00')),
             new Party('John Doe', 'john@example.com', 2, null),
         )->confirm();
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->reservationRepository
+            ->method('findById')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to load reservation.');
+
+        $this->useCase->execute(new MarkNoShowRequest(ReservationId::generate()));
     }
 
     public function testNotFoundThrowsReservationNotFoundException(): void

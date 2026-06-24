@@ -7,6 +7,7 @@ namespace Rez\Tests\Application\UseCase\Reservation\CreateReservation;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\Service\AvailabilityServiceInterface;
@@ -45,6 +46,23 @@ class CreateReservationUseCaseTest extends TestCase
         $this->resourceId = ResourceId::generate();
         $this->resource   = new Resource($this->resourceId, ResourceType::fromString('table'), 'Table 1', 4);
         $this->party      = new Party('John Doe', 'john@example.com', 2, null);
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->resourceRepository
+            ->method('findById')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to load resource.');
+
+        $this->useCase->execute(new CreateReservationRequest(
+            [$this->resourceId],
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+            $this->party,
+        ));
     }
 
     public function testResourceNotFoundThrowsResourceNotFoundException(): void

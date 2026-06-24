@@ -6,6 +6,7 @@ namespace Rez\Tests\Application\UseCase\Resource\GetResource;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\UseCase\Resource\GetResource\GetResourceRequest;
 use Rez\Application\UseCase\Resource\GetResource\GetResourceUseCase;
@@ -23,6 +24,18 @@ class GetResourceUseCaseTest extends TestCase
     {
         $this->repository = $this->createMock(ResourceRepositoryInterface::class);
         $this->useCase    = new GetResourceUseCase($this->repository);
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->repository
+            ->method('findById')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to load resource.');
+
+        $this->useCase->execute(new GetResourceRequest(ResourceId::generate()));
     }
 
     public function testReturnsResourceWhenFound(): void

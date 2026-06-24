@@ -6,6 +6,7 @@ namespace Rez\Tests\Application\UseCase\Seed;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\DatabaseSeederInterface;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseRequest;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCase;
@@ -30,6 +31,20 @@ class SeedDatabaseUseCaseTest extends TestCase
             unlink($file);
         }
         rmdir($this->tempDir);
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        file_put_contents($this->tempDir . '/001_a.sql', 'SELECT 1');
+
+        $this->seeder
+            ->method('executeFile')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to seed database.');
+
+        $this->useCase->execute(new SeedDatabaseRequest([$this->tempDir]));
     }
 
     public function testExecutesEachSqlFileViaSeeder(): void

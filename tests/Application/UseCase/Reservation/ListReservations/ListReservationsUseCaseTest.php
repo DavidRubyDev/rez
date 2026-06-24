@@ -7,6 +7,7 @@ namespace Rez\Tests\Application\UseCase\Reservation\ListReservations;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsRequest;
 use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCase;
@@ -39,6 +40,18 @@ class ListReservationsUseCaseTest extends TestCase
             new TimeSlot(new DateTimeImmutable('2024-01-15 10:00:00'), new DateTimeImmutable('2024-01-15 11:00:00')),
             new Party('John Doe', 'john@example.com', 2, null),
         );
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->reservationRepository
+            ->method('findAll')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to list reservations.');
+
+        $this->useCase->execute(new ListReservationsRequest());
     }
 
     public function testReturnsAllWhenNoFilters(): void

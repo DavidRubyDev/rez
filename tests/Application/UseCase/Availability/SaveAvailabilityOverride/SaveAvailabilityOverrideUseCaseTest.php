@@ -7,6 +7,7 @@ namespace Rez\Tests\Application\UseCase\Availability\SaveAvailabilityOverride;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\UseCase\Availability\SaveAvailabilityOverride\SaveAvailabilityOverrideRequest;
@@ -39,6 +40,22 @@ class SaveAvailabilityOverrideUseCaseTest extends TestCase
             'Table 1',
             4,
         );
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->resourceRepository
+            ->method('findById')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to load resource.');
+
+        $this->useCase->execute(new SaveAvailabilityOverrideRequest(
+            $this->resource->id,
+            new DateTimeImmutable('2024-06-08'),
+            false,
+        ));
     }
 
     public function testResourceNotFoundThrows(): void

@@ -11,13 +11,21 @@ use Rez\Domain\Resource\ResourceId;
 
 interface AvailabilityRepositoryInterface
 {
-    /** @return AvailabilityRule[] */
+    /**
+     * @return AvailabilityRule[]
+     * @throws \Rez\Application\Exception\DatabaseException
+     */
     public function findRulesForResource(ResourceId $resourceId): array;
 
-    /** @return AvailabilityOverride[] */
+    /**
+     * @return AvailabilityOverride[]
+     * @throws \Rez\Application\Exception\DatabaseException
+     */
     public function findOverridesForResource(ResourceId $resourceId, DateTimeImmutable $from, DateTimeImmutable $to): array;
 
+    /** @throws \Rez\Application\Exception\DatabaseException */
     public function saveRule(AvailabilityRule $rule): void;
 
+    /** @throws \Rez\Application\Exception\DatabaseException */
     public function saveOverride(AvailabilityOverride $override): void;
 }

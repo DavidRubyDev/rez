@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Reservation\CreateReservation;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\Service\AvailabilityServiceInterface;
@@ -33,7 +34,11 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
         $resources = [];
 
         foreach ($request->resourceIds as $resourceId) {
-            $resources[] = $this->resourceRepository->findById($resourceId);
+            try {
+                $resources[] = $this->resourceRepository->findById($resourceId);
+            } catch (DatabaseException $e) {
+                throw new DatabaseException('Failed to load resource.', 0, $e);
+            }
         }
 
         $slot = new TimeSlot($request->start, $request->end);
@@ -49,7 +54,11 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
             $request->party,
         );
 
-        $this->reservationRepository->save($reservation);
+        try {
+            $this->reservationRepository->save($reservation);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to save reservation.', 0, $e);
+        }
 
         return new CreateReservationResponse($reservation);
     }

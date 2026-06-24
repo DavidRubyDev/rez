@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Newsletter\Broadcast;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\NewsletterRepositoryInterface;
 
@@ -17,7 +18,11 @@ final class BroadcastUseCase implements BroadcastUseCaseInterface
 
     public function execute(BroadcastRequest $request): BroadcastResponse
     {
-        $subscribers = $this->newsletterRepository->findAll();
+        try {
+            $subscribers = $this->newsletterRepository->findAll();
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load newsletter subscribers.', 0, $e);
+        }
         $sent        = 0;
 
         foreach ($subscribers as $subscriber) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Newsletter\Subscribe;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
 use Rez\Domain\Newsletter\NewsletterSubscriber;
@@ -27,7 +28,13 @@ final class SubscribeUseCase implements SubscribeUseCaseInterface
                 $request->name,
                 $request->source,
             );
-            $this->newsletterRepository->save($subscriber);
+            try {
+                $this->newsletterRepository->save($subscriber);
+            } catch (DatabaseException $e) {
+                throw new DatabaseException('Failed to save subscriber.', 0, $e);
+            }
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load subscriber.', 0, $e);
         }
 
         return new SubscribeResponse($subscriber);

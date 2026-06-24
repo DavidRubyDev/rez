@@ -6,6 +6,7 @@ namespace Rez\Tests\Application\UseCase\Resource\UpdateResource;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\UseCase\Resource\UpdateResource\UpdateResourceRequest;
 use Rez\Application\UseCase\Resource\UpdateResource\UpdateResourceUseCase;
@@ -33,6 +34,18 @@ class UpdateResourceUseCaseTest extends TestCase
             4,
             ['location' => 'window'],
         );
+    }
+
+    public function testRepositoryDatabaseExceptionPropagates(): void
+    {
+        $this->repository
+            ->method('findById')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to load resource.');
+
+        $this->useCase->execute(new UpdateResourceRequest($this->resourceId, 'New Name', null, null));
     }
 
     public function testUpdatesAllFields(): void

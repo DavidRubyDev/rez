@@ -8,6 +8,7 @@ interface CreateResourceUseCaseInterface
 {
     /**
      * @throws \InvalidArgumentException
+     * @throws \Rez\Application\Exception\DatabaseException
      */
     public function execute(CreateResourceRequest $request): CreateResourceResponse;
 }

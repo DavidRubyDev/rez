@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Infrastructure\Persistence\Mysql;
 
 use PDO;
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\DatabaseSeederInterface;
 
 final class MysqlDatabaseSeeder implements DatabaseSeederInterface
@@ -31,7 +32,11 @@ final class MysqlDatabaseSeeder implements DatabaseSeederInterface
         }
 
         foreach ($this->splitStatements($sql) as $statement) {
-            $this->pdo->exec($statement);
+            try {
+                $this->pdo->exec($statement);
+            } catch (\PDOException $e) {
+                throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+            }
         }
     }
 

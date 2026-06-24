@@ -8,6 +8,7 @@ interface GetReservationUseCaseInterface
 {
     /**
      * @throws \Rez\Domain\Exception\ReservationNotFoundException
+     * @throws \Rez\Application\Exception\DatabaseException
      */
     public function execute(GetReservationRequest $request): GetReservationResponse;
 }

@@ -330,6 +330,7 @@ Thin HTTP delivery layer. Contains no business logic. All logic lives in `rez`.
 | `\InvalidArgumentException` | 422 |
 | `DomainException` | 422 |
 | `\UnexpectedValueException` (Stripe sig) | 400 |
+| `DatabaseException` | 503 |
 
 ### API surface
 
@@ -546,7 +547,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 2. `rez-config` — **COMPLETE** (PlatformConfig, all sub-configs, FeatureGuard, container wiring)
 3. `rez-mailer-newsletter` — **COMPLETE**
 4. `rez-throws-phpdoc` — **COMPLETE** (`@throws` PHPDoc backfill across all public methods)
-5. `rez-pdo-exceptions` — DatabaseException, PDO wrapping in repositories, use case re-throw
+5. `rez-pdo-exceptions` — **COMPLETE** (DatabaseException, PDO wrapping in all MySQL repositories, use case re-throw with context messages, 503 mapping documented)
 6. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB)
 7. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
 8. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case

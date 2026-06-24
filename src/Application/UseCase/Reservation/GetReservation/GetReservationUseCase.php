@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Reservation\GetReservation;
 
+use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 
 final class GetReservationUseCase implements GetReservationUseCaseInterface
@@ -13,12 +14,14 @@ final class GetReservationUseCase implements GetReservationUseCaseInterface
     ) {
     }
 
-    /**
-     * @throws \Rez\Domain\Exception\ReservationNotFoundException
-     */
+    /** @throws \Rez\Domain\Exception\ReservationNotFoundException */
     public function execute(GetReservationRequest $request): GetReservationResponse
     {
-        $reservation = $this->reservationRepository->findById($request->reservationId);
+        try {
+            $reservation = $this->reservationRepository->findById($request->reservationId);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load reservation.', 0, $e);
+        }
 
         return new GetReservationResponse($reservation);
     }
