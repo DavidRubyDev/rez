@@ -13,6 +13,9 @@ final class GetReservationUseCase implements GetReservationUseCaseInterface
     ) {
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\ReservationNotFoundException
+     */
     public function execute(GetReservationRequest $request): GetReservationResponse
     {
         $reservation = $this->reservationRepository->findById($request->reservationId);

@@ -16,6 +16,9 @@ final class SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseIn
     ) {
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     */
     public function execute(SaveAvailabilityRuleRequest $request): SaveAvailabilityRuleResponse
     {
         $this->resourceRepository->findById($request->resourceId);

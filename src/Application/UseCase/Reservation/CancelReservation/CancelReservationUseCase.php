@@ -13,6 +13,10 @@ final class CancelReservationUseCase implements CancelReservationUseCaseInterfac
     ) {
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\ReservationNotFoundException
+     * @throws \Rez\Domain\Exception\InvalidReservationStateException
+     */
     public function execute(CancelReservationRequest $request): CancelReservationResponse
     {
         $reservation = $this->reservationRepository->findById($request->reservationId);

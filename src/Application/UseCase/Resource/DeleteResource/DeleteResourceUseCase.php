@@ -13,6 +13,9 @@ final class DeleteResourceUseCase implements DeleteResourceUseCaseInterface
     ) {
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     */
     public function execute(DeleteResourceRequest $request): DeleteResourceResponse
     {
         $this->resourceRepository->findById($request->resourceId);

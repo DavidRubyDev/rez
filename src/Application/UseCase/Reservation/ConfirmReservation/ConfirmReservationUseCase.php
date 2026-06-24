@@ -13,6 +13,10 @@ final class ConfirmReservationUseCase implements ConfirmReservationUseCaseInterf
     ) {
     }
 
+    /**
+     * @throws \Rez\Domain\Exception\ReservationNotFoundException
+     * @throws \Rez\Domain\Exception\InvalidReservationStateException
+     */
     public function execute(ConfirmReservationRequest $request): ConfirmReservationResponse
     {
         $reservation = $this->reservationRepository->findById($request->reservationId);
