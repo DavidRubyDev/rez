@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Tests\Integration\Persistence\Mysql;
 
 use DateTimeImmutable;
+use DateTimeZone;
 use Rez\Domain\Availability\AvailabilityOverride;
 use Rez\Domain\Availability\AvailabilityRule;
 use Rez\Domain\Availability\DayOfWeek;
@@ -96,6 +97,34 @@ class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
         $rules = $this->repository->findRulesForResource($this->resourceId);
 
         $this->assertCount(3, $rules);
+    }
+
+    public function testRuleWithBoundsRoundtrips(): void
+    {
+        $validFrom  = new DateTimeImmutable('2024-01-01 00:00:00', new DateTimeZone('UTC'));
+        $validUntil = new DateTimeImmutable('2024-03-31 00:00:00', new DateTimeZone('UTC'));
+        $rule       = new AvailabilityRule(
+            $this->resourceId, DayOfWeek::Monday, '09:00', '17:00',
+            validFrom: $validFrom, validUntil: $validUntil,
+        );
+        $this->repository->saveRule($rule);
+
+        $rules = $this->repository->findRulesForResource($this->resourceId);
+
+        $this->assertCount(1, $rules);
+        $this->assertSame('2024-01-01', $rules[0]->validFrom?->format('Y-m-d'));
+        $this->assertSame('2024-03-31', $rules[0]->validUntil?->format('Y-m-d'));
+    }
+
+    public function testRuleWithoutBoundsRoundtripsAsNull(): void
+    {
+        $this->repository->saveRule(new AvailabilityRule($this->resourceId, DayOfWeek::Monday, '09:00', '17:00'));
+
+        $rules = $this->repository->findRulesForResource($this->resourceId);
+
+        $this->assertCount(1, $rules);
+        $this->assertNull($rules[0]->validFrom);
+        $this->assertNull($rules[0]->validUntil);
     }
 
     public function testSaveOverrideIsIdempotent(): void

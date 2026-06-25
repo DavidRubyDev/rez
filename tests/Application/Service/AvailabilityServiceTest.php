@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Tests\Application\Service;
 
 use DateTimeImmutable;
+use DateTimeZone;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
@@ -190,6 +191,53 @@ class AvailabilityServiceTest extends TestCase
         $window = $this->service->getAvailableSlots($this->resourceId, $this->date, 30);
 
         $this->assertSame(4, $window->count());
+    }
+
+    public function testGetAvailableSlotsReturnsEmptyWhenRuleValidUntilIsInPast(): void
+    {
+        $expiredRule = new AvailabilityRule(
+            $this->resourceId, DayOfWeek::Monday, '10:00', '12:00',
+            validUntil: new DateTimeImmutable('2024-01-14', new \DateTimeZone('UTC')),
+        );
+
+        $this->availabilityRepository->method('findRulesForResource')->willReturn([$expiredRule]);
+        $this->reservationRepository->method('findByTimeSlotAndResource')->willReturn(ReservationCollection::empty());
+
+        $window = $this->service->getAvailableSlots($this->resourceId, $this->date, 60);
+
+        $this->assertTrue($window->isEmpty());
+    }
+
+    public function testGetAvailableSlotsReturnsEmptyWhenRuleValidFromIsInFuture(): void
+    {
+        $futureRule = new AvailabilityRule(
+            $this->resourceId, DayOfWeek::Monday, '10:00', '12:00',
+            validFrom: new DateTimeImmutable('2024-01-16', new \DateTimeZone('UTC')),
+        );
+
+        $this->availabilityRepository->method('findRulesForResource')->willReturn([$futureRule]);
+        $this->reservationRepository->method('findByTimeSlotAndResource')->willReturn(ReservationCollection::empty());
+
+        $window = $this->service->getAvailableSlots($this->resourceId, $this->date, 60);
+
+        $this->assertTrue($window->isEmpty());
+    }
+
+    public function testGetAvailableSlotsUsesRuleWhenDateIsWithinBounds(): void
+    {
+        $boundedRule = new AvailabilityRule(
+            $this->resourceId, DayOfWeek::Monday, '10:00', '12:00',
+            validFrom:  new DateTimeImmutable('2024-01-01', new \DateTimeZone('UTC')),
+            validUntil: new DateTimeImmutable('2024-03-31', new \DateTimeZone('UTC')),
+        );
+
+        $this->availabilityRepository->method('findRulesForResource')->willReturn([$boundedRule]);
+        $this->availabilityRepository->method('findOverridesForResource')->willReturn([]);
+        $this->reservationRepository->method('findByTimeSlotAndResource')->willReturn(ReservationCollection::empty());
+
+        $window = $this->service->getAvailableSlots($this->resourceId, $this->date, 60);
+
+        $this->assertSame(2, $window->count());
     }
 
     public function testGetAvailableSlotsAdjacentReservationsDoNotBlockEachOther(): void
