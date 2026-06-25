@@ -104,8 +104,12 @@ class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
         $validFrom  = new DateTimeImmutable('2024-01-01 00:00:00', new DateTimeZone('UTC'));
         $validUntil = new DateTimeImmutable('2024-03-31 00:00:00', new DateTimeZone('UTC'));
         $rule       = new AvailabilityRule(
-            $this->resourceId, DayOfWeek::Monday, '09:00', '17:00',
-            validFrom: $validFrom, validUntil: $validUntil,
+            $this->resourceId,
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom: $validFrom,
+            validUntil: $validUntil,
         );
         $this->repository->saveRule($rule);
 

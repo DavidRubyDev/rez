@@ -37,11 +37,14 @@ CREATE TABLE IF NOT EXISTS reservation_resources (
 -- Weekly recurring availability rules per resource.
 -- day_of_week: 'monday' … 'sunday' (see DayOfWeekMapper)
 -- open_time / close_time: 'HH:MM' (24-hour)
+-- valid_from / valid_until: optional date bounds (inclusive) for seasonal rules
 CREATE TABLE IF NOT EXISTS availability_rules (
     resource_id CHAR(36)    NOT NULL,
     day_of_week VARCHAR(10) NOT NULL,
     open_time   CHAR(5)     NOT NULL,
     close_time  CHAR(5)     NOT NULL,
+    valid_from  DATE        NULL DEFAULT NULL,
+    valid_until DATE        NULL DEFAULT NULL,
     PRIMARY KEY (resource_id, day_of_week),
     FOREIGN KEY (resource_id) REFERENCES resources (id) ON DELETE CASCADE
 );
