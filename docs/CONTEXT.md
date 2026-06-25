@@ -947,3 +947,21 @@ All `DateTimeImmutable` instances inside `rez` now use an explicit UTC timezone 
 3 new tests: `ReservationsConfigTest` (2 cases), `testAutoConfirmFalseLeavesPending`, `testAutoConfirmTrueConfirmsImmediately`. Existing `PlatformConfigTest` (17 tests) and `FeatureGuardTest` (8 tests) updated to named args.
 
 344 tests (30 skipped — all integration), PHPStan max clean, CS clean. `06_rez-testing-fixes.md` steps 1, 2, 5 complete (steps 3, 4 are rez-starter only).
+
+---
+
+### 64. `AvailabilityRule` date bounds + `isActiveOn()` (`07_rez-availability-bounds.md` steps 1–4)
+
+`07_rez-availability-bounds.md` fully complete (step 5 is rez-starter only, skipped).
+
+**Step 1 — `AvailabilityRule` bounds:** `validFrom` and `validUntil` added as optional nullable `DateTimeImmutable` constructor parameters (both default `null`). `isActiveOn(DateTimeImmutable $date): bool` added — strips time via `format('Y-m-d')` before comparing, so a rule valid on a given calendar date is active for the whole day regardless of time-of-day.
+
+**Step 2 — `AvailabilityService` filtering:** `AvailabilityService::findRuleForDate()` now calls `$rule->isActiveOn($date)` in addition to `$rule->appliesToDate($date)`. Rules outside their bounds are invisible to the availability pipeline.
+
+**Step 3 — Schema + `MysqlAvailabilityRepository`:** `database/seeds/000_schema.sql` — `availability_rules` table gained `valid_from DATE NULL DEFAULT NULL` and `valid_until DATE NULL DEFAULT NULL` columns. `saveRule()` persists both as `Y-m-d` strings (or `null`). `hydrateRule()` reads them back as UTC `DateTimeImmutable` at midnight.
+
+**Step 4 — `SaveAvailabilityRuleRequest` + `SaveAvailabilityRuleUseCase`:** Request gained `?string $validFrom = null` and `?string $validUntil = null`. Use case `execute()` validates both as `Y-m-d` format (throws `\InvalidArgumentException` for bad format or `validFrom > validUntil`), then passes parsed `DateTimeImmutable` bounds to `AvailabilityRule`. Interface updated with `@throws \InvalidArgumentException`.
+
+10 new unit tests in `AvailabilityRuleTest` (`isActiveOn` variants + UTC timezone for `openTimeForDate`/`closeTimeForDate`). 3 new tests in `AvailabilityServiceTest` (bounds filtering). 4 new tests in `SaveAvailabilityRuleUseCaseTest` (validation). 2 new integration tests in `MysqlAvailabilityRepositoryTest` (bounds round-trip with and without values). All skipped locally.
+
+364 tests (32 skipped — all integration), PHPStan max clean, CS clean.
