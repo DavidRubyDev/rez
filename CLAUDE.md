@@ -40,9 +40,10 @@ Infrastructure — Driven adapters. Implements port interfaces.
                 MySQL repositories, mappers (enum/value object ↔ string).
                 Depends on Application ports and Domain.
 
-Handler       — Driving adapters. Entry points that call use cases.
-               Receives input, delegates to a use case, returns output.
-               No HTTP framework — pure PHP.
+Handler       — DEPRECATED. Do not create new Handler classes.
+               Existing handlers are kept for backwards compatibility only.
+               New entry points belong in the client app (rez-starter / rez-admin),
+               not in this library.
 ```
 
 **Rules:**

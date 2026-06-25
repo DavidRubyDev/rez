@@ -965,3 +965,17 @@ All `DateTimeImmutable` instances inside `rez` now use an explicit UTC timezone 
 10 new unit tests in `AvailabilityRuleTest` (`isActiveOn` variants + UTC timezone for `openTimeForDate`/`closeTimeForDate`). 3 new tests in `AvailabilityServiceTest` (bounds filtering). 4 new tests in `SaveAvailabilityRuleUseCaseTest` (validation). 2 new integration tests in `MysqlAvailabilityRepositoryTest` (bounds round-trip with and without values). All skipped locally.
 
 364 tests (32 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 65. DeleteAvailabilityRule, DeleteAvailabilityOverride, BulkCancelReservations
+
+**DeleteAvailabilityRule** — removes a single day's rule for a resource. `AvailabilityRepositoryInterface` gained `deleteRule(ResourceId, DayOfWeek): void`. Use case validates resource exists then deletes. Handler takes `{resource_id, day_of_week}` and returns `{}`.
+
+**DeleteAvailabilityOverride** — removes a date override for a resource. `AvailabilityRepositoryInterface` gained `deleteOverride(ResourceId, DateTimeImmutable): void`. Same pattern as above. Handler takes `{resource_id, date}` and returns `{}`.
+
+**BulkCancelReservations** — cancels a list of reservations in one call. For each `ReservationId`: `findById` (skip on `ReservationNotFoundException`), `cancel()` (skip on `InvalidReservationStateException`), `save()`. Database errors propagate immediately. Response includes `cancelledCount` and `skippedCount`. Handler converts `string[]` → `ReservationId[]`.
+
+All three use case interfaces registered in `config/container.php`. Integration tests for `deleteRule` and `deleteOverride` added to `MysqlAvailabilityRepositoryTest`.
+
+384 tests (34 skipped — all integration), PHPStan max clean, CS clean.

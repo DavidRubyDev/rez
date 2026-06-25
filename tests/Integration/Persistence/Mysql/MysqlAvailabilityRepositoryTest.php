@@ -131,6 +131,29 @@ class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
         $this->assertNull($rules[0]->validUntil);
     }
 
+    public function testDeleteRuleRemovesIt(): void
+    {
+        $this->repository->saveRule(new AvailabilityRule($this->resourceId, DayOfWeek::Monday, '09:00', '17:00'));
+        $this->repository->deleteRule($this->resourceId, DayOfWeek::Monday);
+
+        $this->assertCount(0, $this->repository->findRulesForResource($this->resourceId));
+    }
+
+    public function testDeleteOverrideRemovesIt(): void
+    {
+        $date = new \DateTimeImmutable('2024-01-15', new \DateTimeZone('UTC'));
+        $this->repository->saveOverride(new AvailabilityOverride($this->resourceId, $date, false));
+        $this->repository->deleteOverride($this->resourceId, $date);
+
+        $overrides = $this->repository->findOverridesForResource(
+            $this->resourceId,
+            new \DateTimeImmutable('2024-01-14'),
+            new \DateTimeImmutable('2024-01-16'),
+        );
+
+        $this->assertCount(0, $overrides);
+    }
+
     public function testSaveOverrideIsIdempotent(): void
     {
         $date = new DateTimeImmutable('2024-01-15');

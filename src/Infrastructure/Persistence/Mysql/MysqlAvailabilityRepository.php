@@ -10,6 +10,7 @@ use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Domain\Availability\AvailabilityOverride;
 use Rez\Domain\Availability\AvailabilityRule;
+use Rez\Domain\Availability\DayOfWeek;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Infrastructure\Mapper\DayOfWeekMapper;
 
@@ -87,6 +88,23 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
         }
     }
 
+    public function deleteRule(ResourceId $resourceId, DayOfWeek $dayOfWeek): void
+    {
+        try {
+            $stmt = $this->pdo->prepare('
+                DELETE FROM availability_rules
+                WHERE resource_id = :resource_id AND day_of_week = :day_of_week
+            ');
+
+            $stmt->execute([
+                ':resource_id' => $resourceId->toString(),
+                ':day_of_week' => $this->dayMapper->toString($dayOfWeek),
+            ]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+    }
+
     public function saveOverride(AvailabilityOverride $override): void
     {
         try {
@@ -101,6 +119,23 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
                 ':resource_id' => $override->resourceId->toString(),
                 ':date'        => $override->date->format('Y-m-d'),
                 ':available'   => $override->isAvailable ? 1 : 0,
+            ]);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+    }
+
+    public function deleteOverride(ResourceId $resourceId, DateTimeImmutable $date): void
+    {
+        try {
+            $stmt = $this->pdo->prepare('
+                DELETE FROM availability_overrides
+                WHERE resource_id = :resource_id AND date = :date
+            ');
+
+            $stmt->execute([
+                ':resource_id' => $resourceId->toString(),
+                ':date'        => $date->format('Y-m-d'),
             ]);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);

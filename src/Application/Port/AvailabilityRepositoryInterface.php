@@ -7,6 +7,7 @@ namespace Rez\Application\Port;
 use DateTimeImmutable;
 use Rez\Domain\Availability\AvailabilityOverride;
 use Rez\Domain\Availability\AvailabilityRule;
+use Rez\Domain\Availability\DayOfWeek;
 use Rez\Domain\Resource\ResourceId;
 
 interface AvailabilityRepositoryInterface
@@ -27,5 +28,11 @@ interface AvailabilityRepositoryInterface
     public function saveRule(AvailabilityRule $rule): void;
 
     /** @throws \Rez\Application\Exception\DatabaseException */
+    public function deleteRule(ResourceId $resourceId, DayOfWeek $dayOfWeek): void;
+
+    /** @throws \Rez\Application\Exception\DatabaseException */
     public function saveOverride(AvailabilityOverride $override): void;
+
+    /** @throws \Rez\Application\Exception\DatabaseException */
+    public function deleteOverride(ResourceId $resourceId, DateTimeImmutable $date): void;
 }
