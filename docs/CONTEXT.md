@@ -940,7 +940,7 @@ All `DateTimeImmutable` instances inside `rez` now use an explicit UTC timezone 
 
 `PlatformConfig` — `ReservationsConfig $reservations` added as a required second constructor parameter (after `MailerConfig`, before all optionals). All test callsites updated to use named arguments.
 
-`CreateReservationUseCase` — `PlatformConfig` injected via constructor. After the initial save (Pending), if `$config->reservations->autoConfirm` is true, calls `$reservation->confirm()` and saves again, returning the Confirmed entity. Only one save when autoConfirm is false.
+`CreateReservationUseCase` — `PlatformConfig` injected via constructor. If `$config->reservations->autoConfirm` is true, calls `$reservation->confirm()` in memory before saving — always a single DB write regardless of autoConfirm value.
 
 `CreateReservationResponse` unchanged — status already accessible via `$response->reservation->status`.
 
