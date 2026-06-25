@@ -27,19 +27,34 @@ and subscriptions.
 
 | Repo | Lang | Visibility | Status |
 |---|---|---|---|
-| `davidrubydev/rez` | PHP 8.3 | Public — Packagist | Core + users complete; platform extensions pending |
-| `davidrubydev/rez-starter` | PHP 8.3 | Public — GitHub | Working template; being updated |
+| `davidrubydev/rez` | PHP 8.3 | **Private** — GitHub | Core + users complete; platform extensions pending |
+| `davidrubydev/rez-starter` | PHP 8.3 | **Private** — GitHub | Working template; being updated |
 | `DavidRubyDev/rez-demo` | PHP 8.3 | Private | Local Docker demo instance for testing |
 | `DavidRubyDev/client-*` | PHP 8.3 | Private | One repo per client |
 | `davidrubydev/rez-components` | TypeScript + Lit | TBD | In progress — `<rez-calendar>` first |
 | `davidrubydev/rez-admin` | TypeScript + React | TBD | Not started |
 
+**All repositories are private.** Deployment is managed via SSH and per-repo deploy keys.
+
+**Composer dependency installation** (rez is not on Packagist): client repos and `rez-starter` declare `rez` as a VCS dependency using SSH:
+
+```json
+"repositories": [
+    { "type": "vcs", "url": "git@github.com:DavidRubyDev/rez.git" }
+],
+"require": {
+    "davidrubydev/rez": "^0.0.1"
+}
+```
+
+Each server and CI environment must have an SSH deploy key with read access to `davidrubydev/rez`.
+
 **Dependency direction (no cycles):**
 ```
 rez-components ──→ client-* API (HTTP)
 rez-admin      ──→ client-* API (HTTP)
-client-*       ──→ davidrubydev/rez (Composer)
-rez-starter    ──→ davidrubydev/rez (Composer)
+client-*       ──→ davidrubydev/rez (Composer, SSH VCS)
+rez-starter    ──→ davidrubydev/rez (Composer, SSH VCS)
 ```
 
 `rez` never depends on client repos. Client repos never depend on each other.
