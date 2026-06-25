@@ -979,3 +979,21 @@ All `DateTimeImmutable` instances inside `rez` now use an explicit UTC timezone 
 All three use case interfaces registered in `config/container.php`. Integration tests for `deleteRule` and `deleteOverride` added to `MysqlAvailabilityRepositoryTest`.
 
 384 tests (34 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 66. PSR-3 Logging (`08_rez-psr-logging.md`)
+
+`psr/log: ^3.0` added to `composer.json` (was already a transitive dep; now declared).
+
+**`CreateReservationUseCase`** — gained optional `?MailerInterface $mailer = null` and `LoggerInterface $logger = new NullLogger()` constructor parameters. After saving the reservation, if a mailer is injected it sends `sendBookingConfirmation`; any `\Throwable` is caught, logged at `error` level with `reservationId` + `email` + `error` context, and swallowed (booking succeeded). In `rez-starter`, the client app wires the concrete mailer in; the library default is null.
+
+**`BroadcastUseCase`** — gained `LoggerInterface $logger = new NullLogger()`. Per-recipient send is now wrapped in try-catch `\Throwable`; failures are logged at `error` level with `subscriberId` + `email` + `error` context and skipped (send count not incremented). Existing behaviour for successful sends is unchanged.
+
+**All four MySQL repositories** (`MysqlReservationRepository`, `MysqlResourceRepository`, `MysqlNewsletterRepository`, `MysqlAvailabilityRepository`) — each gained `LoggerInterface $logger = new NullLogger()`. Every `catch (\PDOException)` block now calls `$this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()])` before re-throwing as `DatabaseException`.
+
+**`CancelReservationUseCase`** — logger deferred to `rez-guest-cancellation` (step 11) when HMAC token verification and email sending are added; injecting it now would be PHPStan `property.onlyWritten`.
+
+3 new tests: `testMailerFailureIsLoggedAndNotPropagated` (CreateReservation), `testPerRecipientFailureIsLoggedAndSkipped` (Broadcast), `testDatabaseExceptionIsLoggedAsCritical` (MysqlRepositoryLoggerTest).
+
+381 tests (34 skipped — all integration), PHPStan max clean, CS clean.

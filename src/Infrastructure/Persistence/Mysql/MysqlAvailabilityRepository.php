@@ -6,6 +6,8 @@ namespace Rez\Infrastructure\Persistence\Mysql;
 
 use DateTimeImmutable;
 use PDO;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Domain\Availability\AvailabilityOverride;
@@ -19,6 +21,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
     public function __construct(
         private readonly PDO $pdo,
         private readonly DayOfWeekMapper $dayMapper,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -28,6 +31,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
             $stmt = $this->pdo->prepare('SELECT * FROM availability_rules WHERE resource_id = :resource_id');
             $stmt->execute([':resource_id' => $resourceId->toString()]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
 
@@ -53,6 +57,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
                 ':to'          => $to->format('Y-m-d'),
             ]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
 
@@ -84,6 +89,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
                 ':valid_until' => $rule->validUntil?->format('Y-m-d'),
             ]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }
@@ -101,6 +107,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
                 ':day_of_week' => $this->dayMapper->toString($dayOfWeek),
             ]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }
@@ -121,6 +128,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
                 ':available'   => $override->isAvailable ? 1 : 0,
             ]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }
@@ -138,6 +146,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
                 ':date'        => $date->format('Y-m-d'),
             ]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }

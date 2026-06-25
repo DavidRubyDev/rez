@@ -7,6 +7,7 @@ namespace Rez\Tests\Application\UseCase\Newsletter;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\NewsletterRepositoryInterface;
@@ -74,6 +75,30 @@ class BroadcastUseCaseTest extends TestCase
         $response = $this->useCase->execute(new BroadcastRequest('Pilates', new DateTimeImmutable('2026-07-02 09:00:00')));
 
         $this->assertSame(2, $response->sent);
+    }
+
+    public function testPerRecipientFailureIsLoggedAndSkipped(): void
+    {
+        $subscriber = $this->makeSubscriber('a@example.com');
+        $this->repository->method('findAll')->willReturn([$subscriber]);
+
+        $this->mailer
+            ->method('sendNewClassNotification')
+            ->willThrowException(new \RuntimeException('SMTP error'));
+
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())
+            ->method('error')
+            ->with(
+                $this->stringContains('subscriber'),
+                $this->arrayHasKey('subscriberId'),
+            );
+
+        $useCase = new BroadcastUseCase($this->repository, $this->mailer, $logger);
+
+        $response = $useCase->execute(new BroadcastRequest('Yoga', new DateTimeImmutable('2026-07-01 10:00:00')));
+
+        $this->assertSame(0, $response->sent);
     }
 
     private function makeSubscriber(string $email): NewsletterSubscriber

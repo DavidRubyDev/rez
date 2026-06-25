@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Rez\Infrastructure\Persistence\Mysql;
 
 use PDO;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
@@ -17,6 +19,7 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
     public function __construct(
         private readonly PDO $pdo,
         private readonly SubscriberSourceMapper $sourceMapper,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -30,6 +33,7 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
             $stmt = $this->pdo->prepare('SELECT * FROM newsletter_subscribers WHERE email = :email');
             $stmt->execute([':email' => $email]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
 
@@ -50,6 +54,7 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
             $stmt = $this->pdo->prepare('SELECT * FROM newsletter_subscribers ORDER BY opted_in_at ASC');
             $stmt->execute();
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
 
@@ -78,6 +83,7 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
                 ':opted_in_at' => $subscriber->optedInAt->format('Y-m-d H:i:s'),
             ]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }
@@ -88,6 +94,7 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
             $stmt = $this->pdo->prepare('DELETE FROM newsletter_subscribers WHERE id = :id');
             $stmt->execute([':id' => $id->toString()]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }
