@@ -132,6 +132,31 @@ class CreateReservationUseCaseTest extends TestCase
         ));
     }
 
+    public function testAutoConfirmSaveCalledOnce(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
+
+        $this->reservationRepository->expects($this->once())->method('save');
+
+        $useCase = new CreateReservationUseCase(
+            $this->reservationRepository,
+            $this->resourceRepository,
+            $this->availabilityService,
+            new PlatformConfig(
+                mailer:       new MailerConfig('info@studio.cz', 'Studio'),
+                reservations: new ReservationsConfig(autoConfirm: true),
+            ),
+        );
+
+        $useCase->execute(new CreateReservationRequest(
+            [$this->resourceId],
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+            $this->party,
+        ));
+    }
+
     public function testSuccessReturnsPendingReservation(): void
     {
         $this->resourceRepository->method('findById')->willReturn($this->resource);

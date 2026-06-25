@@ -56,20 +56,14 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
             $request->party,
         );
 
+        if ($this->config->reservations->autoConfirm) {
+            $reservation = $reservation->confirm();
+        }
+
         try {
             $this->reservationRepository->save($reservation);
         } catch (DatabaseException $e) {
             throw new DatabaseException('Failed to save reservation.', 0, $e);
-        }
-
-        if ($this->config->reservations->autoConfirm) {
-            $reservation = $reservation->confirm();
-
-            try {
-                $this->reservationRepository->save($reservation);
-            } catch (DatabaseException $e) {
-                throw new DatabaseException('Failed to save reservation.', 0, $e);
-            }
         }
 
         return new CreateReservationResponse($reservation);
