@@ -7,6 +7,9 @@ namespace Rez\Tests\Application\UseCase\Reservation\CreateReservation;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Rez\Application\Config\MailerConfig;
+use Rez\Application\Config\PlatformConfig;
+use Rez\Application\Config\ReservationsConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
@@ -41,6 +44,10 @@ class CreateReservationUseCaseTest extends TestCase
             $this->reservationRepository,
             $this->resourceRepository,
             $this->availabilityService,
+            new PlatformConfig(
+                mailer:       new MailerConfig('info@studio.cz', 'Studio'),
+                reservations: new ReservationsConfig(),
+            ),
         );
 
         $this->resourceId = ResourceId::generate();
@@ -153,5 +160,55 @@ class CreateReservationUseCaseTest extends TestCase
         ));
 
         $this->assertTrue($response->reservation->resourceIds->contains($this->resourceId));
+    }
+
+    public function testAutoConfirmFalseLeavesPending(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
+
+        $useCase = new CreateReservationUseCase(
+            $this->reservationRepository,
+            $this->resourceRepository,
+            $this->availabilityService,
+            new PlatformConfig(
+                mailer:       new MailerConfig('info@studio.cz', 'Studio'),
+                reservations: new ReservationsConfig(autoConfirm: false),
+            ),
+        );
+
+        $response = $useCase->execute(new CreateReservationRequest(
+            [$this->resourceId],
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+            $this->party,
+        ));
+
+        $this->assertSame(ReservationStatus::Pending, $response->reservation->status);
+    }
+
+    public function testAutoConfirmTrueConfirmsImmediately(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
+
+        $useCase = new CreateReservationUseCase(
+            $this->reservationRepository,
+            $this->resourceRepository,
+            $this->availabilityService,
+            new PlatformConfig(
+                mailer:       new MailerConfig('info@studio.cz', 'Studio'),
+                reservations: new ReservationsConfig(autoConfirm: true),
+            ),
+        );
+
+        $response = $useCase->execute(new CreateReservationRequest(
+            [$this->resourceId],
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+            $this->party,
+        ));
+
+        $this->assertSame(ReservationStatus::Confirmed, $response->reservation->status);
     }
 }
