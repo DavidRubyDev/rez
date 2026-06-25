@@ -6,6 +6,8 @@ namespace Rez\Infrastructure\Persistence\Mysql;
 
 use DateTimeImmutable;
 use PDO;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Domain\Exception\ReservationNotFoundException;
@@ -24,6 +26,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     public function __construct(
         private readonly PDO $pdo,
         private readonly ReservationStatusMapper $statusMapper,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -37,6 +40,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
             $stmt = $this->pdo->prepare('SELECT * FROM reservations WHERE id = :id');
             $stmt->execute([':id' => $id->toString()]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
 
@@ -69,6 +73,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
                 ':cancelled_status' => $this->statusMapper->toString(ReservationStatus::Cancelled),
             ]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
 
@@ -100,6 +105,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute($params);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
 
@@ -153,6 +159,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
                 ]);
             }
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }

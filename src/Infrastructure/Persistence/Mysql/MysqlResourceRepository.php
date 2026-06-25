@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Rez\Infrastructure\Persistence\Mysql;
 
 use PDO;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Domain\Exception\ResourceNotFoundException;
@@ -18,6 +20,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     public function __construct(
         private readonly PDO $pdo,
         private readonly ResourceTypeMapper $typeMapper,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -31,6 +34,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
             $stmt = $this->pdo->prepare('SELECT * FROM resources WHERE id = :id');
             $stmt->execute([':id' => $id->toString()]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
 
@@ -50,6 +54,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
             $stmt = $this->pdo->prepare('SELECT * FROM resources');
             $stmt->execute();
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
 
@@ -65,6 +70,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
             $stmt = $this->pdo->prepare('DELETE FROM resources WHERE id = :id');
             $stmt->execute([':id' => $id->toString()]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }
@@ -90,6 +96,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
                 ':attributes' => json_encode($resource->attributes),
             ]);
         } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
         }
     }
