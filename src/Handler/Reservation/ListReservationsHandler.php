@@ -31,9 +31,11 @@ final class ListReservationsHandler
      */
     public function handle(array $data): array
     {
+        $utc = new \DateTimeZone('UTC');
+
         $response = $this->useCase->execute(new ListReservationsRequest(
-            from:       isset($data['from']) ? new DateTimeImmutable($data['from']) : null,
-            to:         isset($data['to']) ? new DateTimeImmutable($data['to']) : null,
+            from:       isset($data['from']) ? new DateTimeImmutable($data['from'], $utc) : null,
+            to:         isset($data['to']) ? new DateTimeImmutable($data['to'], $utc) : null,
             resourceId: isset($data['resource_id']) ? ResourceId::fromString($data['resource_id']) : null,
         ));
 

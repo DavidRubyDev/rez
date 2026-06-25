@@ -28,7 +28,7 @@ final class GetAvailabilityHandler
     {
         $window = $this->useCase->execute(new GetAvailabilityRequest(
             ResourceId::fromString($data['resource_id']),
-            new DateTimeImmutable($data['date']),
+            new DateTimeImmutable($data['date'], new \DateTimeZone('UTC')),
             $data['slot_duration_minutes'] ?? 0,
         ))->window;
 

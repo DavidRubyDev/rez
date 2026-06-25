@@ -53,10 +53,12 @@ final class CreateReservationHandler
             $data['party']['phone'] ?? null,
         );
 
+        $utc = new \DateTimeZone('UTC');
+
         $response = $this->useCase->execute(new CreateReservationRequest(
             $resourceIds,
-            new DateTimeImmutable($data['start']),
-            new DateTimeImmutable($data['end']),
+            new DateTimeImmutable($data['start'], $utc),
+            new DateTimeImmutable($data['end'], $utc),
             $party,
         ));
 

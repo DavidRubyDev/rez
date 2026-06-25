@@ -30,11 +30,11 @@ final class AvailabilityRule
 
     public function openTimeForDate(DateTimeImmutable $date): DateTimeImmutable
     {
-        return new DateTimeImmutable($date->format('Y-m-d') . ' ' . $this->openTime);
+        return new DateTimeImmutable($date->format('Y-m-d') . ' ' . $this->openTime, new \DateTimeZone('UTC'));
     }
 
     public function closeTimeForDate(DateTimeImmutable $date): DateTimeImmutable
     {
-        return new DateTimeImmutable($date->format('Y-m-d') . ' ' . $this->closeTime);
+        return new DateTimeImmutable($date->format('Y-m-d') . ' ' . $this->closeTime, new \DateTimeZone('UTC'));
     }
 }

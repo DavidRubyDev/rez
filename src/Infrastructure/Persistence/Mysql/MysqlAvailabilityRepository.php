@@ -119,7 +119,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
     {
         return new AvailabilityOverride(
             ResourceId::fromString($this->str($row['resource_id'])),
-            new DateTimeImmutable($this->str($row['date'])),
+            new DateTimeImmutable($this->str($row['date']), new \DateTimeZone('UTC')),
             $this->bool($row['available']),
         );
     }

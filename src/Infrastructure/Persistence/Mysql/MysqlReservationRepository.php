@@ -157,12 +157,14 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     /** @param array<string, mixed> $row */
     private function hydrate(array $row): Reservation
     {
+        $utc = new \DateTimeZone('UTC');
+
         return Reservation::reconstruct(
             ReservationId::fromString($this->str($row['id'])),
             $this->loadResourceIds($this->str($row['id'])),
             new TimeSlot(
-                new DateTimeImmutable($this->str($row['start_at'])),
-                new DateTimeImmutable($this->str($row['end_at'])),
+                new DateTimeImmutable($this->str($row['start_at']), $utc),
+                new DateTimeImmutable($this->str($row['end_at']), $utc),
             ),
             new Party(
                 $this->str($row['party_name']),
@@ -172,7 +174,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
                 $this->nullStr($row['external_ref']),
             ),
             $this->statusMapper->fromString($this->str($row['status'])),
-            new DateTimeImmutable($this->str($row['created_at'])),
+            new DateTimeImmutable($this->str($row['created_at']), $utc),
         );
     }
 

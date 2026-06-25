@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Tests\Integration\Persistence\Mysql;
 
 use DateTimeImmutable;
+use DateTimeZone;
 use Rez\Domain\Exception\ReservationNotFoundException;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
@@ -159,5 +160,29 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $found = $this->repository->findById($reservation->id);
 
         $this->assertNull($found->party->externalRef);
+    }
+
+    public function testCreatedAtIsHydratedAsUtc(): void
+    {
+        $reservation = $this->makeReservation();
+        $this->repository->save($reservation);
+
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertSame('UTC', $found->createdAt->getTimezone()->getName());
+    }
+
+    public function testSlotTimestampsAreHydratedAsUtc(): void
+    {
+        $reservation = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-15 10:00:00', new DateTimeZone('UTC')),
+            new DateTimeImmutable('2024-01-15 11:00:00', new DateTimeZone('UTC')),
+        ));
+        $this->repository->save($reservation);
+
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertSame('UTC', $found->slot->start->getTimezone()->getName());
+        $this->assertSame('UTC', $found->slot->end->getTimezone()->getName());
     }
 }
