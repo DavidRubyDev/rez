@@ -71,7 +71,7 @@ final class AvailabilityService implements AvailabilityServiceInterface
     private function findRuleForDate(array $rules, DateTimeImmutable $date): ?AvailabilityRule
     {
         foreach ($rules as $rule) {
-            if ($rule->appliesToDate($date)) {
+            if ($rule->appliesToDate($date) && $rule->isActiveOn($date)) {
                 return $rule;
             }
         }

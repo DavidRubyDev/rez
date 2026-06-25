@@ -196,7 +196,10 @@ class AvailabilityServiceTest extends TestCase
     public function testGetAvailableSlotsReturnsEmptyWhenRuleValidUntilIsInPast(): void
     {
         $expiredRule = new AvailabilityRule(
-            $this->resourceId, DayOfWeek::Monday, '10:00', '12:00',
+            $this->resourceId,
+            DayOfWeek::Monday,
+            '10:00',
+            '12:00',
             validUntil: new DateTimeImmutable('2024-01-14', new \DateTimeZone('UTC')),
         );
 
@@ -211,7 +214,10 @@ class AvailabilityServiceTest extends TestCase
     public function testGetAvailableSlotsReturnsEmptyWhenRuleValidFromIsInFuture(): void
     {
         $futureRule = new AvailabilityRule(
-            $this->resourceId, DayOfWeek::Monday, '10:00', '12:00',
+            $this->resourceId,
+            DayOfWeek::Monday,
+            '10:00',
+            '12:00',
             validFrom: new DateTimeImmutable('2024-01-16', new \DateTimeZone('UTC')),
         );
 
@@ -226,7 +232,10 @@ class AvailabilityServiceTest extends TestCase
     public function testGetAvailableSlotsUsesRuleWhenDateIsWithinBounds(): void
     {
         $boundedRule = new AvailabilityRule(
-            $this->resourceId, DayOfWeek::Monday, '10:00', '12:00',
+            $this->resourceId,
+            DayOfWeek::Monday,
+            '10:00',
+            '12:00',
             validFrom:  new DateTimeImmutable('2024-01-01', new \DateTimeZone('UTC')),
             validUntil: new DateTimeImmutable('2024-03-31', new \DateTimeZone('UTC')),
         );
