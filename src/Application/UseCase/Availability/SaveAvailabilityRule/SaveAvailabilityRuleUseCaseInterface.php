@@ -9,6 +9,7 @@ interface SaveAvailabilityRuleUseCaseInterface
     /**
      * @throws \Rez\Domain\Exception\ResourceNotFoundException
      * @throws \Rez\Application\Exception\DatabaseException
+     * @throws \InvalidArgumentException
      */
     public function execute(SaveAvailabilityRuleRequest $request): SaveAvailabilityRuleResponse;
 }

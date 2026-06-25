@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Availability\SaveAvailabilityRule;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
@@ -17,7 +19,10 @@ final class SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseIn
     ) {
     }
 
-    /** @throws \Rez\Domain\Exception\ResourceNotFoundException */
+    /**
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     * @throws \InvalidArgumentException
+     */
     public function execute(SaveAvailabilityRuleRequest $request): SaveAvailabilityRuleResponse
     {
         try {
@@ -26,11 +31,21 @@ final class SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseIn
             throw new DatabaseException('Failed to load resource.', 0, $e);
         }
 
+        $utc       = new DateTimeZone('UTC');
+        $validFrom = $this->parseDate($request->validFrom, 'validFrom', $utc);
+        $validUntil = $this->parseDate($request->validUntil, 'validUntil', $utc);
+
+        if ($validFrom !== null && $validUntil !== null && $validFrom > $validUntil) {
+            throw new \InvalidArgumentException('validFrom must not be after validUntil.');
+        }
+
         $rule = new AvailabilityRule(
             $request->resourceId,
             $request->dayOfWeek,
             $request->openTime,
             $request->closeTime,
+            validFrom:  $validFrom,
+            validUntil: $validUntil,
         );
 
         try {
@@ -40,5 +55,21 @@ final class SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseIn
         }
 
         return new SaveAvailabilityRuleResponse($rule);
+    }
+
+    /** @throws \InvalidArgumentException */
+    private function parseDate(?string $value, string $field, DateTimeZone $utc): ?DateTimeImmutable
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $date = DateTimeImmutable::createFromFormat('Y-m-d', $value, $utc);
+
+        if ($date === false || $date->format('Y-m-d') !== $value) {
+            throw new \InvalidArgumentException("Invalid date format for {$field}: expected Y-m-d.");
+        }
+
+        return $date->setTime(0, 0);
     }
 }
