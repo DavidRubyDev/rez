@@ -4,12 +4,18 @@ declare(strict_types=1);
 
 use Rez\Application\Service\AvailabilityService;
 use Rez\Application\Service\AvailabilityServiceInterface;
+use Rez\Application\UseCase\Availability\DeleteAvailabilityOverride\DeleteAvailabilityOverrideUseCase;
+use Rez\Application\UseCase\Availability\DeleteAvailabilityOverride\DeleteAvailabilityOverrideUseCaseInterface;
+use Rez\Application\UseCase\Availability\DeleteAvailabilityRule\DeleteAvailabilityRuleUseCase;
+use Rez\Application\UseCase\Availability\DeleteAvailabilityRule\DeleteAvailabilityRuleUseCaseInterface;
 use Rez\Application\UseCase\Availability\GetAvailability\GetAvailabilityUseCase;
 use Rez\Application\UseCase\Availability\GetAvailability\GetAvailabilityUseCaseInterface;
 use Rez\Application\UseCase\Availability\SaveAvailabilityOverride\SaveAvailabilityOverrideUseCase;
 use Rez\Application\UseCase\Availability\SaveAvailabilityOverride\SaveAvailabilityOverrideUseCaseInterface;
 use Rez\Application\UseCase\Availability\SaveAvailabilityRule\SaveAvailabilityRuleUseCase;
 use Rez\Application\UseCase\Availability\SaveAvailabilityRule\SaveAvailabilityRuleUseCaseInterface;
+use Rez\Application\UseCase\Reservation\BulkCancelReservations\BulkCancelReservationsUseCase;
+use Rez\Application\UseCase\Reservation\BulkCancelReservations\BulkCancelReservationsUseCaseInterface;
 use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationUseCase;
 use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationUseCaseInterface;
 use Rez\Application\UseCase\Reservation\ConfirmReservation\ConfirmReservationUseCase;
@@ -49,14 +55,17 @@ use function DI\autowire;
 return [
     AvailabilityServiceInterface::class      => autowire(AvailabilityService::class),
     CreateReservationUseCaseInterface::class  => autowire(CreateReservationUseCase::class),
-    CancelReservationUseCaseInterface::class  => autowire(CancelReservationUseCase::class),
+    BulkCancelReservationsUseCaseInterface::class => autowire(BulkCancelReservationsUseCase::class),
+    CancelReservationUseCaseInterface::class      => autowire(CancelReservationUseCase::class),
     ConfirmReservationUseCaseInterface::class => autowire(ConfirmReservationUseCase::class),
     MarkNoShowUseCaseInterface::class         => autowire(MarkNoShowUseCase::class),
     GetReservationUseCaseInterface::class     => autowire(GetReservationUseCase::class),
     ListReservationsUseCaseInterface::class   => autowire(ListReservationsUseCase::class),
-    GetAvailabilityUseCaseInterface::class          => autowire(GetAvailabilityUseCase::class),
-    SaveAvailabilityRuleUseCaseInterface::class     => autowire(SaveAvailabilityRuleUseCase::class),
-    SaveAvailabilityOverrideUseCaseInterface::class => autowire(SaveAvailabilityOverrideUseCase::class),
+    GetAvailabilityUseCaseInterface::class               => autowire(GetAvailabilityUseCase::class),
+    SaveAvailabilityRuleUseCaseInterface::class          => autowire(SaveAvailabilityRuleUseCase::class),
+    DeleteAvailabilityRuleUseCaseInterface::class        => autowire(DeleteAvailabilityRuleUseCase::class),
+    SaveAvailabilityOverrideUseCaseInterface::class      => autowire(SaveAvailabilityOverrideUseCase::class),
+    DeleteAvailabilityOverrideUseCaseInterface::class    => autowire(DeleteAvailabilityOverrideUseCase::class),
     CreateResourceUseCaseInterface::class     => autowire(CreateResourceUseCase::class),
     GetResourceUseCaseInterface::class        => autowire(GetResourceUseCase::class),
     ListResourcesUseCaseInterface::class      => autowire(ListResourcesUseCase::class),
