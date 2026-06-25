@@ -162,6 +162,23 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $this->assertNull($found->party->externalRef);
     }
 
+    public function testCancelledReservationsAreExcludedFromOverlapQuery(): void
+    {
+        $slot = new TimeSlot(
+            new DateTimeImmutable('2024-01-15 10:00:00', new DateTimeZone('UTC')),
+            new DateTimeImmutable('2024-01-15 11:00:00', new DateTimeZone('UTC')),
+        );
+        $reservation = $this->makeReservation($slot);
+        $this->repository->save($reservation);
+
+        $cancelled = $reservation->cancel();
+        $this->repository->save($cancelled);
+
+        $result = $this->repository->findByTimeSlotAndResource($slot, $this->resourceId);
+
+        $this->assertSame(0, $result->count());
+    }
+
     public function testCreatedAtIsHydratedAsUtc(): void
     {
         $reservation = $this->makeReservation();
