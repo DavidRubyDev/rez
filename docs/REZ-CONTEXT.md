@@ -77,7 +77,7 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 - `ResourceCollection` — immutable collection
 
 #### Availability (COMPLETE)
-- `AvailabilityRule` — value object. Per-resource, per-day-of-week open/close times.
+- `AvailabilityRule` — value object. Per-resource, per-day-of-week open/close times. Optional `validFrom` and `validUntil` date bounds (both nullable `DateTimeImmutable`). A null bound means unbounded in that direction — null `validUntil` means the rule recurs forever.
 - `AvailabilityOverride` — value object. Per-resource, per-date available/blocked.
 - `AvailabilityWindow` — value object. Resolved available `TimeSlot[]` for a resource on a date.
 - `DayOfWeek` — pure enum. Monday-first (ISO-8601). String mapping in `DayOfWeekMapper`.
@@ -159,6 +159,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `JwtService` | JWT generation and validation using `firebase/php-jwt` | NOT YET BUILT |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
+| `LoggerInterface` (PSR-3) | Injected via container. `NullLogger` default. Concrete implementation (Monolog) lives in `rez-starter`. | NOT YET BUILT |
 
 ### 3.5 Use cases (Application/UseCase/)
 
@@ -238,6 +239,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 `PlatformConfig` is constructed by the client app and injected via PHP-DI. It is the single root of all feature configuration.
 
 `PlatformConfig` — COMPLETE (needs update). `UsersConfig` becomes required (not optional). Dependency chain simplified — users no longer a prerequisite check since they are always present. `hasMailer/Payments/Credits/Subscriptions(): bool`. `hasUsers()` removed — always true.
+`ReservationsConfig` — NOT YET BUILT. `autoConfirm: bool` (default false). Always required alongside `MailerConfig` and `UsersConfig`. When true, `CreateReservationUseCase` transitions the reservation to `Confirmed` immediately after saving, before returning.
 `MailerConfig` — COMPLETE. `fromAddress` (validated email), `fromName` (non-empty string).
 `UsersConfig` — COMPLETE (needs update). Now required. Gains `cancellationSecret` field (non-empty string, separate from `jwtSecret`). Fields: `jwtSecret`, `cancellationSecret`, `jwtTtlSeconds` (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1).
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
@@ -249,6 +251,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 PlatformConfig
   ├── MailerConfig          always required (fromAddress, fromName)
   ├── UsersConfig           always required (jwtSecret, cancellationSecret, jwtTtlSeconds, passwordResetTtlMinutes)
+  ├── ReservationsConfig    always required (autoConfirm)
   ├── PaymentsConfig?       currency, webhookSecret
   ├── CreditsConfig?        minimumTopUpAmount, currency
   └── SubscriptionsConfig?  PlanConfig[]
@@ -283,7 +286,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `resources` | id, type, name, capacity, attributes (JSON) |
 | `reservations` | id, status, start_at, end_at, party_name, party_email, party_size, party_phone, party_external_ref, created_at |
 | `reservation_resources` | reservation_id, resource_id (many-to-many join) |
-| `availability_rules` | resource_id, day_of_week, open_time (CHAR 5), close_time (CHAR 5) |
+| `availability_rules` | resource_id, day_of_week, open_time (CHAR 5), close_time (CHAR 5), valid_from (DATE nullable), valid_until (DATE nullable) |
 | `availability_overrides` | resource_id, date, available (TINYINT) |
 
 #### Not yet built
@@ -590,15 +593,19 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 3. `rez-mailer-newsletter` — **COMPLETE**
 4. `rez-throws-phpdoc` — **COMPLETE** (`@throws` PHPDoc backfill across all public methods)
 5. `rez-pdo-exceptions` — **COMPLETE** (DatabaseException, PDO wrapping in all MySQL repositories, use case re-throw with context messages, 503 mapping documented)
-6. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; Feature enum drops Users; dependency chain update; PlatformConfig constructor update
-7. `rez-guest-cancellation` — CancellationToken value object, HMAC verification in CancelReservationUseCase, cancellationUrl in confirmation email
-8. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
-9. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
-10. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
-11. `rez-credits` — Wallet, WalletTransaction, wallet use cases
-12. `rez-subscriptions` — Subscription, Plan, subscription use cases
-13. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
-14. `rez-deprecate-handlers` — @deprecated on all Handler classes, update examples/slim/
+6. `rez-testing-fixes` — Bug fixes: created_at UTC, cancelled slot not freed, DB-down 503, seed directory split (schema-only vs --fill), autoConfirm flag in ReservationsConfig
+7. `rez-availability-bounds` — validFrom/validUntil on AvailabilityRule; AvailabilityService respects bounds when resolving slots
+8. `rez-psr-logging` — PSR-3 LoggerInterface injected into use cases and services; NullLogger default; log points: exceptions, HMAC failures, email failures, DatabaseException
+9. `rez-starter-logging` — Monolog wired as PSR-3 implementation; rotating file handler; request/response middleware logger; exception middleware logs with stack trace
+10. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; ReservationsConfig added; Feature enum drops Users; dependency chain update
+11. `rez-guest-cancellation` — CancellationToken value object, HMAC verification in CancelReservationUseCase, cancellationUrl in confirmation email
+12. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
+13. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
+14. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
+15. `rez-credits` — Wallet, WalletTransaction, wallet use cases
+16. `rez-subscriptions` — Subscription, Plan, subscription use cases
+17. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
+18. `rez-deprecate-handlers` — @deprecated on all Handler classes, update examples/slim/
 
 ### `rez-starter`
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
