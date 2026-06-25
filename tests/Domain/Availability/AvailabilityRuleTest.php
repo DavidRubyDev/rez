@@ -58,4 +58,20 @@ class AvailabilityRuleTest extends TestCase
 
         $this->assertSame('2024-01-15 17:00', $result->format('Y-m-d H:i'));
     }
+
+    public function testOpenTimeForDateReturnsUtcTimezone(): void
+    {
+        $rule   = new AvailabilityRule(ResourceId::generate(), DayOfWeek::Monday, '09:00', '17:00');
+        $result = $rule->openTimeForDate(new DateTimeImmutable('2024-01-15', new \DateTimeZone('UTC')));
+
+        $this->assertSame('UTC', $result->getTimezone()->getName());
+    }
+
+    public function testCloseTimeForDateReturnsUtcTimezone(): void
+    {
+        $rule   = new AvailabilityRule(ResourceId::generate(), DayOfWeek::Monday, '09:00', '17:00');
+        $result = $rule->closeTimeForDate(new DateTimeImmutable('2024-01-15', new \DateTimeZone('UTC')));
+
+        $this->assertSame('UTC', $result->getTimezone()->getName());
+    }
 }

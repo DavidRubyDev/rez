@@ -905,3 +905,45 @@ Context messages: "Failed to load reservation.", "Failed to save reservation.", 
 **Sub-step 6 — Document `DatabaseException → 503` mapping:** Added `DatabaseException → 503` row to the exception/HTTP mapping table in `docs/REZ-CONTEXT.md`. Marked `rez-pdo-exceptions` as COMPLETE in pending scaffold list.
 
 334 tests (27 skipped — all integration), PHPStan max clean, CS clean. `05_rez-pdo-exceptions.md` fully complete.
+
+---
+
+### 61. UTC timezone fix (`06_rez-testing-fixes.md` step 1)
+
+All `DateTimeImmutable` instances inside `rez` now use an explicit UTC timezone — never relying on server default.
+
+**Domain:** `AvailabilityRule::openTimeForDate()` and `closeTimeForDate()` — both now construct with `new \DateTimeZone('UTC')`.
+
+**Infrastructure:** `MysqlReservationRepository::hydrate()` — `start_at`, `end_at`, and `created_at` now all constructed with UTC. `MysqlAvailabilityRepository::hydrateOverride()` — `date` column now constructed with UTC.
+
+**Handlers:** `CreateReservationHandler`, `ListReservationsHandler`, `GetAvailabilityHandler`, `SaveAvailabilityOverrideHandler` — all user-input date strings now parsed with explicit UTC timezone.
+
+2 new tests: `testOpenTimeForDateReturnsUtcTimezone`, `testCloseTimeForDateReturnsUtcTimezone` in `AvailabilityRuleTest`. 2 new integration tests: `testCreatedAtIsHydratedAsUtc`, `testSlotTimestampsAreHydratedAsUtc` in `MysqlReservationRepositoryTest` (skipped locally).
+
+338 tests (29 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 62. Cancelled reservations freed from availability (`06_rez-testing-fixes.md` step 2)
+
+`MysqlReservationRepository::findByTimeSlotAndResource()` now filters out cancelled reservations with `AND r.status != :cancelled_status`, where the status string is resolved via `ReservationStatusMapper::toString(ReservationStatus::Cancelled)` — the mapper remains the single source of truth. `ReservationStatus` added to imports.
+
+1 new integration test: `testCancelledReservationsAreExcludedFromOverlapQuery` (skipped locally).
+
+339 tests (30 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 63. `ReservationsConfig` + `autoConfirm` on `CreateReservationUseCase` (`06_rez-testing-fixes.md` step 5)
+
+`src/Application/Config/ReservationsConfig.php` — immutable config value object. Single field: `public readonly bool $autoConfirm = false`. No validation needed — bool cannot be invalid.
+
+`PlatformConfig` — `ReservationsConfig $reservations` added as a required second constructor parameter (after `MailerConfig`, before all optionals). All test callsites updated to use named arguments.
+
+`CreateReservationUseCase` — `PlatformConfig` injected via constructor. If `$config->reservations->autoConfirm` is true, calls `$reservation->confirm()` in memory before saving — always a single DB write regardless of autoConfirm value.
+
+`CreateReservationResponse` unchanged — status already accessible via `$response->reservation->status`.
+
+3 new tests: `ReservationsConfigTest` (2 cases), `testAutoConfirmFalseLeavesPending`, `testAutoConfirmTrueConfirmsImmediately`. Existing `PlatformConfigTest` (17 tests) and `FeatureGuardTest` (8 tests) updated to named args.
+
+344 tests (30 skipped — all integration), PHPStan max clean, CS clean. `06_rez-testing-fixes.md` steps 1, 2, 5 complete (steps 3, 4 are rez-starter only).

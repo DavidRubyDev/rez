@@ -24,7 +24,7 @@ final class SaveAvailabilityOverrideHandler
     {
         $response = $this->useCase->execute(new SaveAvailabilityOverrideRequest(
             ResourceId::fromString($data['resource_id']),
-            new DateTimeImmutable($data['date']),
+            new DateTimeImmutable($data['date'], new \DateTimeZone('UTC')),
             $data['available'],
         ));
 
