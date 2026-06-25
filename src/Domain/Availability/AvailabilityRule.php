@@ -17,6 +17,8 @@ final class AvailabilityRule
         public readonly DayOfWeek $dayOfWeek,
         public readonly string $openTime,
         public readonly string $closeTime,
+        public readonly ?DateTimeImmutable $validFrom = null,
+        public readonly ?DateTimeImmutable $validUntil = null,
     ) {
         if ($closeTime <= $openTime) {
             throw new \InvalidArgumentException('Close time must be after open time.');
@@ -26,6 +28,28 @@ final class AvailabilityRule
     public function appliesToDate(DateTimeImmutable $date): bool
     {
         return DayOfWeek::fromDate($date) === $this->dayOfWeek;
+    }
+
+    public function isActiveOn(DateTimeImmutable $date): bool
+    {
+        $utc = new \DateTimeZone('UTC');
+        $day = new DateTimeImmutable($date->format('Y-m-d'), $utc);
+
+        if ($this->validFrom !== null) {
+            $from = new DateTimeImmutable($this->validFrom->format('Y-m-d'), $utc);
+            if ($day < $from) {
+                return false;
+            }
+        }
+
+        if ($this->validUntil !== null) {
+            $until = new DateTimeImmutable($this->validUntil->format('Y-m-d'), $utc);
+            if ($day > $until) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function openTimeForDate(DateTimeImmutable $date): DateTimeImmutable

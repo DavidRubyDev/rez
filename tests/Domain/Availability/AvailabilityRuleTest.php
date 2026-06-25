@@ -59,6 +59,134 @@ class AvailabilityRuleTest extends TestCase
         $this->assertSame('2024-01-15 17:00', $result->format('Y-m-d H:i'));
     }
 
+    public function testIsActiveOnReturnsTrueWithNoBounds(): void
+    {
+        $rule = new AvailabilityRule(ResourceId::generate(), DayOfWeek::Monday, '09:00', '17:00');
+
+        $this->assertTrue($rule->isActiveOn(new DateTimeImmutable('2024-01-15')));
+    }
+
+    public function testIsActiveOnReturnsFalseWhenBeforeValidFrom(): void
+    {
+        $rule = new AvailabilityRule(
+            ResourceId::generate(),
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom: new DateTimeImmutable('2024-01-01', new \DateTimeZone('UTC')),
+        );
+
+        $this->assertFalse($rule->isActiveOn(new DateTimeImmutable('2023-12-31', new \DateTimeZone('UTC'))));
+    }
+
+    public function testIsActiveOnReturnsTrueWhenEqualToValidFrom(): void
+    {
+        $rule = new AvailabilityRule(
+            ResourceId::generate(),
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom: new DateTimeImmutable('2024-01-01', new \DateTimeZone('UTC')),
+        );
+
+        $this->assertTrue($rule->isActiveOn(new DateTimeImmutable('2024-01-01', new \DateTimeZone('UTC'))));
+    }
+
+    public function testIsActiveOnReturnsTrueWhenAfterValidFrom(): void
+    {
+        $rule = new AvailabilityRule(
+            ResourceId::generate(),
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom: new DateTimeImmutable('2024-01-01', new \DateTimeZone('UTC')),
+        );
+
+        $this->assertTrue($rule->isActiveOn(new DateTimeImmutable('2024-06-15', new \DateTimeZone('UTC'))));
+    }
+
+    public function testIsActiveOnReturnsTrueWhenBeforeValidUntil(): void
+    {
+        $rule = new AvailabilityRule(
+            ResourceId::generate(),
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validUntil: new DateTimeImmutable('2024-03-31', new \DateTimeZone('UTC')),
+        );
+
+        $this->assertTrue($rule->isActiveOn(new DateTimeImmutable('2024-01-15', new \DateTimeZone('UTC'))));
+    }
+
+    public function testIsActiveOnReturnsTrueWhenEqualToValidUntil(): void
+    {
+        $rule = new AvailabilityRule(
+            ResourceId::generate(),
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validUntil: new DateTimeImmutable('2024-03-31', new \DateTimeZone('UTC')),
+        );
+
+        $this->assertTrue($rule->isActiveOn(new DateTimeImmutable('2024-03-31', new \DateTimeZone('UTC'))));
+    }
+
+    public function testIsActiveOnReturnsFalseWhenAfterValidUntil(): void
+    {
+        $rule = new AvailabilityRule(
+            ResourceId::generate(),
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validUntil: new DateTimeImmutable('2024-03-31', new \DateTimeZone('UTC')),
+        );
+
+        $this->assertFalse($rule->isActiveOn(new DateTimeImmutable('2024-04-01', new \DateTimeZone('UTC'))));
+    }
+
+    public function testIsActiveOnReturnsTrueWhenDateInsideBothBounds(): void
+    {
+        $rule = new AvailabilityRule(
+            ResourceId::generate(),
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom:  new DateTimeImmutable('2024-01-01', new \DateTimeZone('UTC')),
+            validUntil: new DateTimeImmutable('2024-03-31', new \DateTimeZone('UTC')),
+        );
+
+        $this->assertTrue($rule->isActiveOn(new DateTimeImmutable('2024-02-15', new \DateTimeZone('UTC'))));
+    }
+
+    public function testIsActiveOnReturnsFalseWhenDateOutsideBothBounds(): void
+    {
+        $rule = new AvailabilityRule(
+            ResourceId::generate(),
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom:  new DateTimeImmutable('2024-01-01', new \DateTimeZone('UTC')),
+            validUntil: new DateTimeImmutable('2024-03-31', new \DateTimeZone('UTC')),
+        );
+
+        $this->assertFalse($rule->isActiveOn(new DateTimeImmutable('2024-05-01', new \DateTimeZone('UTC'))));
+    }
+
+    public function testIsActiveOnIgnoresTimeComponent(): void
+    {
+        $rule = new AvailabilityRule(
+            ResourceId::generate(),
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom:  new DateTimeImmutable('2024-01-15', new \DateTimeZone('UTC')),
+            validUntil: new DateTimeImmutable('2024-01-15', new \DateTimeZone('UTC')),
+        );
+
+        $this->assertTrue($rule->isActiveOn(new DateTimeImmutable('2024-01-15 00:00:00', new \DateTimeZone('UTC'))));
+        $this->assertTrue($rule->isActiveOn(new DateTimeImmutable('2024-01-15 23:59:59', new \DateTimeZone('UTC'))));
+    }
+
     public function testOpenTimeForDateReturnsUtcTimezone(): void
     {
         $rule   = new AvailabilityRule(ResourceId::generate(), DayOfWeek::Monday, '09:00', '17:00');

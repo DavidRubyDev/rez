@@ -89,6 +89,8 @@ abstract class MysqlIntegrationTestCase extends TestCase
                 day_of_week  VARCHAR(10) NOT NULL,
                 open_time    CHAR(5)     NOT NULL,
                 close_time   CHAR(5)     NOT NULL,
+                valid_from   DATE        NULL DEFAULT NULL,
+                valid_until  DATE        NULL DEFAULT NULL,
                 PRIMARY KEY (resource_id, day_of_week)
             )
         ');

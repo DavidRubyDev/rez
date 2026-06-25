@@ -593,8 +593,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 3. `rez-mailer-newsletter` — **COMPLETE**
 4. `rez-throws-phpdoc` — **COMPLETE** (`@throws` PHPDoc backfill across all public methods)
 5. `rez-pdo-exceptions` — **COMPLETE** (DatabaseException, PDO wrapping in all MySQL repositories, use case re-throw with context messages, 503 mapping documented)
-6. `rez-testing-fixes` — Bug fixes: created_at UTC, cancelled slot not freed, DB-down 503, seed directory split (schema-only vs --fill), autoConfirm flag in ReservationsConfig
-7. `rez-availability-bounds` — validFrom/validUntil on AvailabilityRule; AvailabilityService respects bounds when resolving slots
+6. `rez-testing-fixes` — **COMPLETE** (UTC fix, cancelled slot freed, autoConfirm in ReservationsConfig; rez-starter steps skipped)
+7. `rez-availability-bounds` — **COMPLETE** (validFrom/validUntil on AvailabilityRule + isActiveOn(); AvailabilityService filters by bounds; schema columns + repository hydration; SaveAvailabilityRuleRequest/UseCase validates and parses bounds; step 5 rez-starter skipped)
 8. `rez-psr-logging` — PSR-3 LoggerInterface injected into use cases and services; NullLogger default; log points: exceptions, HMAC failures, email failures, DatabaseException
 9. `rez-starter-logging` — Monolog wired as PSR-3 implementation; rotating file handler; request/response middleware logger; exception middleware logs with stack trace
 10. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; ReservationsConfig added; Feature enum drops Users; dependency chain update

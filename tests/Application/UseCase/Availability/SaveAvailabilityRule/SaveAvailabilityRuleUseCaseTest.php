@@ -119,4 +119,67 @@ class SaveAvailabilityRuleUseCaseTest extends TestCase
         $this->assertSame('09:00', $response->rule->openTime);
         $this->assertSame('17:00', $response->rule->closeTime);
     }
+
+    public function testInvalidValidFromFormatThrows(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->useCase->execute(new SaveAvailabilityRuleRequest(
+            $this->resource->id,
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom: 'not-a-date',
+        ));
+    }
+
+    public function testInvalidValidUntilFormatThrows(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->useCase->execute(new SaveAvailabilityRuleRequest(
+            $this->resource->id,
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validUntil: 'not-a-date',
+        ));
+    }
+
+    public function testValidFromAfterValidUntilThrows(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->useCase->execute(new SaveAvailabilityRuleRequest(
+            $this->resource->id,
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom:  '2024-06-01',
+            validUntil: '2024-01-01',
+        ));
+    }
+
+    public function testBoundsArePassedToRule(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+
+        $response = $this->useCase->execute(new SaveAvailabilityRuleRequest(
+            $this->resource->id,
+            DayOfWeek::Monday,
+            '09:00',
+            '17:00',
+            validFrom:  '2024-01-01',
+            validUntil: '2024-03-31',
+        ));
+
+        $this->assertSame('2024-01-01', $response->rule->validFrom?->format('Y-m-d'));
+        $this->assertSame('2024-03-31', $response->rule->validUntil?->format('Y-m-d'));
+    }
 }

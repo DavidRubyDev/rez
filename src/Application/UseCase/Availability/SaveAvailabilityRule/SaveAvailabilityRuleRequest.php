@@ -14,6 +14,8 @@ final class SaveAvailabilityRuleRequest
         public readonly DayOfWeek $dayOfWeek,
         public readonly string $openTime,
         public readonly string $closeTime,
+        public readonly ?string $validFrom = null,
+        public readonly ?string $validUntil = null,
     ) {
     }
 }
