@@ -905,3 +905,19 @@ Context messages: "Failed to load reservation.", "Failed to save reservation.", 
 **Sub-step 6 — Document `DatabaseException → 503` mapping:** Added `DatabaseException → 503` row to the exception/HTTP mapping table in `docs/REZ-CONTEXT.md`. Marked `rez-pdo-exceptions` as COMPLETE in pending scaffold list.
 
 334 tests (27 skipped — all integration), PHPStan max clean, CS clean. `05_rez-pdo-exceptions.md` fully complete.
+
+---
+
+### 61. UTC timezone fix (`06_rez-testing-fixes.md` step 1)
+
+All `DateTimeImmutable` instances inside `rez` now use an explicit UTC timezone — never relying on server default.
+
+**Domain:** `AvailabilityRule::openTimeForDate()` and `closeTimeForDate()` — both now construct with `new \DateTimeZone('UTC')`.
+
+**Infrastructure:** `MysqlReservationRepository::hydrate()` — `start_at`, `end_at`, and `created_at` now all constructed with UTC. `MysqlAvailabilityRepository::hydrateOverride()` — `date` column now constructed with UTC.
+
+**Handlers:** `CreateReservationHandler`, `ListReservationsHandler`, `GetAvailabilityHandler`, `SaveAvailabilityOverrideHandler` — all user-input date strings now parsed with explicit UTC timezone.
+
+2 new tests: `testOpenTimeForDateReturnsUtcTimezone`, `testCloseTimeForDateReturnsUtcTimezone` in `AvailabilityRuleTest`. 2 new integration tests: `testCreatedAtIsHydratedAsUtc`, `testSlotTimestampsAreHydratedAsUtc` in `MysqlReservationRepositoryTest` (skipped locally).
+
+338 tests (29 skipped — all integration), PHPStan max clean, CS clean.
