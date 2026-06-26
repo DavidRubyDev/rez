@@ -10,6 +10,10 @@ use Rez\Application\UseCase\Availability\DeleteAvailabilityRule\DeleteAvailabili
 use Rez\Application\UseCase\Availability\DeleteAvailabilityRule\DeleteAvailabilityRuleUseCaseInterface;
 use Rez\Application\UseCase\Availability\GetAvailability\GetAvailabilityUseCase;
 use Rez\Application\UseCase\Availability\GetAvailability\GetAvailabilityUseCaseInterface;
+use Rez\Application\UseCase\Availability\GetAvailabilityOverrides\GetAvailabilityOverridesUseCase;
+use Rez\Application\UseCase\Availability\GetAvailabilityOverrides\GetAvailabilityOverridesUseCaseInterface;
+use Rez\Application\UseCase\Availability\GetAvailabilityRules\GetAvailabilityRulesUseCase;
+use Rez\Application\UseCase\Availability\GetAvailabilityRules\GetAvailabilityRulesUseCaseInterface;
 use Rez\Application\UseCase\Availability\SaveAvailabilityOverride\SaveAvailabilityOverrideUseCase;
 use Rez\Application\UseCase\Availability\SaveAvailabilityOverride\SaveAvailabilityOverrideUseCaseInterface;
 use Rez\Application\UseCase\Availability\SaveAvailabilityRule\SaveAvailabilityRuleUseCase;
@@ -62,6 +66,8 @@ return [
     GetReservationUseCaseInterface::class     => autowire(GetReservationUseCase::class),
     ListReservationsUseCaseInterface::class   => autowire(ListReservationsUseCase::class),
     GetAvailabilityUseCaseInterface::class               => autowire(GetAvailabilityUseCase::class),
+    GetAvailabilityRulesUseCaseInterface::class          => autowire(GetAvailabilityRulesUseCase::class),
+    GetAvailabilityOverridesUseCaseInterface::class      => autowire(GetAvailabilityOverridesUseCase::class),
     SaveAvailabilityRuleUseCaseInterface::class          => autowire(SaveAvailabilityRuleUseCase::class),
     DeleteAvailabilityRuleUseCaseInterface::class        => autowire(DeleteAvailabilityRuleUseCase::class),
     SaveAvailabilityOverrideUseCaseInterface::class      => autowire(SaveAvailabilityOverrideUseCase::class),
