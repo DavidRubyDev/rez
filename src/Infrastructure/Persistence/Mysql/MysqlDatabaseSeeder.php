@@ -17,7 +17,12 @@ final class MysqlDatabaseSeeder implements DatabaseSeederInterface
 
     public static function seedsPath(): string
     {
-        return dirname(__DIR__, 4) . '/database/seeds';
+        return dirname(__DIR__, 4) . '/database/seeds/schema';
+    }
+
+    public static function dataPath(): string
+    {
+        return dirname(__DIR__, 4) . '/database/seeds/data';
     }
 
     /**
