@@ -1017,3 +1017,17 @@ All three use case interfaces registered in `config/container.php`. Integration 
 Client apps compose seed directories by calling these path helpers and passing the result to `SeedDatabaseRequest`. `rez-starter/bin/seed.php` is the canonical entry point.
 
 381 tests (34 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 68. GetAvailabilityRulesUseCase + GetAvailabilityOverridesUseCase
+
+Two new read use cases for the availability module, following the standard Request/Response/UseCase/Interface pattern.
+
+**GetAvailabilityRulesUseCase** — returns all `AvailabilityRule[]` for a given `ResourceId`. Delegates to `availabilityRepository->findRulesForResource()`. Wraps `DatabaseException` with context message "Failed to get availability rules."
+
+**GetAvailabilityOverridesUseCase** — returns all `AvailabilityOverride[]` for a given `ResourceId` within a `DateTimeImmutable $from` / `$to` date range. Delegates to `availabilityRepository->findOverridesForResource()`. Wraps `DatabaseException` with context message "Failed to get availability overrides."
+
+Both interfaces registered in `config/container.php`.
+
+8 new tests (4 per use case). Total: 389 unit tests passing (34 skipped — all integration), PHPStan max clean, CS clean.
