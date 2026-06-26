@@ -40,6 +40,13 @@ Every operation is also exposed through a handler with a single `handle(array $d
 | `SaveAvailabilityRuleHandler` | `resource_id`, `day_of_week` (`monday`–`sunday`), `open_time` (`HH:MM`), `close_time` (`HH:MM`) | Rule |
 | `SaveAvailabilityOverrideHandler` | `resource_id`, `date`, `available` | Override |
 | `GetAvailabilityHandler` | `resource_id`, `date`, `slot_duration_minutes?` | Availability window |
+
+The following operations have no handler — call the use case interface directly via your DI container:
+
+| Use case interface | Input | Output |
+|---|---|---|
+| `GetAvailabilityRulesUseCaseInterface` | `GetAvailabilityRulesRequest(ResourceId)` | `GetAvailabilityRulesResponse(AvailabilityRule[])` |
+| `GetAvailabilityOverridesUseCaseInterface` | `GetAvailabilityOverridesRequest(ResourceId, DateTimeImmutable $from, DateTimeImmutable $to)` | `GetAvailabilityOverridesResponse(AvailabilityOverride[])` |
 | `CreateReservationHandler` | `resource_ids[]`, `start`, `end`, `party{name,email,size,phone?}` | Reservation |
 | `GetReservationHandler` | `id` | Reservation |
 | `ListReservationsHandler` | `from?`, `to?`, `resource_id?` | Reservation[] |

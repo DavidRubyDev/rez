@@ -174,7 +174,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `JwtService` | JWT generation and validation using `firebase/php-jwt` | NOT YET BUILT |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
-| `LoggerInterface` (PSR-3) | Injected via container. `NullLogger` default. Concrete implementation (Monolog) lives in `rez-starter`. | NOT YET BUILT |
+| `LoggerInterface` (PSR-3) | Injected via container. `NullLogger` default. Concrete implementation (Monolog) wired in `rez-starter`. | COMPLETE |
 
 ### 3.5 Use cases (Application/UseCase/)
 
@@ -194,6 +194,8 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `DeleteResourceUseCase` | `DeleteResourceRequest` | `DeleteResourceResponse` | |
 | `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse` | |
 | `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Delegates to AvailabilityService |
+| `GetAvailabilityRulesUseCase` | `GetAvailabilityRulesRequest` | `GetAvailabilityRulesResponse` | Returns all rules for a resource |
+| `GetAvailabilityOverridesUseCase` | `GetAvailabilityOverridesRequest` | `GetAvailabilityOverridesResponse` | Returns overrides for a resource in a date range |
 | `SaveAvailabilityRuleUseCase` | `SaveAvailabilityRuleRequest` | `SaveAvailabilityRuleResponse` | |
 | `SaveAvailabilityOverrideUseCase` | `SaveAvailabilityOverrideRequest` | `SaveAvailabilityOverrideResponse` | |
 | `SeedDatabaseUseCase` | `SeedDatabaseRequest(string[] $seedsDirectories)` | `SeedDatabaseResponse` | Globs *.sql, executes in filename order across all directories |
@@ -608,10 +610,10 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 3. `rez-mailer-newsletter` — **COMPLETE**
 4. `rez-throws-phpdoc` — **COMPLETE** (`@throws` PHPDoc backfill across all public methods)
 5. `rez-pdo-exceptions` — **COMPLETE** (DatabaseException, PDO wrapping in all MySQL repositories, use case re-throw with context messages, 503 mapping documented)
-6. `rez-testing-fixes` — **COMPLETE** (UTC fix, cancelled slot freed, autoConfirm in ReservationsConfig; rez-starter steps skipped)
+6. `rez-testing-fixes` — **COMPLETE** (UTC fix, cancelled slot freed, autoConfirm in ReservationsConfig; rez-starter steps now done — PDO boot guard, ReservationsConfig wired, seed entry point in rez-starter)
 7. `rez-availability-bounds` — **COMPLETE** (validFrom/validUntil on AvailabilityRule + isActiveOn(); AvailabilityService filters by bounds; schema columns + repository hydration; SaveAvailabilityRuleRequest/UseCase validates and parses bounds; step 5 rez-starter skipped)
 8. `rez-psr-logging` — **COMPLETE** (LoggerInterface + NullLogger in CreateReservationUseCase, BroadcastUseCase, all MySQL repos; mailer integrated into CreateReservationUseCase with email failure logging; CancelReservationUseCase logger deferred to rez-guest-cancellation)
-9. `rez-starter-logging` — Monolog wired as PSR-3 implementation; rotating file handler; request/response middleware logger; exception middleware logs with stack trace
+9. `rez-starter-logging` — **COMPLETE** (Monolog wired as PSR-3 implementation; rotating file handler; request/response middleware logger; exception middleware logs with stack trace)
 10. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; ReservationsConfig added; Feature enum drops Users; dependency chain update
 11. `rez-guest-cancellation` — CancellationToken value object, HMAC verification in CancelReservationUseCase, cancellationUrl in confirmation email
 12. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
@@ -624,11 +626,17 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 
 ### `rez-starter`
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
-- ✅ Slim bootstrap, PHP-DI wiring, basic routes
-- ❌ Full public + admin route surface
+- ✅ Slim bootstrap, PHP-DI wiring, full route surface
+- ✅ Complete exception → HTTP status map
+- ✅ `PlatformConfig` + `ReservationsConfig` construction and DI binding
+- ✅ `SymfonyMailer` implementation (implements `MailerInterface`)
+- ✅ Twig HTML email templates
+- ✅ PDO boot guard — DB-down returns 503
+- ✅ `bin/seed.php` seed entry point (`composer seed` / `composer seed:fill`)
+- ✅ Monolog PSR-3 logging (rotating file handler, request/response middleware, exception middleware)
 - ❌ Auth middleware, admin middleware, CORS middleware
-- ❌ SymfonyMailer implementation
-- ❌ StripeGateway implementation
+- ❌ `StripeGateway` implementation
+- ❌ Auth routes, booking routes, feature-gated routes — blocked on rez users module
 
 ### `rez-demo`
 - ❌ Not initialised (init from rez-starter, local Docker only, for API testing)
