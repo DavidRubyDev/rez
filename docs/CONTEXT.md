@@ -446,7 +446,7 @@ All three expose a `*UseCaseInterface` registered in `config/container.php`.
 
 ### 21. Database Setup
 
-`database/seeds/000_schema.sql` — authoritative DDL for all five tables, safe to re-run (`IF NOT EXISTS`). Lives in the seeds directory so `bin/seed.php` applies it automatically before data files.
+`database/seeds/schema/000_schema.sql` — authoritative DDL for all five tables, safe to re-run (`IF NOT EXISTS`).
 
 Tables: `resources`, `reservations`, `reservation_resources`, `availability_rules`, `availability_overrides`.
 
@@ -477,13 +477,13 @@ Fully hexagonal seed pipeline — data lives in SQL files, the use case orchestr
 
 **`MysqlDatabaseSeeder`** (`src/Infrastructure/Persistence/Mysql/`) — reads a file, splits on `;`, executes each non-empty statement via `PDO::exec()`.
 
-**`database/seeds/`** — four idempotent SQL files with hardcoded UUIDs:
-- `001_resources.sql` — 3 tables (UUIDs `aaaaaaaa-…-001/002/003`)
+**`database/seeds/data/`** — four idempotent SQL files with hardcoded UUIDs:
+- `001_resources.sql` — 3 resources (UUIDs `aaaaaaaa-…-001/002/003`)
 - `002_availability_rules.sql` — Mon–Fri 09:00–17:00, Sat 10:00–14:00 for all three
 - `003_availability_overrides.sql` — Table 1 unavailable on 2024-06-08
 - `004_reservations.sql` — 3 reservations (Mon/Tue 2024-06-03/04) + reservation_resources rows
 
-**`bin/seed.php`** — thin CLI entry point: loads `.env`, boots PHP-DI container, calls `SeedDatabaseUseCaseInterface` with `__DIR__ . '/../database/seeds'`.
+The CLI entry point (`bin/seed.php`) lives in `rez-starter` — see step 67.
 
 `DatabaseSeederInterface` and `SeedDatabaseUseCaseInterface` registered in `config/container.php`.
 
@@ -688,6 +688,8 @@ No test — trivial path computation.
 213 tests (22 skipped — all integration), PHPStan max clean, CS clean.
 
 All `docs/rez-platform-modifications.md` steps complete.
+
+> **Updated in step 67:** `seedsPath()` now returns `database/seeds/schema`; `dataPath()` added returning `database/seeds/data`.
 
 ---
 
@@ -995,5 +997,23 @@ All three use case interfaces registered in `config/container.php`. Integration 
 **`CancelReservationUseCase`** — logger deferred to `rez-guest-cancellation` (step 11) when HMAC token verification and email sending are added; injecting it now would be PHPStan `property.onlyWritten`.
 
 3 new tests: `testMailerFailureIsLoggedAndNotPropagated` (CreateReservation), `testPerRecipientFailureIsLoggedAndSkipped` (Broadcast), `testDatabaseExceptionIsLoggedAsCritical` (MysqlRepositoryLoggerTest).
+
+381 tests (34 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 67. Seed schema/data split + entry point moved to rez-starter (`rez-starter-01_testing-fixes.md` step 2)
+
+`bin/seed.php` removed from rez — CLI entry points are delivery-layer concerns and belong in the client app (`rez-starter`), not the library. This aligns with the Handler deprecation principle.
+
+`database/seeds/` reorganised into two subdirectories:
+- `database/seeds/schema/` — DDL only (`000_schema.sql`). Always safe to run against any environment.
+- `database/seeds/data/` — sample INSERT data for development. Run with `--fill` only.
+
+`MysqlDatabaseSeeder` updated:
+- `seedsPath(): string` — now returns `database/seeds/schema` (was `database/seeds`)
+- `dataPath(): string` — new; returns `database/seeds/data`
+
+Client apps compose seed directories by calling these path helpers and passing the result to `SeedDatabaseRequest`. `rez-starter/bin/seed.php` is the canonical entry point.
 
 381 tests (34 skipped — all integration), PHPStan max clean, CS clean.
