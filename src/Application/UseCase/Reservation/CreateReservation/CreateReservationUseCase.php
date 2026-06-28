@@ -51,7 +51,7 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
         $slot = new TimeSlot($request->start, $request->end);
 
         foreach ($resources as $resource) {
-            $this->assertAvailable($slot, $resource);
+            $this->assertAvailable($slot, $resource, $request->party->size);
         }
 
         $reservation = Reservation::create(
@@ -90,9 +90,9 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
         return new CreateReservationResponse($reservation);
     }
 
-    private function assertAvailable(TimeSlot $slot, Resource $resource): void
+    private function assertAvailable(TimeSlot $slot, Resource $resource, int $partySize): void
     {
-        if (!$this->availabilityService->isSlotAvailable($resource->id, $slot)) {
+        if (!$this->availabilityService->isSlotAvailable($resource->id, $slot, $partySize)) {
             throw new ConflictException($slot, $resource);
         }
     }

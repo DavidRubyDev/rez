@@ -68,7 +68,7 @@ class GetAvailabilityUseCaseTest extends TestCase
         $this->availabilityService
             ->expects($this->once())
             ->method('getAvailableSlots')
-            ->with($this->resourceId, $date, 60)
+            ->with($this->resourceId, $date, 60, 1)
             ->willReturn($window);
 
         $response = $this->useCase->execute(new GetAvailabilityRequest($this->resourceId, $date, 60));

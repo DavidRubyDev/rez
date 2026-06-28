@@ -28,6 +28,7 @@ final class GetAvailabilityUseCase implements GetAvailabilityUseCaseInterface
                 $request->resourceId,
                 $request->date,
                 $request->slotDurationMinutes,
+                $request->partySize,
             );
         } catch (DatabaseException $e) {
             throw new DatabaseException('Failed to get availability.', 0, $e);
