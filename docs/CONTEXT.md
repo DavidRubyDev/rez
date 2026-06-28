@@ -1031,3 +1031,17 @@ Two new read use cases for the availability module, following the standard Reque
 Both interfaces registered in `config/container.php`.
 
 8 new tests (4 per use case). Total: 389 unit tests passing (34 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 69. Bug fixes from API testing (`09_rez-bug-fixes.md`)
+
+Three bugs and one design gap identified during manual API testing (see `docs/reports/testing-report.md`).
+
+**BUG-01 — `GetAvailabilityUseCase` resource existence check:** `ResourceRepositoryInterface` injected into `GetAvailabilityUseCase`. `findById()` called at the top of `execute()` before delegating to `AvailabilityService`. Non-existent resource now returns 404 (`ResourceNotFoundException`) instead of a silent empty slot window. `@throws ResourceNotFoundException` added to interface and implementation.
+
+**BUG-02 + BUG-03 — Capacity-aware conflict detection:** `AvailabilityService` gains `ResourceRepositoryInterface` as its first constructor parameter. `isSlotAvailable()` and `getAvailableSlots()` both accept `int $partySize = 1`. The conflict check changes from `isEmpty()` to summing `party->size` across overlapping reservations and comparing against `resource->capacity`. A slot is available when `occupied + partySize <= capacity`. This fixes both bugs simultaneously: two small parties can share a high-capacity slot (BUG-02), and a party too large for any slot is rejected immediately (BUG-03). `filterConflictingSlots()` renamed to `filterAvailableSlots()` and made capacity-aware. `sumPartySize()` private helper added. `CreateReservationUseCase::assertAvailable()` passes `$request->party->size` as the party size. `GetAvailabilityRequest` gains optional `int $partySize = 1` with validation (`< 1` throws). `GetAvailabilityHandler` reads optional `party_size` from input.
+
+**DESIGN-01 — Loosen UUID parsing:** `fromString()` regex in `ReservationId`, `ResourceId`, and `NewsletterSubscriberId` relaxed from strict UUID v4 pattern (`4[0-9a-f]{3}-[89ab][0-9a-f]{3}`) to generic UUID format (`[0-9a-f]{4}-[0-9a-f]{4}`). Error message updated from "is not a valid UUID v4." to "is not a valid UUID." `generate()` unchanged — still produces canonical v4. Callers now receive 404 for any UUID that doesn't match a record, regardless of UUID variant.
+
+11 new tests. Total: 400 unit tests passing (34 skipped — all integration), PHPStan max clean, CS clean.
