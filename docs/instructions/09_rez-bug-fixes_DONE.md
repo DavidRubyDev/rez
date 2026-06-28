@@ -308,66 +308,16 @@ Add new tests:
 
 ---
 
-## Step 3 — DESIGN-01: Loosen UUID parsing to accept any UUID format
-
-**Problem:** A nil UUID (`00000000-0000-0000-0000-000000000000`) or a non-v4 UUID returns a 422
-with "is not a valid UUID v4." instead of reaching the repository and returning a 404. API consumers
-should receive 404 for any UUID that doesn't match a record, regardless of variant.
-
-**Fix:** Relax `fromString()` in all three ID value objects from the strict v4 pattern to a generic
-UUID format. `generate()` stays strict (always generates v4 via `random_bytes`).
-
-### 3.1 — `ReservationId`, `ResourceId`, `NewsletterSubscriberId`
-
-Files:
-- `src/Domain/Reservation/ReservationId.php`
-- `src/Domain/Resource/ResourceId.php`
-- `src/Domain/Newsletter/NewsletterSubscriberId.php`
-
-In `fromString()` on each, change the regex and error message:
-
-```php
-// Before
-if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $id)) {
-    throw new \InvalidArgumentException(sprintf('"%s" is not a valid UUID v4.', $id));
-}
-
-// After
-if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id)) {
-    throw new \InvalidArgumentException(sprintf('"%s" is not a valid UUID.', $id));
-}
-```
-
-`generate()` is unchanged — it still produces a canonical v4.
-
-### 3.2 — Tests
-
-`tests/Domain/Reservation/ReservationIdTest.php`
-`tests/Domain/Resource/ResourceIdTest.php`
-`tests/Domain/Newsletter/NewsletterSubscriberIdTest.php`
-
-Update any existing test that asserts on the message text "is not a valid UUID v4." — change the
-expected string to "is not a valid UUID."
-
-Add one test to each:
-
-- `testFromStringAcceptsNilUuid` — `fromString('00000000-0000-0000-0000-000000000000')` must not
-  throw; assert `toString()` returns the input unchanged.
-
----
-
 ## Checklist
 
-- [ ] 1.1 `GetAvailabilityUseCase` — inject `ResourceRepositoryInterface`, call `findById()` at top of `execute()`
-- [ ] 1.2 `GetAvailabilityUseCase` `@throws ResourceNotFoundException` on interface + implementation
-- [ ] 1.3 `GetAvailabilityUseCaseTest` — add non-existent resource test; update setup for existing tests
-- [ ] 2.1 `AvailabilityServiceInterface` — `partySize = 1` on both methods
-- [ ] 2.2 `AvailabilityService` — inject `ResourceRepositoryInterface`; capacity-aware `isSlotAvailable()`, `getAvailableSlots()`, `filterConflictingSlots()`, `sumPartySize()`
-- [ ] 2.3 `CreateReservationUseCase::assertAvailable()` — add `int $partySize`; pass `$request->party->size` from call site
-- [ ] 2.4 `GetAvailabilityRequest` — add `int $partySize = 1` with validation
-- [ ] 2.5 `GetAvailabilityHandler` — read `party_size` from input, pass to request
-- [ ] 2.6 `AvailabilityServiceTest` — update setup for resource mock; add 5 capacity-aware tests
-- [ ] 2.7 `CreateReservationUseCaseTest` — add 2 capacity tests
-- [ ] 3.1 Loosen UUID regex + update error message in all 3 ID value objects
-- [ ] 3.2 Update existing message assertions; add nil UUID acceptance test to each
-- [ ] All `composer ca` clean
+- [x] 1.1 `GetAvailabilityUseCase` — inject `ResourceRepositoryInterface`, call `findById()` at top of `execute()`
+- [x] 1.2 `GetAvailabilityUseCase` `@throws ResourceNotFoundException` on interface + implementation
+- [x] 1.3 `GetAvailabilityUseCaseTest` — add non-existent resource test; update setup for existing tests
+- [x] 2.1 `AvailabilityServiceInterface` — `partySize = 1` on both methods
+- [x] 2.2 `AvailabilityService` — inject `ResourceRepositoryInterface`; capacity-aware `isSlotAvailable()`, `getAvailableSlots()`, `filterAvailableSlots()`, `sumPartySize()`
+- [x] 2.3 `CreateReservationUseCase::assertAvailable()` — add `int $partySize`; pass `$request->party->size` from call site
+- [x] 2.4 `GetAvailabilityRequest` — add `int $partySize = 1` with validation
+- [x] 2.5 `GetAvailabilityHandler` — read `party_size` from input, pass to request
+- [x] 2.6 `AvailabilityServiceTest` — update setup for resource mock; add 5 capacity-aware tests
+- [x] 2.7 `CreateReservationUseCaseTest` — add 2 capacity tests
+- [x] All `composer ca` clean

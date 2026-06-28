@@ -76,7 +76,7 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 
 #### Reservations (COMPLETE)
 - `Reservation` — entity. States: `Pending → Confirmed → Cancelled | NoShow`
-- `ReservationId` — UUID value object. `generate()` produces UUID v4; `fromString()` accepts any valid UUID format (not restricted to v4) so API consumers receive 404 instead of 422 for non-v4 test UUIDs.
+- `ReservationId` — UUID v4 value object
 - `ReservationStatus` — pure enum (no backing values)
 - `ReservationCollection` — immutable collection
 - `TimeSlot` — immutable value object. `start < end` enforced. Adjacent slots do NOT overlap.
@@ -87,7 +87,7 @@ Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new cod
 
 #### Resources (COMPLETE)
 - `Resource` — entity. Fields: `id`, `type`, `name`, `capacity`, `attributes`
-- `ResourceId` — UUID value object. Same parsing rule as `ReservationId` — `generate()` is v4, `fromString()` accepts any UUID format.
+- `ResourceId` — UUID v4 value object
 - `ResourceType` — value object wrapping a lowercase slug string
 - `ResourceCollection` — immutable collection
 
