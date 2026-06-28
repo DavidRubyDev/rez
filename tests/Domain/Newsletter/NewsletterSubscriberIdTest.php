@@ -30,7 +30,16 @@ class NewsletterSubscriberIdTest extends TestCase
     public function testFromStringWithInvalidUuidThrowsInvalidArgumentException(): void
     {
         $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('is not a valid UUID.');
         NewsletterSubscriberId::fromString('not-a-uuid');
+    }
+
+    public function testFromStringAcceptsNilUuid(): void
+    {
+        $nil = '00000000-0000-0000-0000-000000000000';
+        $id  = NewsletterSubscriberId::fromString($nil);
+
+        $this->assertSame($nil, $id->toString());
     }
 
     public function testEqualsTrueForSameId(): void
