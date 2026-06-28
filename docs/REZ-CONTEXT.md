@@ -243,15 +243,15 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 7. **Adjacent time slots do not overlap.** `TimeSlot::overlapsWith()`: `A.end === B.start` → false. This is intentional and tested.
 
-12. **Availability is capacity-aware.** A slot is available when `sum(existing party sizes) + incomingPartySize <= resource.capacity`. An empty slot is still unavailable if the incoming party size alone exceeds capacity. Never use a simple `isEmpty()` check.
+8. **Availability is capacity-aware.** A slot is available when `sum(existing party sizes) + incomingPartySize <= resource.capacity`. An empty slot is still unavailable if the incoming party size alone exceeds capacity. Never use a simple `isEmpty()` check.
 
-8. **externalRef on Party is opaque.** The `rez` library stores and returns it but never interprets or validates it. Platform layer sets it to `userId.toString()`. Never add logic to `rez` that reads or branches on `externalRef`.
+9. **externalRef on Party is opaque.** The `rez` library stores and returns it but never interprets or validates it. Platform layer sets it to `userId.toString()`. Never add logic to `rez` that reads or branches on `externalRef`.
 
-9. **FeatureGuard called at top of every gated use case.** Every use case that requires an optional feature (payments, credits, subscriptions) calls `$guard->require*()` as its first line. Users are never gated — do not add a `requireUsers()` guard. This ensures disabled features fail immediately with `FeatureDisabledException`, not mid-operation.
+10. **FeatureGuard called at top of every gated use case.** Every use case that requires an optional feature (payments, credits, subscriptions) calls `$guard->require*()` as its first line. Users are never gated — do not add a `requireUsers()` guard. This ensures disabled features fail immediately with `FeatureDisabledException`, not mid-operation.
 
-10. **Email and newsletter failures never abort a booking.** In `CreateBookingUseCase` and `CancelBookingUseCase`, mailer calls are wrapped in try/catch. A failed email must never roll back a completed booking.
+11. **Email and newsletter failures never abort a booking.** In `CreateBookingUseCase` and `CancelBookingUseCase`, mailer calls are wrapped in try/catch. A failed email must never roll back a completed booking.
 
-11. **Guest cancellation token is stateless HMAC — never stored.** `CancellationToken` is `HMAC-SHA256(reservationId, cancellationSecret)`. No DB column on `reservations`. Verification is pure computation. The secret lives in `UsersConfig::$cancellationSecret`, separate from `jwtSecret`. Both paths through `CancelReservationUseCase` (admin and guest) ultimately call the same cancellation logic — only the auth check differs.
+12. **Guest cancellation token is stateless HMAC — never stored.** `CancellationToken` is `HMAC-SHA256(reservationId, cancellationSecret)`. No DB column on `reservations`. Verification is pure computation. The secret lives in `UsersConfig::$cancellationSecret`, separate from `jwtSecret`. Both paths through `CancelReservationUseCase` (admin and guest) ultimately call the same cancellation logic — only the auth check differs.
 
 ### 3.7 Configuration system
 
@@ -616,15 +616,16 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 7. `rez-availability-bounds` — **COMPLETE** (validFrom/validUntil on AvailabilityRule + isActiveOn(); AvailabilityService filters by bounds; schema columns + repository hydration; SaveAvailabilityRuleRequest/UseCase validates and parses bounds; step 5 rez-starter skipped)
 8. `rez-psr-logging` — **COMPLETE** (LoggerInterface + NullLogger in CreateReservationUseCase, BroadcastUseCase, all MySQL repos; mailer integrated into CreateReservationUseCase with email failure logging; CancelReservationUseCase logger deferred to rez-guest-cancellation)
 9. `rez-starter-logging` — **COMPLETE** (Monolog wired as PSR-3 implementation; rotating file handler; request/response middleware logger; exception middleware logs with stack trace)
-10. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; ReservationsConfig added; Feature enum drops Users; dependency chain update
-11. `rez-guest-cancellation` — CancellationToken value object, HMAC verification in CancelReservationUseCase, cancellationUrl in confirmation email
-12. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
-13. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
-14. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
-15. `rez-credits` — Wallet, WalletTransaction, wallet use cases
-16. `rez-subscriptions` — Subscription, Plan, subscription use cases
-17. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
-18. `rez-deprecate-handlers` — @deprecated on all Handler classes, update examples/slim/
+10. `rez-bug-fixes` — **COMPLETE** (BUG-01: GetAvailabilityUseCase now checks resource exists before calling service; BUG-02+03: capacity-aware conflict detection — slot available when sum(existing party sizes) + incoming ≤ capacity; DESIGN-01 reverted — strict UUID v4 parsing preserved; party_size query param wired in rez-starter GET /api/availability)
+11. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; ReservationsConfig added; Feature enum drops Users; dependency chain update
+12. `rez-guest-cancellation` — CancellationToken value object, HMAC verification in CancelReservationUseCase, cancellationUrl in confirmation email
+13. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
+14. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
+15. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
+16. `rez-credits` — Wallet, WalletTransaction, wallet use cases
+17. `rez-subscriptions` — Subscription, Plan, subscription use cases
+18. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
+19. `rez-deprecate-handlers` — @deprecated on all Handler classes, update examples/slim/
 
 ### `rez-starter`
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
@@ -636,6 +637,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ PDO boot guard — DB-down returns 503
 - ✅ `bin/seed.php` seed entry point (`composer seed` / `composer seed:fill`)
 - ✅ Monolog PSR-3 logging (rotating file handler, request/response middleware, exception middleware)
+- ✅ `GET /api/availability` accepts `party_size` query param — capacity-aware slot filtering
 - ❌ Auth middleware, admin middleware, CORS middleware
 - ❌ `StripeGateway` implementation
 - ❌ Auth routes, booking routes, feature-gated routes — blocked on rez users module
