@@ -8,9 +8,11 @@ use DateInterval;
 use DateTimeImmutable;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
+use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Domain\Availability\AvailabilityOverride;
 use Rez\Domain\Availability\AvailabilityRule;
 use Rez\Domain\Availability\AvailabilityWindow;
+use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationCollection;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
@@ -18,12 +20,13 @@ use Rez\Domain\Resource\ResourceId;
 final class AvailabilityService implements AvailabilityServiceInterface
 {
     public function __construct(
+        private readonly ResourceRepositoryInterface $resourceRepository,
         private readonly AvailabilityRepositoryInterface $availabilityRepository,
         private readonly ReservationRepositoryInterface $reservationRepository,
     ) {
     }
 
-    public function isSlotAvailable(ResourceId $resourceId, TimeSlot $slot): bool
+    public function isSlotAvailable(ResourceId $resourceId, TimeSlot $slot, int $partySize = 1): bool
     {
         $rules = $this->availabilityRepository->findRulesForResource($resourceId);
         $rule  = $this->findRuleForDate($rules, $slot->start);
@@ -40,11 +43,19 @@ final class AvailabilityService implements AvailabilityServiceInterface
             return false;
         }
 
-        return $this->reservationRepository->findByTimeSlotAndResource($slot, $resourceId)->isEmpty();
+        $resource     = $this->resourceRepository->findById($resourceId);
+        $reservations = $this->reservationRepository->findByTimeSlotAndResource($slot, $resourceId);
+        $occupied     = $this->sumPartySize($reservations);
+
+        return $occupied + $partySize <= $resource->capacity;
     }
 
-    public function getAvailableSlots(ResourceId $resourceId, DateTimeImmutable $date, int $slotDurationMinutes): AvailabilityWindow
-    {
+    public function getAvailableSlots(
+        ResourceId $resourceId,
+        DateTimeImmutable $date,
+        int $slotDurationMinutes,
+        int $partySize = 1,
+    ): AvailabilityWindow {
         $rules = $this->availabilityRepository->findRulesForResource($resourceId);
         $rule  = $this->findRuleForDate($rules, $date);
 
@@ -59,10 +70,11 @@ final class AvailabilityService implements AvailabilityServiceInterface
             return AvailabilityWindow::empty($resourceId, $date);
         }
 
-        $candidates  = $this->generateCandidateSlots($rule, $date, $slotDurationMinutes);
-        $fullDaySlot = new TimeSlot($rule->openTimeForDate($date), $rule->closeTimeForDate($date));
+        $resource     = $this->resourceRepository->findById($resourceId);
+        $candidates   = $this->generateCandidateSlots($rule, $date, $slotDurationMinutes);
+        $fullDaySlot  = new TimeSlot($rule->openTimeForDate($date), $rule->closeTimeForDate($date));
         $reservations = $this->reservationRepository->findByTimeSlotAndResource($fullDaySlot, $resourceId);
-        $available   = $this->filterConflictingSlots($candidates, $reservations);
+        $available    = $this->filterAvailableSlots($candidates, $reservations, $resource->capacity, $partySize);
 
         return new AvailabilityWindow($resourceId, $date, $available);
     }
@@ -119,19 +131,32 @@ final class AvailabilityService implements AvailabilityServiceInterface
      * @param list<TimeSlot> $candidates
      * @return list<TimeSlot>
      */
-    private function filterConflictingSlots(array $candidates, ReservationCollection $reservations): array
-    {
+    private function filterAvailableSlots(
+        array $candidates,
+        ReservationCollection $reservations,
+        int $capacity,
+        int $partySize,
+    ): array {
         return array_values(array_filter(
             $candidates,
-            function (TimeSlot $candidate) use ($reservations): bool {
+            function (TimeSlot $candidate) use ($reservations, $capacity, $partySize): bool {
+                $occupied = 0;
                 foreach ($reservations->toArray() as $reservation) {
                     if ($candidate->overlapsWith($reservation->slot)) {
-                        return false;
+                        $occupied += $reservation->party->size;
                     }
                 }
-
-                return true;
+                return $occupied + $partySize <= $capacity;
             }
         ));
+    }
+
+    private function sumPartySize(ReservationCollection $reservations): int
+    {
+        $total = 0;
+        foreach ($reservations->toArray() as $reservation) {
+            $total += $reservation->party->size;
+        }
+        return $total;
     }
 }

@@ -239,6 +239,43 @@ class CreateReservationUseCaseTest extends TestCase
         $this->assertSame(ReservationStatus::Confirmed, $response->reservation->status);
     }
 
+    public function testConflictWhenPartySizeExceedsCapacity(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(false);
+
+        $this->expectException(ConflictException::class);
+
+        $this->useCase->execute(new CreateReservationRequest(
+            [$this->resourceId],
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+            new Party('John Doe', 'john@example.com', 5, null),
+        ));
+    }
+
+    public function testPartySizeIsPassedToAvailabilityService(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+
+        $this->availabilityService
+            ->expects($this->once())
+            ->method('isSlotAvailable')
+            ->with(
+                $this->resourceId,
+                $this->isInstanceOf(TimeSlot::class),
+                2,
+            )
+            ->willReturn(true);
+
+        $this->useCase->execute(new CreateReservationRequest(
+            [$this->resourceId],
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+            $this->party,
+        ));
+    }
+
     public function testMailerFailureIsLoggedAndNotPropagated(): void
     {
         $this->resourceRepository->method('findById')->willReturn($this->resource);

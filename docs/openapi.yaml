@@ -330,6 +330,14 @@ paths:
             minimum: 1
             default: 60
           description: Duration of each slot in minutes
+        - name: party_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Only return slots that can still accommodate this many people
       responses:
         '200':
           description: Availability window with free slots

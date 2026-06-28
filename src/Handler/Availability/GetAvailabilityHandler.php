@@ -17,7 +17,7 @@ final class GetAvailabilityHandler
     }
 
     /**
-     * @param array{resource_id: string, date: string, slot_duration_minutes?: int} $data
+     * @param array{resource_id: string, date: string, slot_duration_minutes?: int, party_size?: int} $data
      * @return array{
      *     resource_id: string,
      *     date: string,
@@ -30,6 +30,7 @@ final class GetAvailabilityHandler
             ResourceId::fromString($data['resource_id']),
             new DateTimeImmutable($data['date'], new \DateTimeZone('UTC')),
             $data['slot_duration_minutes'] ?? 0,
+            (int) ($data['party_size'] ?? 1),
         ))->window;
 
         return [

@@ -169,7 +169,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 | Service | Purpose | Status |
 |---|---|---|
-| `AvailabilityService` | Shared slot availability logic used by CreateReservation + GetAvailability | COMPLETE |
+| `AvailabilityService` | Capacity-aware slot availability logic used by CreateReservation + GetAvailability. Injects `ResourceRepositoryInterface`. `isSlotAvailable(ResourceId, TimeSlot, int $partySize = 1)` sums existing party sizes and checks against `resource->capacity`. `getAvailableSlots()` accepts `int $partySize = 1` and filters candidates by the same capacity rule. | COMPLETE |
 | `FeatureGuard` | Throws `FeatureDisabledException` if a gated feature is not configured | COMPLETE |
 | `JwtService` | JWT generation and validation using `firebase/php-jwt` | NOT YET BUILT |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
@@ -193,7 +193,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable |
 | `DeleteResourceUseCase` | `DeleteResourceRequest` | `DeleteResourceResponse` | |
 | `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse` | |
-| `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Delegates to AvailabilityService |
+| `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Validates resource exists (throws `ResourceNotFoundException`) then delegates to AvailabilityService. `GetAvailabilityRequest` accepts optional `int $partySize = 1`. |
 | `GetAvailabilityRulesUseCase` | `GetAvailabilityRulesRequest` | `GetAvailabilityRulesResponse` | Returns all rules for a resource |
 | `GetAvailabilityOverridesUseCase` | `GetAvailabilityOverridesRequest` | `GetAvailabilityOverridesResponse` | Returns overrides for a resource in a date range |
 | `SaveAvailabilityRuleUseCase` | `SaveAvailabilityRuleRequest` | `SaveAvailabilityRuleResponse` | |
@@ -242,6 +242,8 @@ These are the contracts the library defines. Implementations live in infrastruct
 6. **Login never reveals email existence.** `UserNotFoundException` is always caught and re-thrown as `InvalidCredentialsException`.
 
 7. **Adjacent time slots do not overlap.** `TimeSlot::overlapsWith()`: `A.end === B.start` → false. This is intentional and tested.
+
+12. **Availability is capacity-aware.** A slot is available when `sum(existing party sizes) + incomingPartySize <= resource.capacity`. An empty slot is still unavailable if the incoming party size alone exceeds capacity. Never use a simple `isEmpty()` check.
 
 8. **externalRef on Party is opaque.** The `rez` library stores and returns it but never interprets or validates it. Platform layer sets it to `userId.toString()`. Never add logic to `rez` that reads or branches on `externalRef`.
 
