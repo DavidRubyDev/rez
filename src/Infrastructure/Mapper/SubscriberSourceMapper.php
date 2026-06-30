@@ -11,8 +11,9 @@ final class SubscriberSourceMapper
     public function toString(SubscriberSource $source): string
     {
         return match ($source) {
-            SubscriberSource::Guest      => 'guest',
-            SubscriberSource::Registered => 'registered',
+            SubscriberSource::Guest       => 'guest',
+            SubscriberSource::Registered  => 'registered',
+            SubscriberSource::Admin       => 'admin',
         };
     }
 
@@ -24,6 +25,7 @@ final class SubscriberSourceMapper
         return match ($value) {
             'guest'      => SubscriberSource::Guest,
             'registered' => SubscriberSource::Registered,
+            'admin'      => SubscriberSource::Admin,
             default      => throw new \InvalidArgumentException(sprintf('Unknown SubscriberSource value: "%s".', $value)),
         };
     }

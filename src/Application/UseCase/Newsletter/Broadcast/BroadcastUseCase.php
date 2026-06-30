@@ -30,7 +30,7 @@ final class BroadcastUseCase implements BroadcastUseCaseInterface
 
         foreach ($subscribers as $subscriber) {
             try {
-                $this->mailer->sendNewClassNotification($subscriber->email, $request->className, $request->classDate);
+                $this->mailer->sendNewClassNotification($subscriber->email, $request->resourceName, $request->resourceDate);
                 $sent++;
             } catch (\Throwable $e) {
                 $this->logger->error('Failed to send broadcast email to subscriber', [

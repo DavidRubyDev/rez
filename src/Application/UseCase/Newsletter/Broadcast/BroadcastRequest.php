@@ -7,8 +7,8 @@ namespace Rez\Application\UseCase\Newsletter\Broadcast;
 final class BroadcastRequest
 {
     public function __construct(
-        public readonly string $className,
-        public readonly \DateTimeImmutable $classDate,
+        public readonly string $resourceName,
+        public readonly \DateTimeImmutable $resourceDate,
     ) {
     }
 }

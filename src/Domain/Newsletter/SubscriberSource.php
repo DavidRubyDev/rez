@@ -8,4 +8,5 @@ enum SubscriberSource
 {
     case Guest;
     case Registered;
+    case Admin;
 }

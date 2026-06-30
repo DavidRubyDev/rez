@@ -37,6 +37,16 @@ class SubscriberSourceMapperTest extends TestCase
         $this->assertSame(SubscriberSource::Registered, $this->mapper->fromString('registered'));
     }
 
+    public function testAdminMapsToString(): void
+    {
+        $this->assertSame('admin', $this->mapper->toString(SubscriberSource::Admin));
+    }
+
+    public function testStringMapsToAdmin(): void
+    {
+        $this->assertSame(SubscriberSource::Admin, $this->mapper->fromString('admin'));
+    }
+
     public function testUnknownStringThrowsInvalidArgumentException(): void
     {
         $this->expectException(\InvalidArgumentException::class);
