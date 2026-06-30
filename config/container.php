@@ -48,6 +48,8 @@ use Rez\Application\Port\DatabaseSeederInterface;
 use Rez\Application\Service\FeatureGuard;
 use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCase;
 use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCaseInterface;
+use Rez\Application\UseCase\Newsletter\ListSubscribers\ListSubscribersUseCase;
+use Rez\Application\UseCase\Newsletter\ListSubscribers\ListSubscribersUseCaseInterface;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCase;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
 use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCase;
@@ -86,4 +88,5 @@ return [
     SubscribeUseCaseInterface::class          => autowire(SubscribeUseCase::class),
     UnsubscribeUseCaseInterface::class        => autowire(UnsubscribeUseCase::class),
     BroadcastUseCaseInterface::class          => autowire(BroadcastUseCase::class),
+    ListSubscribersUseCaseInterface::class    => autowire(ListSubscribersUseCase::class),
 ];
