@@ -202,6 +202,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
 | `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
 | `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count |
+| `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse` | Returns all newsletter subscribers |
 
 #### Not yet built
 

@@ -1034,6 +1034,19 @@ Both interfaces registered in `config/container.php`.
 
 ---
 
+### 70. ListSubscribersUseCase
+
+`ListSubscribersUseCase` follows the standard Request/Response/UseCase/Interface pattern under `src/Application/UseCase/Newsletter/ListSubscribers/`.
+
+- `ListSubscribersRequest` — no parameters
+- `ListSubscribersResponse` — `NewsletterSubscriber[] $subscribers`
+- `ListSubscribersUseCase` — calls `findAll()`, wraps `DatabaseException` with message "Failed to load newsletter subscribers."
+- `ListSubscribersUseCaseInterface` registered in `config/container.php`
+
+3 new tests. Total: 400 unit tests passing (34 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
 ### 69. Bug fixes from API testing (`09_rez-bug-fixes.md`)
 
 Three bugs and one design gap identified during manual API testing (see `docs/reports/testing-report.md`).
