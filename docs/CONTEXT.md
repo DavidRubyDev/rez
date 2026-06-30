@@ -792,7 +792,7 @@ Pre-step before `02_rez-config.md` — shared financial domain types needed acro
 
 ### 50. SubscriberSource (`03_rez-mailer-newsletter.md` step 2)
 
-`src/Domain/Newsletter/SubscriberSource.php` — pure enum: `Guest`, `Registered`. String serialization handled by infrastructure mapper. No test — same convention as other pure enums.
+`src/Domain/Newsletter/SubscriberSource.php` — pure enum: `Guest`, `Registered`, `Admin`. String serialization handled by infrastructure mapper. No test — same convention as other pure enums.
 
 ### 51. NewsletterSubscriberId (`03_rez-mailer-newsletter.md` step 3)
 
@@ -830,7 +830,7 @@ All three use cases follow Request/Response/UseCase/Interface pattern under `src
 
 **UnsubscribeUseCase** — silent: `findByEmail()` first; if not found returns `removed: false`. If found calls `delete($subscriber->id)`, returns `removed: true`. 2 tests.
 
-**BroadcastUseCase** — `findAll()` subscribers, calls `mailer->sendNewClassNotification()` for each, returns sent count. 3 tests.
+**BroadcastUseCase** — `findAll()` subscribers, calls `mailer->sendNewClassNotification()` for each, returns sent count. `BroadcastRequest` fields: `$resourceName` (string), `$resourceDate` (DateTimeImmutable). 3 tests.
 
 306 tests (22 skipped — all integration), PHPStan max clean, CS clean.
 
@@ -844,9 +844,9 @@ All three use cases follow Request/Response/UseCase/Interface pattern under `src
 
 `src/Infrastructure/Persistence/Mysql/MysqlNewsletterRepository.php` — implements `NewsletterRepositoryInterface`. Constructor: `PDO`, `SubscriberSourceMapper`. Methods: `findByEmail()` (throws `NewsletterSubscriberNotFoundException`), `findAll()` (ordered by `opted_in_at ASC`), `save()` (upsert by email — updates `name`/`source` only, preserves `opted_in_at`), `delete()`. Private `hydrate()` uses `NewsletterSubscriber::reconstruct()`.
 
-`src/Infrastructure/Mapper/SubscriberSourceMapper.php` — maps `SubscriberSource` pure enum to/from string (`'guest'`/`'registered'`). Same pattern as `ReservationStatusMapper`.
+`src/Infrastructure/Mapper/SubscriberSourceMapper.php` — maps `SubscriberSource` pure enum to/from string (`'guest'`/`'registered'`/`'admin'`). Same pattern as `ReservationStatusMapper`.
 
-`tests/Infrastructure/Mapper/SubscriberSourceMapperTest.php` — 5 cases: toString for each case, fromString for each case, unknown string throws.
+`tests/Infrastructure/Mapper/SubscriberSourceMapperTest.php` — 7 cases: toString for each case, fromString for each case, unknown string throws.
 
 `NewsletterSubscriber::reconstruct()` added — static factory for hydration, bypasses `create()` which sets `optedInAt` to UTC now.
 
@@ -1056,3 +1056,17 @@ Three bugs and one design gap identified during manual API testing (see `docs/re
 **BUG-02 + BUG-03 — Capacity-aware conflict detection:** `AvailabilityService` gains `ResourceRepositoryInterface` as its first constructor parameter. `isSlotAvailable()` and `getAvailableSlots()` both accept `int $partySize = 1`. The conflict check changes from `isEmpty()` to summing `party->size` across overlapping reservations and comparing against `resource->capacity`. A slot is available when `occupied + partySize <= capacity`. This fixes both bugs simultaneously: two small parties can share a high-capacity slot (BUG-02), and a party too large for any slot is rejected immediately (BUG-03). `filterConflictingSlots()` renamed to `filterAvailableSlots()` and made capacity-aware. `sumPartySize()` private helper added. `CreateReservationUseCase::assertAvailable()` passes `$request->party->size` as the party size. `GetAvailabilityRequest` gains optional `int $partySize = 1` with validation (`< 1` throws). `GetAvailabilityHandler` reads optional `party_size` from input.
 
 9 new tests. Total: 398 unit tests passing (34 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 71. `SubscriberSource::Admin` + `BroadcastRequest` field rename
+
+`src/Domain/Newsletter/SubscriberSource.php` — added `Admin` case (subscribers added manually via rez-admin).
+
+`src/Infrastructure/Mapper/SubscriberSourceMapper.php` — `Admin` ↔ `'admin'` added to both `toString()` and `fromString()` match expressions.
+
+`src/Application/UseCase/Newsletter/Broadcast/BroadcastRequest.php` — `$className` renamed to `$resourceName`; `$classDate` renamed to `$resourceDate`.
+
+`src/Application/UseCase/Newsletter/Broadcast/BroadcastUseCase.php` — `execute()` updated to read `$request->resourceName` and `$request->resourceDate`.
+
+2 new tests in `SubscriberSourceMapperTest` (`testAdminMapsToString`, `testStringMapsToAdmin`). Total: 402 unit tests passing (34 skipped — all integration), PHPStan max clean, CS clean.

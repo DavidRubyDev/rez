@@ -124,7 +124,7 @@ required (not optional) part of `PlatformConfig`.
 #### Newsletter (COMPLETE — `03_rez-mailer-newsletter.md`)
 - `NewsletterSubscriber` — entity. Fields: `id`, `email`, `name?`, `source`, `optedInAt` (all `public readonly`). Factories: `create()` (validates email, sets optedInAt = UTC now) and `reconstruct()` (hydration from DB). ✅
 - `NewsletterSubscriberId` — UUID v4 value object ✅
-- `SubscriberSource` — pure enum: `Guest`, `Registered` ✅
+- `SubscriberSource` — pure enum: `Guest`, `Registered`, `Admin` ✅
 
 #### Shared
 - `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code — used only in Domain (exceptions, `Money::__toString()`). Infrastructure serialization goes through `CurrencyMapper::toString()`.
@@ -201,7 +201,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `SeedDatabaseUseCase` | `SeedDatabaseRequest(string[] $seedsDirectories)` | `SeedDatabaseResponse` | Globs *.sql, executes in filename order across all directories |
 | `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
 | `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
-| `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count |
+| `BroadcastUseCase` | `BroadcastRequest(resourceName, resourceDate)` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count |
 | `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse` | Returns all newsletter subscribers |
 
 #### Not yet built
