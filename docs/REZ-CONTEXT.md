@@ -6,7 +6,7 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** June 2026
-> **Implementation status:** Core library complete. Config, Mailer, Newsletter, and Guest Cancellation complete. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built.
+> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -32,7 +32,7 @@ and subscriptions.
 | `DavidRubyDev/rez-demo` | PHP 8.3 | Private | Local Docker demo instance for testing |
 | `DavidRubyDev/client-*` | PHP 8.3 | Private | One repo per client |
 | `davidrubydev/rez-components` | TypeScript + Lit | TBD | In progress — `<rez-calendar>` first |
-| `davidrubydev/rez-admin` | TypeScript + React | TBD | Not started |
+| `davidrubydev/rez-admin` | TypeScript + React | TBD | In progress — Resources, Reservations, Newsletter built |
 
 **All repositories are private.** Deployment is managed via SSH and per-repo deploy keys.
 
@@ -124,7 +124,7 @@ required (not optional) part of `PlatformConfig`.
 #### Newsletter (COMPLETE — `03_rez-mailer-newsletter.md`)
 - `NewsletterSubscriber` — entity. Fields: `id`, `email`, `name?`, `source`, `optedInAt` (all `public readonly`). Factories: `create()` (validates email, sets optedInAt = UTC now) and `reconstruct()` (hydration from DB). ✅
 - `NewsletterSubscriberId` — UUID v4 value object ✅
-- `SubscriberSource` — pure enum: `Guest`, `Registered`, `Admin` ✅
+- `SubscriberSource` — pure enum: `Guest`, `Registered`, `Admin` ✅ (`Admin` added for subscribers manually added via rez-admin). Serialiser lowercases via `strtolower($subscriber->source->name)`.
 
 #### Shared
 - `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code — used only in Domain (exceptions, `Money::__toString()`). Infrastructure serialization goes through `CurrencyMapper::toString()`.
@@ -201,7 +201,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `SeedDatabaseUseCase` | `SeedDatabaseRequest(string[] $seedsDirectories)` | `SeedDatabaseResponse` | Globs *.sql, executes in filename order across all directories |
 | `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
 | `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
-| `BroadcastUseCase` | `BroadcastRequest(resourceName, resourceDate)` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count |
+| `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). |
 | `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse` | Returns all newsletter subscribers |
 
 #### Not yet built
@@ -403,7 +403,9 @@ GET    /api/reservations/{id}
 POST   /api/reservations/{id}/confirm
 POST   /api/reservations/{id}/no-show
 DELETE /api/bookings/{id}                                    ← admin cancellation (no token)
-POST   /api/newsletter/broadcast
+GET    /api/newsletter/subscribers
+POST   /api/admin/newsletter/subscribers                     ← admin-add subscriber (sets Admin source)
+POST   /api/newsletter/broadcast                             ← body: { resource_name, resource_date }
 GET    /api/admin/config
 ```
 
@@ -639,7 +641,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ `bin/seed.php` seed entry point (`composer seed` / `composer seed:fill`)
 - ✅ Monolog PSR-3 logging (rotating file handler, request/response middleware, exception middleware)
 - ✅ `GET /api/availability` accepts `party_size` query param — capacity-aware slot filtering
-- ❌ Auth middleware, admin middleware, CORS middleware
+- ✅ CORS middleware (wildcard origin, preflight handled)
+- ❌ Auth middleware, admin middleware
 - ❌ `StripeGateway` implementation
 - ❌ Auth routes, booking routes, feature-gated routes — blocked on rez users module
 
@@ -653,4 +656,12 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ❌ `<rez-account>` — not started
 
 ### `rez-admin`
-- ❌ Not started
+- ✅ Project scaffold (Vite + React + TypeScript + Tailwind, Vitest, Dockerfile + nginx)
+- ✅ AppLayout + Sidebar (feature-gated entries via `/api/admin/config`)
+- ✅ Resources page — list, create, edit, delete; availability rules panel + rule modal; overrides panel + override modal; sorting (type/name/capacity/attributes)
+- ✅ Reservations page — list with date-range filter, resource name lookup, search + per-field filters (resource, status, name, email), sorting (date/status/name/email); detail modal with confirm/no-show/cancel actions; manual booking modal
+- ✅ Newsletter page — tabbed layout: broadcast panel (resource selector, date/time, send, result); subscribers panel (list with search + sort by email/name/source/opted-in, inline add with `Admin` source, delete with ConfirmDialog)
+- ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, Modal, PageHeader, StatusBadge, SlotPicker
+- ✅ API client modules: resources, reservations, availability, newsletter, config
+- ❌ Auth (login/logout, JWT, protected routes) — deferred until rez-users is built
+- ❌ Users page — deferred until rez-users is built
