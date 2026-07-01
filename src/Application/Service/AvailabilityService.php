@@ -45,7 +45,7 @@ final class AvailabilityService implements AvailabilityServiceInterface
 
         $resource     = $this->resourceRepository->findById($resourceId);
         $reservations = $this->reservationRepository->findByTimeSlotAndResource($slot, $resourceId);
-        $occupied     = $this->sumPartySize($reservations);
+        $occupied     = $this->sumOverlappingPartySize($slot, $reservations);
 
         return $occupied + $partySize <= $resource->capacity;
     }
@@ -140,22 +140,19 @@ final class AvailabilityService implements AvailabilityServiceInterface
         return array_values(array_filter(
             $candidates,
             function (TimeSlot $candidate) use ($reservations, $capacity, $partySize): bool {
-                $occupied = 0;
-                foreach ($reservations->toArray() as $reservation) {
-                    if ($candidate->overlapsWith($reservation->slot)) {
-                        $occupied += $reservation->party->size;
-                    }
-                }
+                $occupied = $this->sumOverlappingPartySize($candidate, $reservations);
                 return $occupied + $partySize <= $capacity;
             }
         ));
     }
 
-    private function sumPartySize(ReservationCollection $reservations): int
+    private function sumOverlappingPartySize(TimeSlot $slot, ReservationCollection $reservations): int
     {
         $total = 0;
         foreach ($reservations->toArray() as $reservation) {
-            $total += $reservation->party->size;
+            if ($reservation->slot->overlapsWith($slot)) {
+                $total += $reservation->party->size;
+            }
         }
         return $total;
     }
