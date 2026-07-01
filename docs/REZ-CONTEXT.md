@@ -69,8 +69,10 @@ rez-starter    ──→ davidrubydev/rez (Composer, SSH VCS)
 Domain/           Pure business logic. No I/O. No framework.
 Application/      Use cases, port interfaces, config, services.
 Infrastructure/   MySQL implementations of port interfaces.
-Handler/          DEPRECATED. Array-in/array-out adapters. Do not use in new code.
 ```
+
+The Handler layer (array-in/array-out adapters) was removed entirely — client apps call
+use cases directly. See step 73 in `docs/CONTEXT.md`.
 
 ### 3.2 Domain modules and their status
 
@@ -607,7 +609,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
 | Subscriptions | ❌ | ❌ | ❌ | — |
 | Booking orchestration | ❌ | ❌ | — | — |
-| Handler deprecation | ❌ | — | — | — |
+| Handler layer | ✅ (removed) | — | — | — |
 
 ### Pending scaffold documents (run in this order)
 1. `rez-core-changes` — **COMPLETE**
@@ -628,7 +630,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 16. `rez-credits` — Wallet, WalletTransaction, wallet use cases
 17. `rez-subscriptions` — Subscription, Plan, subscription use cases
 18. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
-19. `rez-deprecate-handlers` — @deprecated on all Handler classes, update examples/slim/
+19. `rez-deprecate-handlers` — **SUPERSEDED** (Handler layer removed entirely rather than deprecated — see step 73 in `docs/CONTEXT.md`)
 
 ### `rez-starter`
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
