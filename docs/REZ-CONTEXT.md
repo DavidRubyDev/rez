@@ -646,6 +646,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ CORS middleware (wildcard origin, preflight handled)
 - ✅ Routes split into per-route `App\Http\Handler\*` classes (`src/Http/Handler`, `RequestFactory`, `Serializer`) — unrelated to the removed `Rez\Handler\*` library layer
 - ✅ PHPUnit + PHPStan (level max) + PHP-CS-Fixer (PSR-12) — mirrors `davidrubydev/rez`'s toolchain; `composer ca` now works
+- ✅ `bootstrap/app.php` — app construction extracted from `public/index.php` so tests reuse the exact same wiring
+- ✅ Api test suite (`tests/Api/`) — real HTTP lifecycle against a dedicated `rez_starter_test` database, run in-process (`composer test-api`)
 - ❌ Auth middleware, admin middleware
 - ❌ `StripeGateway` implementation
 - ❌ Auth routes, booking routes, feature-gated routes — blocked on rez users module
