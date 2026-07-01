@@ -644,6 +644,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Monolog PSR-3 logging (rotating file handler, request/response middleware, exception middleware)
 - ✅ `GET /api/availability` accepts `party_size` query param — capacity-aware slot filtering
 - ✅ CORS middleware (wildcard origin, preflight handled)
+- ✅ Routes split into per-route `App\Http\Handler\*` classes (`src/Http/Handler`, `RequestFactory`, `Serializer`) — unrelated to the removed `Rez\Handler\*` library layer
+- ✅ PHPUnit + PHPStan (level max) + PHP-CS-Fixer (PSR-12) — mirrors `davidrubydev/rez`'s toolchain; `composer ca` now works
 - ❌ Auth middleware, admin middleware
 - ❌ `StripeGateway` implementation
 - ❌ Auth routes, booking routes, feature-gated routes — blocked on rez users module
