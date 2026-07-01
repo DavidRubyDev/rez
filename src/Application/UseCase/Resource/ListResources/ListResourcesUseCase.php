@@ -14,6 +14,7 @@ final class ListResourcesUseCase implements ListResourcesUseCaseInterface
     ) {
     }
 
+    /** @throws DatabaseException */
     public function execute(ListResourcesRequest $request): ListResourcesResponse
     {
         try {

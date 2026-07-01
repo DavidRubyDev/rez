@@ -15,6 +15,7 @@ final class ListReservationsUseCase implements ListReservationsUseCaseInterface
     ) {
     }
 
+    /** @throws DatabaseException */
     public function execute(ListReservationsRequest $request): ListReservationsResponse
     {
         try {

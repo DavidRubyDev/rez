@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Rez\Application\Config;
 
+use Rez\Domain\Shared\Email;
+
 final class MailerConfig
 {
     /**
@@ -13,7 +15,7 @@ final class MailerConfig
         public readonly string $fromAddress,
         public readonly string $fromName,
     ) {
-        if (filter_var($fromAddress, FILTER_VALIDATE_EMAIL) === false) {
+        if (!Email::isValid($fromAddress)) {
             throw new \InvalidArgumentException("Invalid email address: '{$fromAddress}'.");
         }
 

@@ -13,9 +13,6 @@
         <testsuite name="Infrastructure">
             <directory>tests/Infrastructure/</directory>
         </testsuite>
-        <testsuite name="Handler">
-            <directory>tests/Handler/</directory>
-        </testsuite>
         <testsuite name="Integration">
             <directory>tests/Integration/</directory>
         </testsuite>

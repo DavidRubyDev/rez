@@ -14,7 +14,10 @@ final class GetResourceUseCase implements GetResourceUseCaseInterface
     ) {
     }
 
-    /** @throws \Rez\Domain\Exception\ResourceNotFoundException */
+    /**
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     * @throws DatabaseException
+     */
     public function execute(GetResourceRequest $request): GetResourceResponse
     {
         try {

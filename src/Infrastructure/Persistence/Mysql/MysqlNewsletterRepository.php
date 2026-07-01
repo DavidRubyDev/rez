@@ -11,6 +11,7 @@ use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
 use Rez\Domain\Newsletter\NewsletterSubscriber;
 use Rez\Domain\Newsletter\NewsletterSubscriberId;
+use Rez\Domain\Shared\Utc;
 use Rez\Infrastructure\Mapper\SubscriberSourceMapper;
 
 final class MysqlNewsletterRepository extends MysqlRepository implements NewsletterRepositoryInterface
@@ -106,7 +107,7 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
             $this->str($row['email']),
             $this->nullStr($row['name']),
             $this->sourceMapper->fromString($this->str($row['source'])),
-            new \DateTimeImmutable($this->str($row['opted_in_at']), new \DateTimeZone('UTC')),
+            new \DateTimeImmutable($this->str($row['opted_in_at']), Utc::timezone()),
         );
     }
 

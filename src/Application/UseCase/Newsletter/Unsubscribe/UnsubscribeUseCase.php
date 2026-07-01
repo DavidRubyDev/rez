@@ -15,6 +15,7 @@ final class UnsubscribeUseCase implements UnsubscribeUseCaseInterface
     ) {
     }
 
+    /** @throws DatabaseException */
     public function execute(UnsubscribeRequest $request): UnsubscribeResponse
     {
         try {
