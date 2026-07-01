@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Tests\Integration\Persistence\Mysql;
 
 use PDO;
+use Psr\Log\NullLogger;
 use Rez\Infrastructure\Persistence\Mysql\MysqlDatabaseSeeder;
 
 class MysqlDatabaseSeederTest extends MysqlIntegrationTestCase
@@ -18,7 +19,7 @@ class MysqlDatabaseSeederTest extends MysqlIntegrationTestCase
 
         parent::setUp();
 
-        $this->seeder = new MysqlDatabaseSeeder($this->pdo());
+        $this->seeder = new MysqlDatabaseSeeder($this->pdo(), new NullLogger());
     }
 
     protected function tearDown(): void
