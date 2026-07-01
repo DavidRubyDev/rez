@@ -6,7 +6,6 @@ namespace Rez\Infrastructure\Persistence\Mysql;
 
 use PDO;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
@@ -19,7 +18,7 @@ final class MysqlNewsletterRepository extends MysqlRepository implements Newslet
     public function __construct(
         private readonly PDO $pdo,
         private readonly SubscriberSourceMapper $sourceMapper,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly LoggerInterface $logger,
     ) {
     }
 

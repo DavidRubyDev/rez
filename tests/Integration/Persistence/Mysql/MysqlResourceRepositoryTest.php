@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Tests\Integration\Persistence\Mysql;
 
+use Psr\Log\NullLogger;
 use Rez\Domain\Exception\ResourceNotFoundException;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
@@ -19,7 +20,7 @@ class MysqlResourceRepositoryTest extends MysqlIntegrationTestCase
     {
         parent::setUp();
 
-        $this->repository = new MysqlResourceRepository($this->pdo(), new ResourceTypeMapper());
+        $this->repository = new MysqlResourceRepository($this->pdo(), new ResourceTypeMapper(), new NullLogger());
     }
 
     private function makeResource(): Resource

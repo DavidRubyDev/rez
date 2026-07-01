@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Tests\Integration\Persistence\Mysql;
 
+use Psr\Log\NullLogger;
 use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
 use Rez\Domain\Newsletter\NewsletterSubscriber;
 use Rez\Domain\Newsletter\NewsletterSubscriberId;
@@ -18,7 +19,7 @@ class MysqlNewsletterRepositoryTest extends MysqlIntegrationTestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->repository = new MysqlNewsletterRepository($this->pdo(), new SubscriberSourceMapper());
+        $this->repository = new MysqlNewsletterRepository($this->pdo(), new SubscriberSourceMapper(), new NullLogger());
     }
 
     public function testSaveAndFindByEmail(): void

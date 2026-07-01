@@ -6,6 +6,7 @@ namespace Rez\Tests\Integration\Persistence\Mysql;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Psr\Log\NullLogger;
 use Rez\Domain\Exception\ReservationNotFoundException;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
@@ -26,7 +27,7 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
     {
         parent::setUp();
 
-        $this->repository = new MysqlReservationRepository($this->pdo(), new ReservationStatusMapper());
+        $this->repository = new MysqlReservationRepository($this->pdo(), new ReservationStatusMapper(), new NullLogger());
         $this->resourceId = ResourceId::generate();
         $this->party      = new Party('John Doe', 'john@example.com', 2, null);
     }

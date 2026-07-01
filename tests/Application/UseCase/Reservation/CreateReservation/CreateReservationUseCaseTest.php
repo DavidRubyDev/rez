@@ -32,6 +32,8 @@ class CreateReservationUseCaseTest extends TestCase
     private ReservationRepositoryInterface&MockObject $reservationRepository;
     private ResourceRepositoryInterface&MockObject $resourceRepository;
     private AvailabilityServiceInterface&MockObject $availabilityService;
+    private MailerInterface&MockObject $mailer;
+    private LoggerInterface&MockObject $logger;
     private CreateReservationUseCase $useCase;
     private ResourceId $resourceId;
     private Resource $resource;
@@ -42,6 +44,8 @@ class CreateReservationUseCaseTest extends TestCase
         $this->reservationRepository = $this->createMock(ReservationRepositoryInterface::class);
         $this->resourceRepository    = $this->createMock(ResourceRepositoryInterface::class);
         $this->availabilityService   = $this->createMock(AvailabilityServiceInterface::class);
+        $this->mailer                = $this->createMock(MailerInterface::class);
+        $this->logger                = $this->createMock(LoggerInterface::class);
         $this->useCase               = new CreateReservationUseCase(
             $this->reservationRepository,
             $this->resourceRepository,
@@ -50,6 +54,8 @@ class CreateReservationUseCaseTest extends TestCase
                 mailer:       new MailerConfig('info@studio.cz', 'Studio'),
                 reservations: new ReservationsConfig(),
             ),
+            $this->mailer,
+            $this->logger,
         );
 
         $this->resourceId = ResourceId::generate();
@@ -149,6 +155,8 @@ class CreateReservationUseCaseTest extends TestCase
                 mailer:       new MailerConfig('info@studio.cz', 'Studio'),
                 reservations: new ReservationsConfig(autoConfirm: true),
             ),
+            $this->mailer,
+            $this->logger,
         );
 
         $useCase->execute(new CreateReservationRequest(
@@ -202,6 +210,8 @@ class CreateReservationUseCaseTest extends TestCase
                 mailer:       new MailerConfig('info@studio.cz', 'Studio'),
                 reservations: new ReservationsConfig(autoConfirm: false),
             ),
+            $this->mailer,
+            $this->logger,
         );
 
         $response = $useCase->execute(new CreateReservationRequest(
@@ -227,6 +237,8 @@ class CreateReservationUseCaseTest extends TestCase
                 mailer:       new MailerConfig('info@studio.cz', 'Studio'),
                 reservations: new ReservationsConfig(autoConfirm: true),
             ),
+            $this->mailer,
+            $this->logger,
         );
 
         $response = $useCase->execute(new CreateReservationRequest(

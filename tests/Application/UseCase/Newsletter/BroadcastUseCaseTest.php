@@ -21,13 +21,15 @@ class BroadcastUseCaseTest extends TestCase
 {
     private NewsletterRepositoryInterface&MockObject $repository;
     private MailerInterface&MockObject $mailer;
+    private LoggerInterface&MockObject $logger;
     private BroadcastUseCase $useCase;
 
     protected function setUp(): void
     {
         $this->repository = $this->createMock(NewsletterRepositoryInterface::class);
         $this->mailer     = $this->createMock(MailerInterface::class);
-        $this->useCase    = new BroadcastUseCase($this->repository, $this->mailer);
+        $this->logger     = $this->createMock(LoggerInterface::class);
+        $this->useCase    = new BroadcastUseCase($this->repository, $this->mailer, $this->logger);
     }
 
     public function testRepositoryDatabaseExceptionPropagates(): void

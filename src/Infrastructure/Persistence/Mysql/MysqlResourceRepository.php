@@ -6,7 +6,6 @@ namespace Rez\Infrastructure\Persistence\Mysql;
 
 use PDO;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Domain\Exception\ResourceNotFoundException;
@@ -20,7 +19,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     public function __construct(
         private readonly PDO $pdo,
         private readonly ResourceTypeMapper $typeMapper,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly LoggerInterface $logger,
     ) {
     }
 

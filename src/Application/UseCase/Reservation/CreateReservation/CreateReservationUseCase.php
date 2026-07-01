@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Rez\Application\UseCase\Reservation\CreateReservation;
 
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 use Rez\Application\Config\PlatformConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
@@ -26,8 +25,8 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
         private readonly ResourceRepositoryInterface $resourceRepository,
         private readonly AvailabilityServiceInterface $availabilityService,
         private readonly PlatformConfig $config,
-        private readonly ?MailerInterface $mailer = null,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly MailerInterface $mailer,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -71,20 +70,18 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
             throw new DatabaseException('Failed to save reservation.', 0, $e);
         }
 
-        if ($this->mailer !== null) {
-            try {
-                $this->mailer->sendBookingConfirmation(
-                    $reservation->party->email,
-                    $reservation->party->name,
-                    $reservation,
-                );
-            } catch (\Throwable $e) {
-                $this->logger->error('Failed to send reservation confirmation email', [
-                    'reservationId' => $reservation->id->toString(),
-                    'email'         => $reservation->party->email,
-                    'error'         => $e->getMessage(),
-                ]);
-            }
+        try {
+            $this->mailer->sendBookingConfirmation(
+                $reservation->party->email,
+                $reservation->party->name,
+                $reservation,
+            );
+        } catch (\Throwable $e) {
+            $this->logger->error('Failed to send reservation confirmation email', [
+                'reservationId' => $reservation->id->toString(),
+                'email'         => $reservation->party->email,
+                'error'         => $e->getMessage(),
+            ]);
         }
 
         return new CreateReservationResponse($reservation);

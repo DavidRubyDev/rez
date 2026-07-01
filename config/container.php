@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Service\AvailabilityService;
 use Rez\Application\Service\AvailabilityServiceInterface;
@@ -56,20 +57,23 @@ use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCase;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
 use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCase;
 use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCaseInterface;
+use Rez\Infrastructure\Mailer\NullMailer;
 use Rez\Infrastructure\Persistence\Mysql\MysqlDatabaseSeeder;
 
 use function DI\autowire;
-use function DI\get;
 
 return [
+    // Default no-op bindings. $mailer and $logger are required (non-optional) constructor
+    // parameters throughout this library specifically so PHP-DI's reflection autowiring always
+    // resolves them from the container — autowiring silently skips any optional parameter
+    // (one with a default value) without ever consulting the container for it, which previously
+    // caused client-bound mailers/loggers to be ignored. Client apps override these two bindings
+    // with concrete implementations (e.g. SymfonyMailer, Monolog).
+    MailerInterface::class                   => autowire(NullMailer::class),
+    LoggerInterface::class                   => autowire(NullLogger::class),
+
     AvailabilityServiceInterface::class      => autowire(AvailabilityService::class),
-    // PHP-DI's reflection autowiring skips optional constructor parameters entirely — it never
-    // consults the container for them, regardless of what's bound. $mailer and $logger are
-    // optional here (nullable / NullLogger default), so they must be wired explicitly or the
-    // client app's MailerInterface/LoggerInterface bindings are silently ignored.
-    CreateReservationUseCaseInterface::class  => autowire(CreateReservationUseCase::class)
-        ->constructorParameter('mailer', get(MailerInterface::class))
-        ->constructorParameter('logger', get(LoggerInterface::class)),
+    CreateReservationUseCaseInterface::class  => autowire(CreateReservationUseCase::class),
     BulkCancelReservationsUseCaseInterface::class => autowire(BulkCancelReservationsUseCase::class),
     CancelReservationUseCaseInterface::class      => autowire(CancelReservationUseCase::class),
     ConfirmReservationUseCaseInterface::class => autowire(ConfirmReservationUseCase::class),
@@ -93,10 +97,9 @@ return [
     // PlatformConfig must be bound by the client app — not defined here.
     // FeatureGuard is autowired — PHP-DI resolves PlatformConfig from client binding.
     FeatureGuard::class                       => autowire(),
-    // MailerInterface and NewsletterRepositoryInterface must be bound by the client app.
+    // NewsletterRepositoryInterface must be bound by the client app.
     SubscribeUseCaseInterface::class          => autowire(SubscribeUseCase::class),
     UnsubscribeUseCaseInterface::class        => autowire(UnsubscribeUseCase::class),
-    BroadcastUseCaseInterface::class          => autowire(BroadcastUseCase::class)
-        ->constructorParameter('logger', get(LoggerInterface::class)),
+    BroadcastUseCaseInterface::class          => autowire(BroadcastUseCase::class),
     ListSubscribersUseCaseInterface::class    => autowire(ListSubscribersUseCase::class),
 ];
