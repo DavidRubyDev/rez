@@ -1070,3 +1070,15 @@ Three bugs and one design gap identified during manual API testing (see `docs/re
 `src/Application/UseCase/Newsletter/Broadcast/BroadcastUseCase.php` — `execute()` updated to read `$request->resourceName` and `$request->resourceDate`.
 
 2 new tests in `SubscriberSourceMapperTest` (`testAdminMapsToString`, `testStringMapsToAdmin`). Total: 402 unit tests passing (34 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 72. Fix: optional `$mailer`/`$logger` constructor params silently ignored by PHP-DI autowiring
+
+**Bug:** `CreateReservationUseCase` (`$mailer`, `$logger`) and `BroadcastUseCase` (`$logger`) declare these dependencies as optional constructor parameters (`?MailerInterface $mailer = null`, `LoggerInterface $logger = new NullLogger()`). PHP-DI's `ReflectionBasedAutowiring::getParametersDefinition()` skips any constructor parameter where `isOptional()` is true — it never queries the container for that parameter, regardless of what's bound to its type. Result: a client app's `MailerInterface`/`LoggerInterface` bindings (e.g. `rez-starter`'s `SymfonyMailer` and Monolog logger) were never actually injected — these use cases always received `null`/`NullLogger`, so reservation confirmation emails silently never sent and no error was ever logged.
+
+**Fix:** `config/container.php` now uses `->constructorParameter('mailer', get(MailerInterface::class))` / `->constructorParameter('logger', get(LoggerInterface::class))` on the `autowire()` definitions for `CreateReservationUseCaseInterface` and `BroadcastUseCaseInterface`, forcing PHP-DI to resolve these from the container instead of falling back to the parameter's default value.
+
+**Note for `rez-starter` (and any other consumer):** the four MySQL repositories (`MysqlReservationRepository`, `MysqlResourceRepository`, `MysqlAvailabilityRepository`, `MysqlNewsletterRepository`) have the same optional `LoggerInterface $logger = new NullLogger()` pattern, but their container bindings live in the client app, not here — client apps must apply the same `->constructorParameter('logger', get(LoggerInterface::class))` override wherever they bind these repository interfaces, or their logger wiring will be silently ignored too.
+
+No behavioral change to the use cases themselves — verified via a standalone container-resolution script (real bindings now injected instead of defaults) and `composer ca` (402 tests, PHPStan max, CS clean).

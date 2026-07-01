@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Psr\Log\LoggerInterface;
+use Rez\Application\Port\MailerInterface;
 use Rez\Application\Service\AvailabilityService;
 use Rez\Application\Service\AvailabilityServiceInterface;
 use Rez\Application\UseCase\Availability\DeleteAvailabilityOverride\DeleteAvailabilityOverrideUseCase;
@@ -57,10 +59,17 @@ use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCaseInterface;
 use Rez\Infrastructure\Persistence\Mysql\MysqlDatabaseSeeder;
 
 use function DI\autowire;
+use function DI\get;
 
 return [
     AvailabilityServiceInterface::class      => autowire(AvailabilityService::class),
-    CreateReservationUseCaseInterface::class  => autowire(CreateReservationUseCase::class),
+    // PHP-DI's reflection autowiring skips optional constructor parameters entirely — it never
+    // consults the container for them, regardless of what's bound. $mailer and $logger are
+    // optional here (nullable / NullLogger default), so they must be wired explicitly or the
+    // client app's MailerInterface/LoggerInterface bindings are silently ignored.
+    CreateReservationUseCaseInterface::class  => autowire(CreateReservationUseCase::class)
+        ->constructorParameter('mailer', get(MailerInterface::class))
+        ->constructorParameter('logger', get(LoggerInterface::class)),
     BulkCancelReservationsUseCaseInterface::class => autowire(BulkCancelReservationsUseCase::class),
     CancelReservationUseCaseInterface::class      => autowire(CancelReservationUseCase::class),
     ConfirmReservationUseCaseInterface::class => autowire(ConfirmReservationUseCase::class),
@@ -87,6 +96,7 @@ return [
     // MailerInterface and NewsletterRepositoryInterface must be bound by the client app.
     SubscribeUseCaseInterface::class          => autowire(SubscribeUseCase::class),
     UnsubscribeUseCaseInterface::class        => autowire(UnsubscribeUseCase::class),
-    BroadcastUseCaseInterface::class          => autowire(BroadcastUseCase::class),
+    BroadcastUseCaseInterface::class          => autowire(BroadcastUseCase::class)
+        ->constructorParameter('logger', get(LoggerInterface::class)),
     ListSubscribersUseCaseInterface::class    => autowire(ListSubscribersUseCase::class),
 ];
