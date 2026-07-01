@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Domain\Reservation;
 
 use Rez\Domain\Exception\InvalidPartyException;
+use Rez\Domain\Shared\Email;
 
 final class Party
 {
@@ -22,7 +23,7 @@ final class Party
             throw new InvalidPartyException('Party name must not be empty.');
         }
 
-        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+        if (!Email::isValid($email)) {
             throw new InvalidPartyException(sprintf('"%s" is not a valid email address.', $email));
         }
 
