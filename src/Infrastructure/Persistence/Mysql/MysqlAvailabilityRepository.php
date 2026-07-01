@@ -13,6 +13,7 @@ use Rez\Domain\Availability\AvailabilityOverride;
 use Rez\Domain\Availability\AvailabilityRule;
 use Rez\Domain\Availability\DayOfWeek;
 use Rez\Domain\Resource\ResourceId;
+use Rez\Domain\Shared\Utc;
 use Rez\Infrastructure\Mapper\DayOfWeekMapper;
 
 final class MysqlAvailabilityRepository extends MysqlRepository implements AvailabilityRepositoryInterface
@@ -153,7 +154,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
     /** @param array<string, mixed> $row */
     private function hydrateRule(array $row): AvailabilityRule
     {
-        $utc = new \DateTimeZone('UTC');
+        $utc = Utc::timezone();
 
         return new AvailabilityRule(
             ResourceId::fromString($this->str($row['resource_id'])),
@@ -170,7 +171,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
     {
         return new AvailabilityOverride(
             ResourceId::fromString($this->str($row['resource_id'])),
-            new DateTimeImmutable($this->str($row['date']), new \DateTimeZone('UTC')),
+            new DateTimeImmutable($this->str($row['date']), Utc::timezone()),
             $this->bool($row['available']),
         );
     }

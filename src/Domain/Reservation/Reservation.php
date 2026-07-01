@@ -7,6 +7,7 @@ namespace Rez\Domain\Reservation;
 use DateTimeImmutable;
 use Rez\Domain\Exception\InvalidReservationStateException;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Shared\Utc;
 
 final class Reservation
 {
@@ -33,7 +34,7 @@ final class Reservation
             throw new \InvalidArgumentException('A reservation must have at least one resource.');
         }
 
-        return new self($id, $resourceIds, $slot, $party, ReservationStatus::Pending, new DateTimeImmutable('now', new \DateTimeZone('UTC')));
+        return new self($id, $resourceIds, $slot, $party, ReservationStatus::Pending, Utc::now());
     }
 
     public static function reconstruct(

@@ -6,6 +6,7 @@ namespace Rez\Domain\Availability;
 
 use DateTimeImmutable;
 use Rez\Domain\Resource\ResourceId;
+use Rez\Domain\Shared\Utc;
 
 final class AvailabilityRule
 {
@@ -32,7 +33,7 @@ final class AvailabilityRule
 
     public function isActiveOn(DateTimeImmutable $date): bool
     {
-        $utc = new \DateTimeZone('UTC');
+        $utc = Utc::timezone();
         $day = new DateTimeImmutable($date->format('Y-m-d'), $utc);
 
         if ($this->validFrom !== null) {
@@ -54,11 +55,11 @@ final class AvailabilityRule
 
     public function openTimeForDate(DateTimeImmutable $date): DateTimeImmutable
     {
-        return new DateTimeImmutable($date->format('Y-m-d') . ' ' . $this->openTime, new \DateTimeZone('UTC'));
+        return new DateTimeImmutable($date->format('Y-m-d') . ' ' . $this->openTime, Utc::timezone());
     }
 
     public function closeTimeForDate(DateTimeImmutable $date): DateTimeImmutable
     {
-        return new DateTimeImmutable($date->format('Y-m-d') . ' ' . $this->closeTime, new \DateTimeZone('UTC'));
+        return new DateTimeImmutable($date->format('Y-m-d') . ' ' . $this->closeTime, Utc::timezone());
     }
 }

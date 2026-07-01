@@ -18,6 +18,7 @@ use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Shared\Utc;
 use Rez\Infrastructure\Mapper\ReservationStatusMapper;
 
 final class MysqlReservationRepository extends MysqlRepository implements ReservationRepositoryInterface
@@ -166,7 +167,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     /** @param array<string, mixed> $row */
     private function hydrate(array $row): Reservation
     {
-        $utc = new \DateTimeZone('UTC');
+        $utc = Utc::timezone();
 
         return Reservation::reconstruct(
             ReservationId::fromString($this->str($row['id'])),

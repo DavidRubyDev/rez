@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Rez\Domain\Newsletter;
 
+use Rez\Domain\Shared\Email;
+use Rez\Domain\Shared\Utc;
+
 final class NewsletterSubscriber
 {
     private function __construct(
@@ -34,11 +37,11 @@ final class NewsletterSubscriber
         ?string $name,
         SubscriberSource $source,
     ): self {
-        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+        if (!Email::isValid($email)) {
             throw new \InvalidArgumentException(sprintf('"%s" is not a valid email address.', $email));
         }
 
-        return new self($id, $email, $name, $source, new \DateTimeImmutable('now', new \DateTimeZone('UTC')));
+        return new self($id, $email, $name, $source, Utc::now());
     }
 
 
