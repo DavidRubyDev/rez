@@ -15,7 +15,10 @@ final class UpdateResourceUseCase implements UpdateResourceUseCaseInterface
     ) {
     }
 
-    /** @throws \Rez\Domain\Exception\ResourceNotFoundException */
+    /**
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     * @throws DatabaseException
+     */
     public function execute(UpdateResourceRequest $request): UpdateResourceResponse
     {
         try {

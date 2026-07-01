@@ -17,7 +17,10 @@ final class CreateResourceUseCase implements CreateResourceUseCaseInterface
     ) {
     }
 
-    /** @throws \InvalidArgumentException */
+    /**
+     * @throws \InvalidArgumentException
+     * @throws DatabaseException
+     */
     public function execute(CreateResourceRequest $request): CreateResourceResponse
     {
         $resource = new Resource(

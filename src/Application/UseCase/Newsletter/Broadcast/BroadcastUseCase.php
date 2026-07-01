@@ -18,6 +18,7 @@ final class BroadcastUseCase implements BroadcastUseCaseInterface
     ) {
     }
 
+    /** @throws DatabaseException */
     public function execute(BroadcastRequest $request): BroadcastResponse
     {
         try {

@@ -10,6 +10,7 @@ use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Domain\Availability\AvailabilityRule;
+use Rez\Domain\Shared\Utc;
 
 final class SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseInterface
 {
@@ -22,6 +23,7 @@ final class SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseIn
     /**
      * @throws \Rez\Domain\Exception\ResourceNotFoundException
      * @throws \InvalidArgumentException
+     * @throws DatabaseException
      */
     public function execute(SaveAvailabilityRuleRequest $request): SaveAvailabilityRuleResponse
     {
@@ -31,7 +33,7 @@ final class SaveAvailabilityRuleUseCase implements SaveAvailabilityRuleUseCaseIn
             throw new DatabaseException('Failed to load resource.', 0, $e);
         }
 
-        $utc       = new DateTimeZone('UTC');
+        $utc       = Utc::timezone();
         $validFrom = $this->parseDate($request->validFrom, 'validFrom', $utc);
         $validUntil = $this->parseDate($request->validUntil, 'validUntil', $utc);
 
