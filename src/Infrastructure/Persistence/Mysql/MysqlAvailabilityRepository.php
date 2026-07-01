@@ -7,7 +7,6 @@ namespace Rez\Infrastructure\Persistence\Mysql;
 use DateTimeImmutable;
 use PDO;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\AvailabilityRepositoryInterface;
 use Rez\Domain\Availability\AvailabilityOverride;
@@ -21,7 +20,7 @@ final class MysqlAvailabilityRepository extends MysqlRepository implements Avail
     public function __construct(
         private readonly PDO $pdo,
         private readonly DayOfWeekMapper $dayMapper,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly LoggerInterface $logger,
     ) {
     }
 

@@ -6,6 +6,7 @@ namespace Rez\Tests\Integration\Persistence\Mysql;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Psr\Log\NullLogger;
 use Rez\Domain\Availability\AvailabilityOverride;
 use Rez\Domain\Availability\AvailabilityRule;
 use Rez\Domain\Availability\DayOfWeek;
@@ -22,7 +23,7 @@ class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
     {
         parent::setUp();
 
-        $this->repository = new MysqlAvailabilityRepository($this->pdo(), new DayOfWeekMapper());
+        $this->repository = new MysqlAvailabilityRepository($this->pdo(), new DayOfWeekMapper(), new NullLogger());
         $this->resourceId = ResourceId::generate();
     }
 

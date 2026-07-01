@@ -7,7 +7,6 @@ namespace Rez\Infrastructure\Persistence\Mysql;
 use DateTimeImmutable;
 use PDO;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Domain\Exception\ReservationNotFoundException;
@@ -26,7 +25,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     public function __construct(
         private readonly PDO $pdo,
         private readonly ReservationStatusMapper $statusMapper,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly LoggerInterface $logger,
     ) {
     }
 

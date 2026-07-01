@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Rez\Application\UseCase\Newsletter\Broadcast;
 
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\NewsletterRepositoryInterface;
@@ -15,7 +14,7 @@ final class BroadcastUseCase implements BroadcastUseCaseInterface
     public function __construct(
         private readonly NewsletterRepositoryInterface $newsletterRepository,
         private readonly MailerInterface $mailer,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly LoggerInterface $logger,
     ) {
     }
 
