@@ -5,7 +5,7 @@
 > update it as implementation progresses. It intentionally avoids implementation details
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
-> **Last updated:** June 2026
+> **Last updated:** July 2026
 > **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
@@ -667,7 +667,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Resources page — list, create, edit, delete; availability rules panel + rule modal; overrides panel + override modal; sorting (type/name/capacity/attributes)
 - ✅ Reservations page — list with date-range filter, resource name lookup, search + per-field filters (resource, status, name, email), sorting (date/status/name/email); detail modal with confirm/no-show/cancel actions; manual booking modal
 - ✅ Newsletter page — tabbed layout: broadcast panel (resource selector, date/time, send, result); subscribers panel (list with search + sort by email/name/source/opted-in, inline add with `Admin` source, delete with ConfirmDialog)
-- ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, Modal, PageHeader, StatusBadge, SlotPicker
+- ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, Modal, PageHeader, StatusBadge, SlotPicker, EditableListPanel, Button, TextInput, Select, FormField, FormActions, RowActions, SearchInput, EmptyTableRow
+- ✅ Shared hooks: useAsyncData, useConfig, useSortable, useConfirmDelete, useSyncedList
+- ✅ Component/hook dedup pass — merged the near-duplicate AvailabilityRulesPanel/AvailabilityOverridesPanel into EditableListPanel, consolidated day-of-week data into lib/days.ts, removed duplicated UTC time-formatting and empty-state table markup
 - ✅ API client modules: resources, reservations, availability, newsletter, config
 - ❌ Auth (login/logout, JWT, protected routes) — deferred until rez-users is built
 - ❌ Users page — deferred until rez-users is built
