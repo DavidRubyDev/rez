@@ -33,4 +33,10 @@ interface MailerInterface
         string $className,
         \DateTimeImmutable $classDate,
     ): void;
+
+    public function sendCustomEmail(
+        string $recipientEmail,
+        string $subject,
+        string $htmlBody,
+    ): void;
 }

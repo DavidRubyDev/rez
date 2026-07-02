@@ -65,4 +65,14 @@ class MailerInterfaceTest extends TestCase
 
         $mailer->sendReservationCancelledEmail($this->reservation);
     }
+
+    public function testSendCustomEmailAcceptsRecipientSubjectAndHtml(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects($this->once())
+            ->method('sendCustomEmail')
+            ->with('jane@example.com', 'Welcome', '<p>Hello</p>');
+
+        $mailer->sendCustomEmail('jane@example.com', 'Welcome', '<p>Hello</p>');
+    }
 }
