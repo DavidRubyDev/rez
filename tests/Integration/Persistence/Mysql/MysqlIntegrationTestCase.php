@@ -124,6 +124,15 @@ abstract class MysqlIntegrationTestCase extends TestCase
                 updated_at                       DATETIME         NOT NULL
             )
         ');
+
+        $pdo->exec('
+            CREATE TABLE IF NOT EXISTS mailer_settings (
+                id           TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+                from_address VARCHAR(255)     NOT NULL,
+                from_name    VARCHAR(255)     NOT NULL,
+                updated_at   DATETIME         NOT NULL
+            )
+        ');
     }
 
     private function truncateTables(PDO $pdo): void
@@ -136,16 +145,24 @@ abstract class MysqlIntegrationTestCase extends TestCase
         $pdo->exec('TRUNCATE TABLE availability_overrides');
         $pdo->exec('TRUNCATE TABLE newsletter_subscribers');
         $pdo->exec('TRUNCATE TABLE reservation_settings');
+        $pdo->exec('TRUNCATE TABLE mailer_settings');
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
 
-        // reservation_settings is a required singleton row (id = 1) — production seeding
-        // inserts it once via database/seeds/schema/001_reservation_settings.sql. Restore it
-        // here so every test starts from the same known-default row instead of a missing one.
+        // reservation_settings and mailer_settings are required singleton rows (id = 1) —
+        // production seeding inserts them once via database/seeds/schema/. Restore both here
+        // so every test starts from the same known-default row instead of a missing one.
         $pdo->exec("
             INSERT INTO reservation_settings
                 (id, auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at)
             VALUES
                 (1, 0, 1, 1, 1, UTC_TIMESTAMP())
+        ");
+
+        $pdo->exec("
+            INSERT INTO mailer_settings
+                (id, from_address, from_name, updated_at)
+            VALUES
+                (1, 'noreply@example.com', 'Rez', UTC_TIMESTAMP())
         ");
     }
 }
