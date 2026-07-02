@@ -53,6 +53,7 @@ use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCase;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCaseInterface;
 use Rez\Application\Port\DatabaseSeederInterface;
 use Rez\Application\Service\FeatureGuard;
+use Rez\Application\Service\ReservationEmailService;
 use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCase;
 use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCaseInterface;
 use Rez\Application\UseCase\Newsletter\ListSubscribers\ListSubscribersUseCase;
@@ -103,9 +104,11 @@ return [
     // the interface-to-implementation binding is a client-app concern).
     GetReservationSettingsUseCaseInterface::class    => autowire(GetReservationSettingsUseCase::class),
     UpdateReservationSettingsUseCaseInterface::class => autowire(UpdateReservationSettingsUseCase::class),
-    // PlatformConfig must be bound by the client app — not defined here.
-    // FeatureGuard is autowired — PHP-DI resolves PlatformConfig from client binding.
+    // PlatformConfig and MailerConfig must be bound by the client app — not defined here.
+    // FeatureGuard and ReservationEmailService are autowired — PHP-DI resolves their config/
+    // port dependencies from client bindings.
     FeatureGuard::class                       => autowire(),
+    ReservationEmailService::class            => autowire(),
     // NewsletterRepositoryInterface must be bound by the client app.
     SubscribeUseCaseInterface::class          => autowire(SubscribeUseCase::class),
     UnsubscribeUseCaseInterface::class        => autowire(UnsubscribeUseCase::class),
