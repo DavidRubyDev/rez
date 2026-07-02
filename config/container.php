@@ -35,6 +35,12 @@ use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCase
 use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCaseInterface;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowUseCase;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowUseCaseInterface;
+use Rez\Application\UseCase\ReservationEmail\SendReservationCancelledEmail\SendReservationCancelledEmailUseCase;
+use Rez\Application\UseCase\ReservationEmail\SendReservationCancelledEmail\SendReservationCancelledEmailUseCaseInterface;
+use Rez\Application\UseCase\ReservationEmail\SendReservationConfirmedEmail\SendReservationConfirmedEmailUseCase;
+use Rez\Application\UseCase\ReservationEmail\SendReservationConfirmedEmail\SendReservationConfirmedEmailUseCaseInterface;
+use Rez\Application\UseCase\ReservationEmail\SendReservationCreatedEmail\SendReservationCreatedEmailUseCase;
+use Rez\Application\UseCase\ReservationEmail\SendReservationCreatedEmail\SendReservationCreatedEmailUseCaseInterface;
 use Rez\Application\UseCase\ReservationSettings\GetReservationSettings\GetReservationSettingsUseCase;
 use Rez\Application\UseCase\ReservationSettings\GetReservationSettings\GetReservationSettingsUseCaseInterface;
 use Rez\Application\UseCase\ReservationSettings\UpdateReservationSettings\UpdateReservationSettingsUseCase;
@@ -53,6 +59,7 @@ use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCase;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCaseInterface;
 use Rez\Application\Port\DatabaseSeederInterface;
 use Rez\Application\Service\FeatureGuard;
+use Rez\Application\Service\ReservationEmailService;
 use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCase;
 use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCaseInterface;
 use Rez\Application\UseCase\Newsletter\ListSubscribers\ListSubscribersUseCase;
@@ -103,9 +110,14 @@ return [
     // the interface-to-implementation binding is a client-app concern).
     GetReservationSettingsUseCaseInterface::class    => autowire(GetReservationSettingsUseCase::class),
     UpdateReservationSettingsUseCaseInterface::class => autowire(UpdateReservationSettingsUseCase::class),
-    // PlatformConfig must be bound by the client app — not defined here.
-    // FeatureGuard is autowired — PHP-DI resolves PlatformConfig from client binding.
+    SendReservationCreatedEmailUseCaseInterface::class   => autowire(SendReservationCreatedEmailUseCase::class),
+    SendReservationConfirmedEmailUseCaseInterface::class => autowire(SendReservationConfirmedEmailUseCase::class),
+    SendReservationCancelledEmailUseCaseInterface::class => autowire(SendReservationCancelledEmailUseCase::class),
+    // PlatformConfig and MailerConfig must be bound by the client app — not defined here.
+    // FeatureGuard and ReservationEmailService are autowired — PHP-DI resolves their config/
+    // port dependencies from client bindings.
     FeatureGuard::class                       => autowire(),
+    ReservationEmailService::class            => autowire(),
     // NewsletterRepositoryInterface must be bound by the client app.
     SubscribeUseCaseInterface::class          => autowire(SubscribeUseCase::class),
     UnsubscribeUseCaseInterface::class        => autowire(UnsubscribeUseCase::class),

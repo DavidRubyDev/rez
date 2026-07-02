@@ -219,8 +219,11 @@ PaymentResolver $paymentResolver,
 \Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationUseCaseInterface $createReservationUseCase,
 DebitWalletUseCaseInterface $debitWalletUseCase,
 SubscribeUseCaseInterface $subscribeUseCase,
-MailerInterface $mailer,
 ```
+
+**No `MailerInterface` dependency** — see step 7 below (superseded by
+`rez-lifecycle-email-integration`, which wired email-sending into `CreateReservationUseCase`
+itself, called at step 4).
 
 Logic — **strict ordering, do not change**:
 
@@ -267,19 +270,11 @@ Logic — **strict ordering, do not change**:
    Newsletter failure must NOT throw — catch any exception and log silently.
    A failed newsletter subscription must never roll back a completed booking.
 
-7. **Superseded by `rez-email-restructure`** — `MailerInterface` no longer has a single
-   `sendBookingConfirmation(string $email, string $name, Reservation $reservation)` method.
-   It now exposes `sendReservationCreatedEmail(Reservation $reservation, CancellationToken
-   $cancellationToken)` and `sendReservationConfirmedEmail(Reservation $reservation,
-   CancellationToken $cancellationToken)` — pick created vs confirmed based on
-   `$reservation->status` (confirmed if `autoConfirm` fired — read via
-   `ReservationSettingsRepositoryInterface::get()->autoConfirm` since `rez-reservation-settings`,
-   not `PlatformConfig->reservations`, which no longer exists). Generate the token with
-   `CancellationToken::generate($reservation->id, $usersConfig->cancellationSecret)`
-   (`CreateBookingUseCase` needs a `UsersConfig` dependency for this). Recipient email/name
-   come from `$reservation->party` — do not pass them as separate string params, they're no
-   longer part of the signature. Mailer failure must still NOT throw — catch any exception
-   and log silently. A failed email must never roll back a completed booking.
+7. **Superseded by `rez-lifecycle-email-integration` — no action needed here.** The
+   created/confirmed email (whichever fires, based on `ReservationSettings->autoConfirm`) is
+   now sent automatically *inside* `CreateReservationUseCase` at step 4, via
+   `ReservationEmailService`. Do **not** add a second mailer call here — that would double-send.
+   This step is a no-op; kept only so the numbering below still lines up with earlier drafts.
 
 8. Return `new CreateBookingResponse($reservation)`
 
@@ -295,9 +290,13 @@ Logic — **strict ordering, do not change**:
 - Guest with `newsletterOptIn: false` — `subscribeUseCase` never called
 - Authenticated user with `newsletterOptIn: true` — `subscribeUseCase` NOT called
   (registered users manage newsletter preference via account settings)
-- Mailer failure (throws) — exception caught, booking still returned successfully
 - Newsletter failure (throws) — exception caught, booking still returned successfully
 - Success: returned response contains the reservation
+
+No mailer-failure test here — mailer failure handling is `CreateReservationUseCase`'s/
+`ReservationEmailService`'s concern now, already covered by their own test suites
+(`rez-lifecycle-email-integration`). `CreateBookingUseCase` has no `MailerInterface` dependency
+to test a failure of.
 
 ---
 
@@ -318,8 +317,12 @@ Constructor:
 ```php
 \Rez\Application\UseCase\Reservation\GetReservation\GetReservationUseCaseInterface $getReservationUseCase,
 \Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationUseCaseInterface $cancelReservationUseCase,
-MailerInterface $mailer,
 ```
+
+**No `MailerInterface` dependency** — see step 4 below (superseded by
+`rez-lifecycle-email-integration`, which wired the cancelled email into
+`CancelReservationUseCase` itself, called at step 3, unconditionally regardless of admin/guest
+actor).
 
 Logic:
 1. `$reservation = getReservationUseCase->execute(new GetReservationRequest($reservationId))->getReservation()`
@@ -333,10 +336,11 @@ Logic:
 3. `$cancelled = cancelReservationUseCase->execute(new CancelReservationRequest($reservationId))->getReservation()`
    Propagates `\DomainException` if already cancelled.
 
-4. **Superseded by `rez-email-restructure`** — call `mailer->sendReservationCancelledEmail($cancelled)`.
-   No recipient email/name params and no cancellation token — the method only takes the
-   reservation (nothing left to cancel once it's cancelled).
-   Catch and log silently — email failure must not throw.
+4. **Superseded by `rez-lifecycle-email-integration` — no action needed here.** The cancelled
+   email is now sent automatically *inside* `CancelReservationUseCase` at step 3, via
+   `ReservationEmailService::sendCancelledIfEnabled()`. Do **not** add a second mailer call
+   here — that would double-send. This step is a no-op; kept only so the numbering below still
+   lines up with earlier drafts.
 
 5. Return `new CancelBookingResponse($cancelled)`
 
@@ -347,8 +351,11 @@ Logic:
 - Authenticated user who OWNS the reservation (externalRef matches) can cancel
 - Admin (`isAdmin: true`) can cancel any reservation regardless of ownership
 - Already cancelled reservation propagates `\DomainException` from core use case
-- Cancellation email sent on success
-- Mailer failure caught silently — cancellation still returned
+
+No mailer-failure or email-sent test here — that's `CancelReservationUseCase`'s/
+`ReservationEmailService`'s concern now, already covered by their own test suites
+(`rez-lifecycle-email-integration`). `CancelBookingUseCase` has no `MailerInterface`
+dependency to test.
 
 ---
 

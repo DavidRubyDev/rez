@@ -1226,3 +1226,98 @@ value now comes from `ReservationSettingsRepositoryInterface::get()->autoConfirm
 1 new Create-use-case settings-propagation test), 3 removed (`ReservationsConfigTest`'s 2 cases,
 `PlatformConfigTest::testReservationsConfigIsAccessible`). Total: 401 unit tests passing
 (37 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 76. Reservation lifecycle email wiring (`rez-lifecycle-email-integration`)
+
+Wires settings-gated auto-sending into the three core reservation use cases, plus three
+standalone manual-send use cases for rez-admin's "send anyway" buttons. Depends on
+`rez-email-restructure` (three-method `MailerInterface`) and `rez-reservation-settings`
+(`ReservationSettings`).
+
+**`MailerConfig::cancellationSecret`** — new required field (non-empty string). Needed because
+`CreateReservationUseCase`/`ConfirmReservationUseCase` needed a real HMAC secret to generate
+`CancellationToken`s, but `UsersConfig` (the invariant-12-documented home) doesn't have this
+field yet and stays optional on `PlatformConfig` until `rez-config-update` runs — out of scope
+here, a much larger change touching dozens of existing tests. `MailerConfig` is the one config
+object always required on `PlatformConfig` today, so this works with no nullability gap.
+`tests/Application/Config/MailerConfigTest.php` — 1 new case (empty secret throws), existing
+cases updated for the new required param. REZ-CONTEXT.md invariant 12 updated to match;
+`docs/instructions/10_rez-config-update.md` flagged with a conflict note so that scaffold
+doesn't add a second, independent `cancellationSecret` to `UsersConfig` later.
+
+**`ReservationEmailService`** (`src/Application/Service/`) — single home for the
+settings-check-and-send logic. `sendCreatedIfEnabled()`, `sendConfirmedIfEnabled()`,
+`sendCancelledIfEnabled()` each check the matching `ReservationSettings` flag, then call the
+matching `MailerInterface` method inside a try/catch that logs at `error` level and never
+re-throws (invariant 11, now explicitly covering all three lifecycle emails, not just
+create/cancel). `ReservationSettings` is passed in by the caller rather than loaded internally,
+so a use case needing it for another decision (`autoConfirm`) only reads it once per request.
+No interface — final class injected directly, same pattern as `FeatureGuard`. 9 tests (3 per
+method: skip when disabled, call mailer when enabled, log-and-swallow on mailer exception).
+
+**`CreateReservationUseCase`** — after save, a single `if ($settings->autoConfirm) { …
+sendConfirmedIfEnabled … } else { … sendCreatedIfEnabled … }` decides which email fires.
+Structural, not two independent flag checks — locked in by
+`testAutoConfirmTrueAndConfirmedEnabledSendsOnlyConfirmedEmailEvenWhenCreatedAlsoEnabled`, which
+sets both `autoSendReservationCreated` and `autoSendReservationConfirmed` to `true` with
+`autoConfirm: true` and asserts only the confirmed email fires. Gained `ReservationEmailService`
+and `MailerConfig` constructor deps. 5 new tests (2 for the false/true × enabled/disabled matrix
+combinations not already covered by existing autoConfirm tests, 1 token-verifies-for-saved-id
+test) on top of the existing suite.
+
+**`ConfirmReservationUseCase`** — the manual admin-confirm path. After save: generates a
+`CancellationToken` and calls the same `sendConfirmedIfEnabled()` that `CreateReservationUseCase`'s
+autoConfirm branch uses — exactly one place decides whether a confirmed email goes out. Gained
+`ReservationSettingsRepositoryInterface`, `ReservationEmailService`, `MailerConfig` deps. 4 new
+tests (settings DatabaseException propagation, sends-when-enabled, skips-when-disabled, mailer
+failure doesn't abort confirmation).
+
+**`CancelReservationUseCase`** — after save: calls `sendCancelledIfEnabled()` unconditionally,
+no actor-type branching (admin vs future guest HMAC path both get the same email behavior, per
+explicit instruction). No token needed. Gained `ReservationSettingsRepositoryInterface`,
+`ReservationEmailService` deps — no `MailerConfig` needed here since there's no token to
+generate. 4 new tests, same shape as ConfirmReservationUseCase's.
+`BulkCancelReservationsUseCase` intentionally untouched — independent save-per-id loop, doesn't
+route through `CancelReservationUseCase`, wasn't in scope.
+
+**Three manual-send use cases** (`src/Application/UseCase/ReservationEmail/`) — new top-level
+use case category, alongside `Reservation`, `ReservationSettings`, `Availability`, `Resource`,
+`Newsletter`. `SendReservationCreatedEmailUseCase`, `SendReservationConfirmedEmailUseCase`,
+`SendReservationCancelledEmailUseCase` — each: load reservation (`ReservationNotFoundException`
+propagates), generate a token where needed, call the matching `MailerInterface` method
+*directly* (not through `ReservationEmailService` — that class exists for the settings-gated
+path only; bypassing settings is meant to be explicit and grep-able). No reservation-state
+validation — they fire regardless of status, by design; restricting when a button is shown is a
+rez-admin concern. Mailer failures propagate unswallowed — manual admin action, not an
+unattended auto-send. 12 new tests (4 per use case: happy path, missing reservation, DB
+exception, mailer exception propagates).
+
+All six use case interfaces registered in `config/container.php`, plus
+`ReservationEmailService::class => autowire()`.
+
+**Instruction docs updated for conflicts:** `10_rez-config-update.md` — conflict note added
+(see above). `11_rez-guest-cancellation.md` — section 4 (`CancelReservationUseCase`) updated to
+read `MailerConfig->cancellationSecret` instead of the never-built
+`UsersConfig->cancellationSecret`, and to list the `ReservationSettingsRepositoryInterface`/
+`ReservationEmailService` deps it already has; section 6 rewritten from "out of scope" to
+"already done" describing what actually shipped. `17_rez-booking.md` — `CreateBookingUseCase`/
+`CancelBookingUseCase` no longer need a `MailerInterface` dependency or manual send step, since
+`CreateReservationUseCase`/`CancelReservationUseCase` already send the right email internally
+now; the old plan would have double-sent.
+
+**Explicitly out of scope (per this scaffold's own instructions):** `rez-starter` routes for
+the three manual-send endpoints and the settings `GET`/`PATCH` endpoint; rez-admin UI; resource
+delete/modify cascade cancellation emails (would loop `sendCancelledIfEnabled()` per affected
+reservation — separate use case, not built).
+
+**`rez-starter` follow-up (not done here):** needs a standalone `MailerConfig::class` container
+binding — previously `MailerConfig` only existed nested inside `PlatformConfig`'s factory
+closure; the new direct-dependency use cases need PHP-DI to autowire it on its own.
+
+30 tests added (9 `ReservationEmailService`, 5 `CreateReservationUseCase` new + matrix, 4
+`ConfirmReservationUseCase` new, 4 `CancelReservationUseCase` new, 12 manual-send use cases,
+1 `MailerConfig`), 1 fixed for a PHPStan error (typed capture instead of untyped array
+destructuring). Total: 436 unit tests passing (37 skipped — all integration), PHPStan max
+clean, CS clean.

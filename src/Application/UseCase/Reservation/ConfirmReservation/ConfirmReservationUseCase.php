@@ -4,13 +4,20 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Reservation\ConfirmReservation;
 
+use Rez\Application\Config\MailerConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
+use Rez\Application\Port\ReservationSettingsRepositoryInterface;
+use Rez\Application\Service\ReservationEmailService;
+use Rez\Domain\Shared\CancellationToken;
 
 final class ConfirmReservationUseCase implements ConfirmReservationUseCaseInterface
 {
     public function __construct(
         private readonly ReservationRepositoryInterface $reservationRepository,
+        private readonly ReservationSettingsRepositoryInterface $reservationSettingsRepository,
+        private readonly ReservationEmailService $emailService,
+        private readonly MailerConfig $mailerConfig,
     ) {
     }
 
@@ -34,6 +41,15 @@ final class ConfirmReservationUseCase implements ConfirmReservationUseCaseInterf
         } catch (DatabaseException $e) {
             throw new DatabaseException('Failed to save reservation.', 0, $e);
         }
+
+        try {
+            $settings = $this->reservationSettingsRepository->get();
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load reservation settings.', 0, $e);
+        }
+
+        $token = CancellationToken::generate($confirmed->id, $this->mailerConfig->cancellationSecret);
+        $this->emailService->sendConfirmedIfEnabled($confirmed, $token, $settings);
 
         return new ConfirmReservationResponse($confirmed);
     }
