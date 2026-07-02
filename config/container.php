@@ -35,6 +35,12 @@ use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCase
 use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCaseInterface;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowUseCase;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowUseCaseInterface;
+use Rez\Application\UseCase\ReservationEmail\SendReservationCancelledEmail\SendReservationCancelledEmailUseCase;
+use Rez\Application\UseCase\ReservationEmail\SendReservationCancelledEmail\SendReservationCancelledEmailUseCaseInterface;
+use Rez\Application\UseCase\ReservationEmail\SendReservationConfirmedEmail\SendReservationConfirmedEmailUseCase;
+use Rez\Application\UseCase\ReservationEmail\SendReservationConfirmedEmail\SendReservationConfirmedEmailUseCaseInterface;
+use Rez\Application\UseCase\ReservationEmail\SendReservationCreatedEmail\SendReservationCreatedEmailUseCase;
+use Rez\Application\UseCase\ReservationEmail\SendReservationCreatedEmail\SendReservationCreatedEmailUseCaseInterface;
 use Rez\Application\UseCase\ReservationSettings\GetReservationSettings\GetReservationSettingsUseCase;
 use Rez\Application\UseCase\ReservationSettings\GetReservationSettings\GetReservationSettingsUseCaseInterface;
 use Rez\Application\UseCase\ReservationSettings\UpdateReservationSettings\UpdateReservationSettingsUseCase;
@@ -104,6 +110,9 @@ return [
     // the interface-to-implementation binding is a client-app concern).
     GetReservationSettingsUseCaseInterface::class    => autowire(GetReservationSettingsUseCase::class),
     UpdateReservationSettingsUseCaseInterface::class => autowire(UpdateReservationSettingsUseCase::class),
+    SendReservationCreatedEmailUseCaseInterface::class   => autowire(SendReservationCreatedEmailUseCase::class),
+    SendReservationConfirmedEmailUseCaseInterface::class => autowire(SendReservationConfirmedEmailUseCase::class),
+    SendReservationCancelledEmailUseCaseInterface::class => autowire(SendReservationCancelledEmailUseCase::class),
     // PlatformConfig and MailerConfig must be bound by the client app — not defined here.
     // FeatureGuard and ReservationEmailService are autowired — PHP-DI resolves their config/
     // port dependencies from client bindings.
