@@ -1154,3 +1154,75 @@ has no mailer references — unaffected.
 8 tests added (5 `CancellationToken`, 3 `MailerInterface`), 1 removed
 (`testMailerFailureIsLoggedAndNotPropagated`). Total: 388 unit tests passing (34 skipped — all
 integration), PHPStan max clean, CS clean.
+
+---
+
+### 75. DB-backed ReservationSettings replaces ReservationsConfig (`rez-reservation-settings`)
+
+Moves `autoConfirm` (and adds three new lifecycle-email toggles) from deploy-time env config to
+a plain per-request DB read. No caching layer — explicit decision; add one later as an
+infrastructure-layer decorator only if measured to matter.
+
+**`ReservationSettings`** (`src/Domain/Reservation/ReservationSettings.php`) — value object,
+four `bool` fields: `autoConfirm`, `autoSendReservationCreated`, `autoSendReservationConfirmed`,
+`autoSendReservationCancelled`. No dedicated test — trivial, no invariants, matching this
+codebase's precedent for value objects with no logic.
+
+**`ReservationSettingsRepositoryInterface`** (`src/Application/Port/`) — `get(): ReservationSettings`
+(throws `DatabaseException` if the row is missing — a missing row post-seed is a deployment bug,
+not a normal state, so it never defaults silently) and `update(ReservationSettings): void`
+(full-row replace, no PATCH semantics at the repository level).
+
+**`MysqlReservationSettingsRepository`** — single-row table, `id` always `1` by convention (not
+a DB constraint). Same `PDOException` → `DatabaseException` + `logger->critical()` wrapping as
+every other MySQL repository. `tests/Infrastructure/Persistence/Mysql/MysqlReservationSettingsRepositoryLoggerTest.php`
+— 2 cases (`get()`/`update()` PDO failure). `tests/Integration/Persistence/Mysql/MysqlReservationSettingsRepositoryTest.php`
+— 3 cases (seeded-defaults round-trip, update round-trip, missing-row throws), skipped locally.
+`MysqlIntegrationTestCase` creates the table and — since this row is a required singleton rather
+than deletable sample data — re-inserts the default row after each test's `TRUNCATE` so every
+test starts from a known state.
+
+**Schema** — `database/seeds/schema/001_reservation_settings.sql`, a new file in `rez`'s owned
+number range rather than appended to `000_schema.sql`, per this scaffold's explicit instruction
+(diverges from this repo's earlier practice of one growing schema file, but the data/ directory
+already establishes numbered-file-per-addition as a valid pattern within the seed convention).
+`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE` for the default row — idempotent, safe to re-run.
+Defaults: `autoConfirm: false` (matches the old deploy-time default), the three
+`autoSend*: true` (preserves today's observable behavior — an email always went out on create —
+through the migration, even though which specific email fires now depends on `autoConfirm`).
+
+**`GetReservationSettingsUseCase`** / **`UpdateReservationSettingsUseCase`**
+(`src/Application/UseCase/ReservationSettings/`) — standard Request/Response/Interface pattern.
+Get is a thin read-through (2 tests). Update is PATCH semantics reusing `UpdateResourceUseCase`'s
+established shape — nullable request fields, `get()` current, apply only non-null fields, `update()`
+— rather than inventing a new update style (8 tests: one per field independently, one combined,
+one no-fields-provided, plus `get()`/`update()` `DatabaseException` propagation). Both interfaces
+registered in `config/container.php`; the repository binding itself is left to the client app,
+matching every other MySQL-repository-owned-by-`rez` interface (`NewsletterRepositoryInterface`
+et al.) — `rez`'s own container never binds repository interfaces, only use cases.
+
+**`ReservationsConfig` removed entirely.** `PlatformConfig` drops the `reservations` constructor
+param (no `hasReservations()` existed to remove). `CreateReservationUseCase` — its *only* use of
+`PlatformConfig` was `->reservations->autoConfirm` — now depends on
+`ReservationSettingsRepositoryInterface` instead of `PlatformConfig`, wrapping `get()` failures as
+`DatabaseException('Failed to load reservation settings.')` matching the existing wrapping
+convention for `findById`/`save`. `PlatformConfigTest` and `FeatureGuardTest` updated (both
+constructed a `ReservationsConfig` per test purely to satisfy the old required param).
+No live client currently exists (core tier's users/auth layer isn't built yet — see §9 in
+REZ-CONTEXT.md — so nothing could be live), confirming the "no migration/backfill needed" premise
+this scaffold's instructions asked to verify before merging.
+
+**`rez-starter` follow-up (not done here):** its `PlatformConfig` DI wiring still passes a
+`reservations` argument that no longer exists on the constructor and will fail to compile;
+its container also needs `ReservationSettingsRepositoryInterface` bound to
+`MysqlReservationSettingsRepository`. Flagged in REZ-CONTEXT.md.
+
+**Instruction docs** — `11_rez-guest-cancellation.md` and `17_rez-booking.md` both mentioned
+`autoConfirm` in passing (not `ReservationsConfig` directly); both updated with a note that the
+value now comes from `ReservationSettingsRepositoryInterface::get()->autoConfirm`, not
+`PlatformConfig->reservations`.
+
+18 tests added (2 repository logger, 3 integration, 2 Get-use-case, 8 Update-use-case,
+1 new Create-use-case settings-propagation test), 3 removed (`ReservationsConfigTest`'s 2 cases,
+`PlatformConfigTest::testReservationsConfigIsAccessible`). Total: 401 unit tests passing
+(37 skipped — all integration), PHPStan max clean, CS clean.
