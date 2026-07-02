@@ -47,7 +47,7 @@ class ConfirmReservationUseCaseTest extends TestCase
             ->willReturn(new ReservationSettings(true, true, true, true));
         $this->mailer       = $this->createMock(MailerInterface::class);
         $this->emailService = new ReservationEmailService($this->mailer, new NullLogger());
-        $this->mailerConfig = new MailerConfig('info@studio.cz', 'Studio', 'super-secret-cancellation-key');
+        $this->mailerConfig = new MailerConfig('super-secret-cancellation-key');
         $this->useCase      = $this->makeUseCase($this->reservationSettingsRepository);
 
         $this->reservation = Reservation::create(
