@@ -6,7 +6,7 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** July 2026
-> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped. Reservation-lifecycle emails now wired end-to-end (`rez-lifecycle-email-integration`) — settings-gated auto-send in Create/Confirm/Cancel plus three manual-send use cases; `rez-starter` needs a standalone `MailerConfig` container binding. `fromAddress`/`fromName` extracted from `MailerConfig` into DB-backed `MailerSettings` (`rez-mailer-settings`) — `rez-starter`'s `SymfonyMailer` needs to read them from there instead.
+> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped. Reservation-lifecycle emails now wired end-to-end (`rez-lifecycle-email-integration`) — settings-gated auto-send in Create/Confirm/Cancel plus three manual-send use cases; `rez-starter` needs a standalone `MailerConfig` container binding. `fromAddress`/`fromName` extracted from `MailerConfig` into DB-backed `MailerSettings` (`rez-mailer-settings`) — `rez-starter`'s `SymfonyMailer` needs to read them from there instead. Custom email template infrastructure added (`rez-custom-email-templates`) — `EmailTemplate` CRUD + `SendEmailTemplateUseCase` + `MailerInterface::sendCustomEmail()`; the rez-admin editor/list/send UI and rez-starter's routes + layout wrapping are separate, not-yet-built follow-ups.
 
 ---
 
@@ -136,13 +136,19 @@ required (not optional) part of `PlatformConfig`.
 - `NewsletterSubscriberId` — UUID v4 value object ✅
 - `SubscriberSource` — pure enum: `Guest`, `Registered`, `Admin` ✅ (`Admin` added for subscribers manually added via rez-admin). Serialiser lowercases via `strtolower($subscriber->source->name)`.
 
-#### Mailer (COMPLETE — `rez-mailer-settings`)
+#### Mailer (COMPLETE — `rez-mailer-settings`, `rez-custom-email-templates`)
 - `MailerSettings` — immutable value object. Fields: `fromAddress` (validated email), `fromName`
   (non-empty string). DB-backed single-row settings
   (`MailerSettingsRepositoryInterface`/`MysqlMailerSettingsRepository`, §3.3/§3.8), not
   deploy-time config — extracted from `MailerConfig`, which now only carries
   `cancellationSecret` (a security secret, not admin-editable branding — deliberately not
   moved here). No caching layer, same explicit decision as `ReservationSettings`.
+- `EmailTemplate` — immutable entity (not a settings value object — a real multi-row
+  collection). Fields: `id`, `subject`, `html`, `createdAt`. `create()`/`reconstruct()` factories
+  plus `withContent()` for validated updates preserving `id`/`createdAt`. Admin-composed
+  reusable email content, sent to an arbitrary recipient list via `SendEmailTemplateUseCase`
+  (§3.5) — the editor/list UI lives in rez-admin, HTTP routes and email-layout wrapping in
+  rez-starter, neither built in this repo. `EmailTemplateId` — UUID v4, `UuidV4Id` trait.
 
 #### Shared
 - `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code — used only in Domain (exceptions, `Money::__toString()`). Infrastructure serialization goes through `CurrencyMapper::toString()`.
@@ -170,6 +176,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `AvailabilityRepositoryInterface` | `MysqlAvailabilityRepository` | COMPLETE |
 | `ReservationSettingsRepositoryInterface` | `MysqlReservationSettingsRepository` | COMPLETE (binding itself, like all `rez`-owned repos, must be wired by the client app — not bound in `rez`'s own `config/container.php`) |
 | `MailerSettingsRepositoryInterface` | `MysqlMailerSettingsRepository` | COMPLETE (same binding note as above) |
+| `EmailTemplateRepositoryInterface` | `MysqlEmailTemplateRepository` | COMPLETE (same binding note as above) |
 | `DatabaseSeederInterface` | `MysqlDatabaseSeeder` | COMPLETE |
 | `StripeEventRepositoryInterface` | `MysqlStripeEventRepository` | NOT YET BUILT |
 | `WalletRepositoryInterface` | `MysqlWalletRepository` | NOT YET BUILT |
@@ -230,6 +237,14 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `SaveAvailabilityOverrideUseCase` | `SaveAvailabilityOverrideRequest` | `SaveAvailabilityOverrideResponse` | |
 | `GetReservationSettingsUseCase` | `GetReservationSettingsRequest` (empty) | `GetReservationSettingsResponse` | Thin read-through to `ReservationSettingsRepositoryInterface` |
 | `UpdateReservationSettingsUseCase` | `UpdateReservationSettingsRequest` | `UpdateReservationSettingsResponse` | PATCH semantics — all fields nullable, same shape as `UpdateResourceUseCase` |
+| `GetMailerSettingsUseCase` | `GetMailerSettingsRequest` (empty) | `GetMailerSettingsResponse` | Thin read-through to `MailerSettingsRepositoryInterface` |
+| `UpdateMailerSettingsUseCase` | `UpdateMailerSettingsRequest` | `UpdateMailerSettingsResponse` | PATCH semantics, same shape as `UpdateReservationSettingsUseCase` |
+| `CreateEmailTemplateUseCase` | `CreateEmailTemplateRequest` | `CreateEmailTemplateResponse` | |
+| `GetEmailTemplateUseCase` | `GetEmailTemplateRequest` | `GetEmailTemplateResponse` | |
+| `ListEmailTemplatesUseCase` | `ListEmailTemplatesRequest` (empty) | `ListEmailTemplatesResponse` | Returns a plain `EmailTemplate[]` array, like `ListSubscribersUseCase` |
+| `UpdateEmailTemplateUseCase` | `UpdateEmailTemplateRequest` | `UpdateEmailTemplateResponse` | PATCH semantics via `EmailTemplate::withContent()` |
+| `DeleteEmailTemplateUseCase` | `DeleteEmailTemplateRequest` | `DeleteEmailTemplateResponse` | `findById` before `delete`, so a missing template throws rather than silently no-opping |
+| `SendEmailTemplateUseCase` | `SendEmailTemplateRequest(EmailTemplateId, string[] $recipients)` | `SendEmailTemplateResponse(int $sent)` | Validates every recipient up front, fails fast if any is malformed; per-recipient mailer failures are caught, logged, and skipped — same pattern as `BroadcastUseCase` |
 | `SeedDatabaseUseCase` | `SeedDatabaseRequest(string[] $seedsDirectories)` | `SeedDatabaseResponse` | Globs *.sql, executes in filename order across all directories |
 | `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
 | `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
@@ -373,6 +388,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `availability_overrides` | resource_id, date, available (TINYINT) |
 | `reservation_settings` | id (always 1, single row by convention), auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at | Seeded via `database/seeds/schema/001_reservation_settings.sql` (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`) — a new numbered file rather than appended to `000_schema.sql`, per explicit instruction on this scaffold |
 | `mailer_settings` | id (always 1, single row by convention), from_address, from_name, updated_at | Seeded via `database/seeds/schema/002_mailer_settings.sql`, same pattern as `reservation_settings`. Seeded defaults (`noreply@example.com` / `Rez`) are placeholders — every deployment must update them before going live |
+| `email_templates` | id, subject, html (MEDIUMTEXT), created_at | Seeded via `database/seeds/schema/003_email_templates.sql` — `CREATE TABLE IF NOT EXISTS` only, no seed rows (a real collection, not a singleton settings table) |
 
 #### Not yet built
 
@@ -663,6 +679,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Availability | ✅ | ✅ | ✅ | ✅ |
 | ReservationSettings | ✅ | ✅ | ✅ | ✅ (`rez-reservation-settings`) |
 | MailerSettings | ✅ | ✅ | ✅ | ✅ (`rez-mailer-settings`) |
+| EmailTemplate (custom emails) | ✅ | ✅ CRUD + Send | ✅ | ✅ (`rez-custom-email-templates`) |
 | Reservation lifecycle emails | — | ✅ auto-send (3 use cases wired) + ✅ 3 manual-send use cases | — | ✅ (`rez-lifecycle-email-integration`) |
 | Seeder | ✅ | ✅ | ✅ | ✅ |
 | Currency + Money | ✅ | — | ✅ CurrencyMapper | ✅ |
@@ -729,6 +746,13 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   "From" header needs to read from `MailerSettingsRepositoryInterface` instead of the now-removed
   `MailerConfig` fields; container needs `MailerSettingsRepositoryInterface` bound to
   `MysqlMailerSettingsRepository`.
+- `rez-custom-email-templates` — **COMPLETE**, ad hoc (no `docs/instructions/NN_*` file — see
+  `docs/CONTEXT.md`). Adds `EmailTemplate` (real CRUD entity, not a settings singleton) with
+  full CRUD use cases plus `SendEmailTemplateUseCase` (loads a template, sends to an arbitrary
+  recipient list, catch-log-continue per recipient like `BroadcastUseCase`). Adds
+  `MailerInterface::sendCustomEmail()`. Covers only `rez` — the rez-admin editor/list/send UI
+  and rez-starter's HTTP routes + Twig layout wrapping are separate, not-yet-built follow-ups
+  in those repos.
 13. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 14. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
 15. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
@@ -761,6 +785,10 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   longer exist (`rez-mailer-settings`) — needs switching to `MailerSettingsRepositoryInterface`
   (or `GetMailerSettingsUseCase`) at send time. Container also needs
   `MailerSettingsRepositoryInterface` bound to `MysqlMailerSettingsRepository`
+- ❌ `SymfonyMailer::sendCustomEmail()` not implemented (`rez-custom-email-templates`) — new
+  `MailerInterface` method, needs a Twig layout template that wraps the raw `htmlBody`. Container
+  also needs `EmailTemplateRepositoryInterface` bound to `MysqlEmailTemplateRepository`
+- ❌ No HTTP routes for the six `EmailTemplate` use cases yet (`rez-custom-email-templates`)
 - ✅ Twig HTML email templates
 - ✅ PDO boot guard — DB-down returns 503
 - ✅ `bin/seed.php` seed entry point (`composer seed` / `composer seed:fill`)
@@ -796,3 +824,6 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ API client modules: resources, reservations, availability, newsletter, config
 - ❌ Auth (login/logout, JWT, protected routes) — deferred until rez-users is built
 - ❌ Users page — deferred until rez-users is built
+- ❌ Custom email templates page (rich-text editor, saved-template list, send-to-recipient-list
+  UI) — depends on `rez-custom-email-templates`'s use cases and `rez-starter`'s not-yet-built
+  HTTP routes for them

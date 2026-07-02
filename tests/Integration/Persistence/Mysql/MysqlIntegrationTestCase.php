@@ -133,6 +133,15 @@ abstract class MysqlIntegrationTestCase extends TestCase
                 updated_at   DATETIME         NOT NULL
             )
         ');
+
+        $pdo->exec('
+            CREATE TABLE IF NOT EXISTS email_templates (
+                id         CHAR(36)     NOT NULL PRIMARY KEY,
+                subject    VARCHAR(255) NOT NULL,
+                html       MEDIUMTEXT   NOT NULL,
+                created_at DATETIME     NOT NULL
+            )
+        ');
     }
 
     private function truncateTables(PDO $pdo): void
@@ -146,6 +155,7 @@ abstract class MysqlIntegrationTestCase extends TestCase
         $pdo->exec('TRUNCATE TABLE newsletter_subscribers');
         $pdo->exec('TRUNCATE TABLE reservation_settings');
         $pdo->exec('TRUNCATE TABLE mailer_settings');
+        $pdo->exec('TRUNCATE TABLE email_templates');
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
 
         // reservation_settings and mailer_settings are required singleton rows (id = 1) —

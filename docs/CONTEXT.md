@@ -1388,3 +1388,78 @@ Container also needs `MailerSettingsRepositoryInterface` bound to
 16 tests added (3 `MailerSettings`, 2 repository logger, 3 integration, 2 Get-use-case,
 8 Update-use-case, minus 2 removed from `MailerConfigTest`). Total: 452 unit tests passing
 (40 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 78. Custom email template infrastructure (`rez-custom-email-templates`)
+
+Admin-composed reusable emails (subject + HTML body), stored as a real multi-row collection —
+not a settings singleton like `ReservationSettings`/`MailerSettings`. Covers only the `rez`
+layer: domain entity, MySQL persistence, CRUD use cases, and a send-to-a-list use case. The
+rich-text editor and template list UI live in `rez-admin`; the HTTP routes and the email-layout
+wrapping live in `rez-starter` — both out of scope here, separate repos.
+
+**`EmailTemplate`** (`src/Domain/Mailer/EmailTemplate.php`) — immutable entity: `id`, `subject`,
+`html`, `createdAt`. Private constructor; `create()` validates (non-empty subject/html) and sets
+`createdAt`; `reconstruct()` is DB hydration (trusts the row, matching
+`NewsletterSubscriber::reconstruct()`); `withContent(subject, html)` is the update path —
+validates and returns a new instance preserving `id`/`createdAt`, since there's no existing
+"update in place" convention to reuse (`Resource`'s constructor isn't private, so its update
+path just calls `new Resource(...)` directly — `EmailTemplate` can't do that). `EmailTemplateId`
+— `UuidV4Id` trait, same as every other ID class. 12 tests (7 entity, 5 id).
+
+**`EmailTemplateNotFoundException`** — empty stub extending `DomainException`, matching
+`ResourceNotFoundException` (not `NewsletterSubscriberNotFoundException`'s constructor-arg
+variant — templates are looked up by id, not a business key).
+
+**`EmailTemplateRepositoryInterface`** / **`MysqlEmailTemplateRepository`** — full CRUD, shaped
+like `ResourceRepositoryInterface`/`MysqlResourceRepository` (`findById`/`findAll`/`save`/
+`delete`), not the settings pair's `get`/`update`-only shape. `findAll()` orders by
+`created_at DESC`. Same `PDOException` wrapping convention as every other MySQL repository.
+9 tests (4 repository logger, 5 integration — save/find roundtrip, not-found, findAll,
+upsert-on-save, delete — skipped locally).
+
+**Schema** — `database/seeds/schema/003_email_templates.sql`, next number after
+`002_mailer_settings.sql`. `CREATE TABLE IF NOT EXISTS` only — no seed rows, since this is a
+real collection (like `resources`), not a singleton settings row. `html` column is `MEDIUMTEXT`
+(email bodies can be long; `MEDIUMTEXT`'s 16MB cap is comfortably more than enough).
+`MysqlIntegrationTestCase` creates the table and truncates it per test — no reseed needed,
+unlike `reservation_settings`/`mailer_settings`.
+
+**`MailerInterface::sendCustomEmail(string $recipientEmail, string $subject, string $htmlBody)`**
+— new typed method, consistent with this port's existing convention (one typed method per email,
+not a generic `templateName`+`params` method, per the `rez-email-restructure` decision).
+`rez-starter`'s concrete mailer wraps `htmlBody` in the shared email layout before sending —
+`rez` only hands over the raw content. `NullMailer` updated. 1 new test in
+`MailerInterfaceTest`.
+
+**`CreateEmailTemplateUseCase`** / **`GetEmailTemplateUseCase`** / **`ListEmailTemplatesUseCase`**
+/ **`UpdateEmailTemplateUseCase`** / **`DeleteEmailTemplateUseCase`**
+(`src/Application/UseCase/EmailTemplate/`) — standard Request/Response/Interface pattern,
+matching `Resource`'s CRUD use cases exactly (`ListEmailTemplatesResponse` wraps a plain
+`EmailTemplate[]` array like `ListSubscribersResponse`, not a collection type like
+`ListResourcesResponse` — `EmailTemplateRepositoryInterface::findAll()` returns a plain array).
+`DeleteEmailTemplateUseCase` follows `DeleteResourceUseCase`'s order — `findById` before
+`delete`, so a missing template surfaces as `EmailTemplateNotFoundException` rather than a
+silent no-op `DELETE`. 23 tests total across the five.
+
+**`SendEmailTemplateUseCase`** — loads the template by id, validates the whole recipient list up
+front (non-empty, every address well-formed via `Email::isValid()`) and fails fast before
+sending anything if any entry is malformed, then loops calling
+`mailer->sendCustomEmail($recipient, $template->subject, $template->html)` per recipient,
+catching `\Throwable` and logging (not re-throwing) on individual failures — same
+catch-log-continue pattern as `BroadcastUseCase`. Returns the count actually sent. 6 tests.
+
+All six use case interfaces registered in `config/container.php`; the repository binding itself
+is left to the client app, same as every other `rez`-owned repository interface.
+
+No pending instruction docs reference this feature — brand new, nothing to reconcile.
+
+**`rez-starter`/`rez-admin` follow-ups (not done here, separate repos):** HTTP routes for the
+six use cases; `SymfonyMailer::sendCustomEmail()` implementation wrapping `htmlBody` in the
+Twig email layout; container binding `EmailTemplateRepositoryInterface` →
+`MysqlEmailTemplateRepository`; the rez-admin editor/list/send UI described in the original
+request.
+
+51 tests added. Total: 503 unit tests passing (45 skipped — all integration), PHPStan max
+clean, CS clean.
