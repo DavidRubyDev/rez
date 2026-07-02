@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Reservation\CreateReservation;
 
-use Rez\Application\Config\PlatformConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
+use Rez\Application\Port\ReservationSettingsRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\Service\AvailabilityServiceInterface;
 use Rez\Domain\Exception\ConflictException;
@@ -22,7 +22,7 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
         private readonly ReservationRepositoryInterface $reservationRepository,
         private readonly ResourceRepositoryInterface $resourceRepository,
         private readonly AvailabilityServiceInterface $availabilityService,
-        private readonly PlatformConfig $config,
+        private readonly ReservationSettingsRepositoryInterface $reservationSettingsRepository,
     ) {
     }
 
@@ -57,7 +57,13 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
             $request->party,
         );
 
-        if ($this->config->reservations->autoConfirm) {
+        try {
+            $settings = $this->reservationSettingsRepository->get();
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load reservation settings.', 0, $e);
+        }
+
+        if ($settings->autoConfirm) {
             $reservation = $reservation->confirm();
         }
 

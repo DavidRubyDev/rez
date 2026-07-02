@@ -9,14 +9,12 @@ use Rez\Application\Config\CreditsConfig;
 use Rez\Application\Config\MailerConfig;
 use Rez\Application\Config\PaymentsConfig;
 use Rez\Application\Config\PlatformConfig;
-use Rez\Application\Config\ReservationsConfig;
 use Rez\Application\Config\SubscriptionsConfig;
 use Rez\Application\Config\UsersConfig;
 
 class PlatformConfigTest extends TestCase
 {
     private MailerConfig $mailer;
-    private ReservationsConfig $reservations;
     private PaymentsConfig $payments;
     private UsersConfig $users;
     private CreditsConfig $credits;
@@ -25,7 +23,6 @@ class PlatformConfigTest extends TestCase
     protected function setUp(): void
     {
         $this->mailer        = new MailerConfig('info@studio.cz', 'Studio');
-        $this->reservations  = new ReservationsConfig();
         $this->payments      = new PaymentsConfig('CZK', 'whsec_test');
         $this->users         = new UsersConfig('super-secret-jwt');
         $this->credits       = new CreditsConfig(10000, 'CZK');
@@ -35,12 +32,10 @@ class PlatformConfigTest extends TestCase
     public function testValidConstructionWithMailerOnly(): void
     {
         $config = new PlatformConfig(
-            mailer:       $this->mailer,
-            reservations: $this->reservations,
+            mailer: $this->mailer,
         );
 
         $this->assertSame($this->mailer, $config->mailer);
-        $this->assertSame($this->reservations, $config->reservations);
         $this->assertNull($config->payments);
         $this->assertNull($config->users);
         $this->assertNull($config->credits);
@@ -51,7 +46,6 @@ class PlatformConfigTest extends TestCase
     {
         $config = new PlatformConfig(
             mailer:        $this->mailer,
-            reservations:  $this->reservations,
             payments:      $this->payments,
             users:         $this->users,
             credits:       $this->credits,
@@ -64,100 +58,92 @@ class PlatformConfigTest extends TestCase
         $this->assertSame($this->subscriptions, $config->subscriptions);
     }
 
-    public function testReservationsConfigIsAccessible(): void
-    {
-        $reservations = new ReservationsConfig(autoConfirm: true);
-        $config       = new PlatformConfig(mailer: $this->mailer, reservations: $reservations);
-
-        $this->assertTrue($config->reservations->autoConfirm);
-    }
-
     public function testUsersWithoutPaymentsThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, users: $this->users);
+        new PlatformConfig(mailer: $this->mailer, users: $this->users);
     }
 
     public function testCreditsWithoutPaymentsThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, users: $this->users, credits: $this->credits);
+        new PlatformConfig(mailer: $this->mailer, users: $this->users, credits: $this->credits);
     }
 
     public function testCreditsWithoutUsersThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, payments: $this->payments, credits: $this->credits);
+        new PlatformConfig(mailer: $this->mailer, payments: $this->payments, credits: $this->credits);
     }
 
     public function testSubscriptionsWithoutPaymentsThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, users: $this->users, subscriptions: $this->subscriptions);
+        new PlatformConfig(mailer: $this->mailer, users: $this->users, subscriptions: $this->subscriptions);
     }
 
     public function testSubscriptionsWithoutUsersThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, payments: $this->payments, subscriptions: $this->subscriptions);
+        new PlatformConfig(mailer: $this->mailer, payments: $this->payments, subscriptions: $this->subscriptions);
     }
 
     public function testHasMailerAlwaysTrue(): void
     {
-        $this->assertTrue((new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations))->hasMailer());
+        $this->assertTrue((new PlatformConfig(mailer: $this->mailer))->hasMailer());
     }
 
     public function testHasPaymentsFalseWhenNull(): void
     {
-        $this->assertFalse((new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations))->hasPayments());
+        $this->assertFalse((new PlatformConfig(mailer: $this->mailer))->hasPayments());
     }
 
     public function testHasPaymentsTrueWhenSet(): void
     {
         $this->assertTrue(
-            (new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, payments: $this->payments))->hasPayments()
+            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments))->hasPayments()
         );
     }
 
     public function testHasUsersFalseWhenNull(): void
     {
         $this->assertFalse(
-            (new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, payments: $this->payments))->hasUsers()
+            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments))->hasUsers()
         );
     }
 
     public function testHasUsersTrueWhenSet(): void
     {
         $this->assertTrue(
-            (new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, payments: $this->payments, users: $this->users))->hasUsers()
+            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users))->hasUsers()
         );
     }
 
     public function testHasCreditsFalseWhenNull(): void
     {
         $this->assertFalse(
-            (new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, payments: $this->payments, users: $this->users))->hasCredits()
+            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users))->hasCredits()
         );
     }
 
     public function testHasCreditsTrueWhenSet(): void
     {
         $this->assertTrue(
-            (new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, payments: $this->payments, users: $this->users, credits: $this->credits))->hasCredits()
+            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users, credits: $this->credits))->hasCredits()
         );
     }
 
     public function testHasSubscriptionsFalseWhenNull(): void
     {
         $this->assertFalse(
-            (new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, payments: $this->payments, users: $this->users))->hasSubscriptions()
+            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users))->hasSubscriptions()
         );
     }
 
     public function testHasSubscriptionsTrueWhenSet(): void
     {
         $this->assertTrue(
-            (new PlatformConfig(mailer: $this->mailer, reservations: $this->reservations, payments: $this->payments, users: $this->users, subscriptions: $this->subscriptions))->hasSubscriptions()
+            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users, subscriptions: $this->subscriptions))->hasSubscriptions()
         );
     }
 }

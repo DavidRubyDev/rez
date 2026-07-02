@@ -11,7 +11,6 @@ final class PlatformConfig
      */
     public function __construct(
         public readonly MailerConfig $mailer,
-        public readonly ReservationsConfig $reservations,
         public readonly ?PaymentsConfig $payments = null,
         public readonly ?UsersConfig $users = null,
         public readonly ?CreditsConfig $credits = null,
