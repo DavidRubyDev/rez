@@ -6,7 +6,7 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** July 2026
-> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped.
+> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped. Reservation-lifecycle emails now wired end-to-end (`rez-lifecycle-email-integration`) — settings-gated auto-send in Create/Confirm/Cancel plus three manual-send use cases; `rez-starter` needs a standalone `MailerConfig` container binding.
 
 ---
 
@@ -141,7 +141,13 @@ required (not optional) part of `PlatformConfig`.
 - `Feature` — pure enum: `Payments`, `Credits`, `Subscriptions`. Users removed — users are always present and never gated. Passed to `FeatureDisabledException` so gated feature names are never raw strings in use cases.
 - `Money` — immutable value object. `amount: int` (haléře/cents — NEVER floats), `currency: Currency`. Methods: `add()`, `subtract()` (throws `InsufficientFundsException`), `isZero()`, `equals()`, `isGreaterThan()`, `__toString()`.
 - `DateTimeRange` — shared utility, not a domain concept
-- `CancellationToken` — value object. Stateless HMAC-SHA256 of `reservationId + secret`. **Built** (`rez-email-restructure`, ahead of schedule — `MailerInterface`'s new shape needed the type). Not yet wired to any call site: nothing generates it at booking time yet, and `CancelReservationUseCase` doesn't verify it yet — both are still `rez-guest-cancellation` (step 12). Secret will come from `UsersConfig::$cancellationSecret`, which doesn't exist yet either (`rez-config-update`, step 11 — not done, and a prerequisite of step 12).
+- `CancellationToken` — value object. Stateless HMAC-SHA256 of `reservationId + secret`. Built
+  in `rez-email-restructure` (ahead of schedule — `MailerInterface`'s new shape needed the
+  type). **Generation now wired** (`rez-lifecycle-email-integration`): `CreateReservationUseCase`,
+  `ConfirmReservationUseCase`, and the two `SendReservation{Created,Confirmed}EmailUseCase`
+  manual-send use cases all generate one from `MailerConfig::$cancellationSecret`.
+  **Verification still not wired** — `CancelReservationUseCase` has no guest token-check path
+  yet; that's still `rez-guest-cancellation` (step 12).
 
 ### 3.3 Port interfaces (Application/Port/)
 
@@ -182,6 +188,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 |---|---|---|
 | `AvailabilityService` | Capacity-aware slot availability logic used by CreateReservation + GetAvailability. Injects `ResourceRepositoryInterface`. `isSlotAvailable(ResourceId, TimeSlot, int $partySize = 1)` sums existing party sizes and checks against `resource->capacity`. `getAvailableSlots()` accepts `int $partySize = 1` and filters candidates by the same capacity rule. | COMPLETE |
 | `FeatureGuard` | Throws `FeatureDisabledException` if a gated feature is not configured | COMPLETE |
+| `ReservationEmailService` | Settings-gated send/log/swallow for all three reservation-lifecycle emails (`sendCreatedIfEnabled`, `sendConfirmedIfEnabled`, `sendCancelledIfEnabled`). Takes `ReservationSettings` from the caller rather than loading it — avoids a second DB read per request. Single home for invariant 11. No interface, injected as a concrete class (same pattern as `FeatureGuard`) | COMPLETE (`rez-lifecycle-email-integration`) |
 | `JwtService` | JWT generation and validation using `firebase/php-jwt` | NOT YET BUILT |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
@@ -193,9 +200,12 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 | Use case | Input | Output | Notes |
 |---|---|---|---|
-| `CreateReservationUseCase` | `CreateReservationRequest` | `CreateReservationResponse` | Checks availability, throws `ConflictException` if slot taken. **Does not send any email** — the `MailerInterface` call (and `LoggerInterface` dependency it needed for failure logging) was removed in `rez-email-restructure`; reintroducing a call to `sendReservationCreatedEmail()`/`sendReservationConfirmedEmail()`, gated by settings, is `rez-lifecycle-email-integration`'s job (not yet scaffolded) |
-| `CancelReservationUseCase` | `CancelReservationRequest` | `CancelReservationResponse` | Two paths: (1) admin cancels by reservationId only; (2) guest cancels with reservationId + HMAC cancellation token — verified before cancellation |
-| `ConfirmReservationUseCase` | `ConfirmReservationRequest` | `ConfirmReservationResponse` | |
+| `CreateReservationUseCase` | `CreateReservationRequest` | `CreateReservationResponse` | Checks availability, throws `ConflictException` if slot taken. After save: single `if ($settings->autoConfirm) { …confirmed… } else { …created… }` — generates one `CancellationToken` and sends exactly one of the two emails via `ReservationEmailService`, gated by `ReservationSettings` (`rez-lifecycle-email-integration`) |
+| `CancelReservationUseCase` | `CancelReservationRequest` | `CancelReservationResponse` | Currently one path (admin cancel by reservationId only) — the second path (guest cancels with reservationId + HMAC cancellation token, verified before cancellation) is `rez-guest-cancellation`, not yet built. After save: sends the cancelled email via `ReservationEmailService::sendCancelledIfEnabled()` unconditionally, no actor-type branching (`rez-lifecycle-email-integration`) |
+| `ConfirmReservationUseCase` | `ConfirmReservationRequest` | `ConfirmReservationResponse` | Manual admin-confirm path. After save: generates a `CancellationToken` and sends the confirmed email via the same `ReservationEmailService::sendConfirmedIfEnabled()` that `CreateReservationUseCase`'s autoConfirm branch uses — exactly one place decides whether a confirmed email goes out (`rez-lifecycle-email-integration`) |
+| `SendReservationCreatedEmailUseCase` | `SendReservationCreatedEmailRequest(ReservationId)` | `SendReservationCreatedEmailResponse` | Manual escape hatch for rez-admin's "send anyway" button. Ignores `ReservationSettings` and reservation state entirely; calls `MailerInterface::sendReservationCreatedEmail()` directly, not through `ReservationEmailService`. Mailer failures propagate unswallowed |
+| `SendReservationConfirmedEmailUseCase` | `SendReservationConfirmedEmailRequest(ReservationId)` | `SendReservationConfirmedEmailResponse` | Same pattern as above, for the confirmed email |
+| `SendReservationCancelledEmailUseCase` | `SendReservationCancelledEmailRequest(ReservationId)` | `SendReservationCancelledEmailResponse` | Same pattern as above, for the cancelled email — no token needed |
 | `MarkNoShowUseCase` | `MarkNoShowRequest` | `MarkNoShowResponse` | |
 | `GetReservationUseCase` | `GetReservationRequest` | `GetReservationResponse` | |
 | `ListReservationsUseCase` | `ListReservationsRequest` | `ListReservationsResponse` | Optional from/to/resourceId filters |
@@ -263,9 +273,28 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 10. **FeatureGuard called at top of every gated use case.** Every use case that requires an optional feature (payments, credits, subscriptions) calls `$guard->require*()` as its first line. Users are never gated — do not add a `requireUsers()` guard. This ensures disabled features fail immediately with `FeatureDisabledException`, not mid-operation.
 
-11. **Email and newsletter failures never abort a booking.** In `CreateBookingUseCase` and `CancelBookingUseCase`, mailer calls are wrapped in try/catch. A failed email must never roll back a completed booking.
+11. **Email and newsletter failures never abort a booking.** All three reservation-lifecycle
+    emails (created, confirmed, cancelled) go through `ReservationEmailService`, the single
+    place this invariant lives — every send is wrapped in try/catch and logged, never
+    re-thrown. `CreateReservationUseCase`, `ConfirmReservationUseCase`, and
+    `CancelReservationUseCase` all route through it (see `rez-lifecycle-email-integration`).
+    Newsletter sends follow the same pattern independently in `BroadcastUseCase`. **Exception:**
+    the three standalone manual-send use cases (`SendReservationCreatedEmailUseCase` et al.)
+    deliberately do NOT swallow mailer failures — they're an explicit admin action, not an
+    unattended auto-send, so a failure must surface to the caller. `CreateBookingUseCase` and
+    `CancelBookingUseCase` (not yet built) don't call the mailer at all — the reservation
+    use cases they call already handle it.
 
-12. **Guest cancellation token is stateless HMAC — never stored.** `CancellationToken` is `HMAC-SHA256(reservationId, cancellationSecret)`. No DB column on `reservations`. Verification is pure computation. The secret lives in `UsersConfig::$cancellationSecret`, separate from `jwtSecret`. Both paths through `CancelReservationUseCase` (admin and guest) ultimately call the same cancellation logic — only the auth check differs.
+12. **Guest cancellation token is stateless HMAC — never stored.** `CancellationToken` is
+    `HMAC-SHA256(reservationId, cancellationSecret)`. No DB column on `reservations`.
+    Verification is pure computation. The secret lives in `MailerConfig::$cancellationSecret`
+    (not `UsersConfig` — that was the original plan in `rez-guest-cancellation`, but
+    `UsersConfig` isn't required yet, so `rez-lifecycle-email-integration` put it on
+    `MailerConfig`, which is always required. See the conflict note in
+    `docs/instructions/10_rez-config-update.md` before moving it). Guest-side token
+    *verification* in `CancelReservationUseCase` (both admin and guest paths ultimately call
+    the same cancellation logic — only the auth check differs) is still `rez-guest-cancellation`'s
+    job, not yet built; token *generation* for the created/confirmed emails is already wired.
 
 ### 3.7 Configuration system
 
@@ -273,8 +302,14 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 `PlatformConfig` — COMPLETE (needs update). `UsersConfig` becomes required (not optional). Dependency chain simplified — users no longer a prerequisite check since they are always present. `hasMailer/Payments/Credits/Subscriptions(): bool`. `hasUsers()` removed — always true.
 `ReservationsConfig` — **removed** (`rez-reservation-settings`). Never had a `reservations` slot that matched this section's own diagram anyway (drift predates this removal). `autoConfirm` is no longer part of `PlatformConfig` at all — it's DB-backed now, see `ReservationSettings` in §3.2/§3.4 and the `reservation_settings` table in §3.8. **Breaking change for `rez-starter`:** its `PlatformConfig` construction still passes a `reservations` argument that no longer exists — needs updating, not done here.
-`MailerConfig` — COMPLETE. `fromAddress` (validated email), `fromName` (non-empty string).
-`UsersConfig` — COMPLETE (needs update). Now required. Gains `cancellationSecret` field (non-empty string, separate from `jwtSecret`). Fields: `jwtSecret`, `cancellationSecret`, `jwtTtlSeconds` (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1).
+`MailerConfig` — COMPLETE. `fromAddress` (validated email), `fromName` (non-empty string),
+`cancellationSecret` (non-empty string — added in `rez-lifecycle-email-integration`; see
+invariant 12 for why it landed here instead of `UsersConfig`). Will also gain
+`cancellationBaseUrl` in `rez-guest-cancellation`.
+`UsersConfig` — COMPLETE (needs update). Now required. Fields: `jwtSecret`, `jwtTtlSeconds`
+(default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1). **Does not** gain
+`cancellationSecret` — that field lives on `MailerConfig` (see above), diverging from the
+original `rez-guest-cancellation` plan; see the conflict note in `10_rez-config-update.md`.
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
 `CreditsConfig` — COMPLETE. `minimumTopUpAmount` (int, min 1, haléře/cents), `currency` (non-empty string).
 `PlanConfig` — COMPLETE. `id`, `name`, `priceAmount` (≥ 0), `currency`, `intervalDays` (min 1), `stripePriceId`. Named `PlanConfig` (not `Plan`) — it holds primitive Stripe-specific config, not a domain value object.
@@ -282,8 +317,8 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 ```
 PlatformConfig
-  ├── MailerConfig          always required (fromAddress, fromName)
-  ├── UsersConfig           always required (jwtSecret, cancellationSecret, jwtTtlSeconds, passwordResetTtlMinutes)
+  ├── MailerConfig          always required (fromAddress, fromName, cancellationSecret)
+  ├── UsersConfig           always required (jwtSecret, jwtTtlSeconds, passwordResetTtlMinutes)
   ├── PaymentsConfig?       currency, webhookSecret
   ├── CreditsConfig?        minimumTopUpAmount, currency
   └── SubscriptionsConfig?  PlanConfig[]
@@ -610,16 +645,17 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 
 | Module | Domain | Use cases | Infrastructure | Tests |
 |---|---|---|---|---|
-| Reservations | ✅ | ✅ (needs cancel token update) | ✅ | ✅ 188 unit + 22 integration |
+| Reservations | ✅ | ✅ (needs guest cancel-token verification — `rez-guest-cancellation`) | ✅ | ✅ 188 unit + 22 integration |
 | Resources | ✅ | ✅ | ✅ | ✅ |
 | Availability | ✅ | ✅ | ✅ | ✅ |
 | ReservationSettings | ✅ | ✅ | ✅ | ✅ (`rez-reservation-settings`) |
+| Reservation lifecycle emails | — | ✅ auto-send (3 use cases wired) + ✅ 3 manual-send use cases | — | ✅ (`rez-lifecycle-email-integration`) |
 | Seeder | ✅ | ✅ | ✅ | ✅ |
 | Currency + Money | ✅ | — | ✅ CurrencyMapper | ✅ |
-| Config / FeatureGuard | ✅ | — | — | ✅ (needs UsersConfig + Feature enum update; `ReservationsConfig` removed — see ReservationSettings row above) |
+| Config / FeatureGuard | ✅ | — | — | ✅ (needs UsersConfig + Feature enum update; `ReservationsConfig` removed — see ReservationSettings row above; `MailerConfig` gained `cancellationSecret` — see Reservation lifecycle emails row) |
 | Mailer port | ⚠️ restructured, breaking (`rez-email-restructure`) | — | — | ✅ shape tests |
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
-| CancellationToken | ✅ value object only, unwired | — | — | ✅ |
+| CancellationToken | ✅ value object + generation wired into 5 use cases | — | — | ✅ |
 | Users (core) | ❌ | ❌ | ❌ | — |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
@@ -661,6 +697,16 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   `ReservationSettingsRepositoryInterface` needs binding to `MysqlReservationSettingsRepository`
   in the client container — neither done here. API surface
   (`GET`/`PATCH /api/admin/reservation-settings` or similar) is also a `rez-starter` follow-up.
+- `rez-lifecycle-email-integration` — **COMPLETE**, ad hoc (no `docs/instructions/NN_*` file —
+  see `docs/CONTEXT.md`). Wires settings-gated auto-sending into `CreateReservationUseCase`
+  (single if/else on `autoConfirm`, never both created+confirmed), `ConfirmReservationUseCase`,
+  and `CancelReservationUseCase` (unconditional, no actor branching), all through the new
+  `ReservationEmailService`. Adds three standalone manual-send use cases
+  (`SendReservationCreatedEmailUseCase` et al.) that bypass settings and call `MailerInterface`
+  directly, unswallowed failures. Added `MailerConfig::cancellationSecret` — see invariant 12 and
+  the conflict note in `10_rez-config-update.md`. `rez-starter` follow-up (not done here): needs
+  a standalone `MailerConfig::class` container binding (previously only nested inside
+  `PlatformConfig`'s factory) for the new direct-dependency use cases to autowire.
 13. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 14. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
 15. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
@@ -682,6 +728,10 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   (`sendBookingConfirmation`/`sendBookingCancellation`); needs updating to the three-method
   shape from `rez-email-restructure` (`sendReservationCreatedEmail`/`sendReservationConfirmedEmail`/
   `sendReservationCancelledEmail`) or it will fail to satisfy the interface
+- ⚠️ Container needs a standalone `MailerConfig::class` binding (`rez-lifecycle-email-integration`)
+  — previously `MailerConfig` only existed nested inside `PlatformConfig`'s factory closure, but
+  `CreateReservationUseCase`/`ConfirmReservationUseCase`/the three manual-send use cases now
+  depend on it directly via autowiring
 - ✅ Twig HTML email templates
 - ✅ PDO boot guard — DB-down returns 503
 - ✅ `bin/seed.php` seed entry point (`composer seed` / `composer seed:fill`)
