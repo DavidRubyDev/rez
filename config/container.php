@@ -7,6 +7,10 @@ use Psr\Log\NullLogger;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Service\AvailabilityService;
 use Rez\Application\Service\AvailabilityServiceInterface;
+use Rez\Application\UseCase\MailerSettings\GetMailerSettings\GetMailerSettingsUseCase;
+use Rez\Application\UseCase\MailerSettings\GetMailerSettings\GetMailerSettingsUseCaseInterface;
+use Rez\Application\UseCase\MailerSettings\UpdateMailerSettings\UpdateMailerSettingsUseCase;
+use Rez\Application\UseCase\MailerSettings\UpdateMailerSettings\UpdateMailerSettingsUseCaseInterface;
 use Rez\Application\UseCase\Availability\DeleteAvailabilityOverride\DeleteAvailabilityOverrideUseCase;
 use Rez\Application\UseCase\Availability\DeleteAvailabilityOverride\DeleteAvailabilityOverrideUseCaseInterface;
 use Rez\Application\UseCase\Availability\DeleteAvailabilityRule\DeleteAvailabilityRuleUseCase;
@@ -110,6 +114,10 @@ return [
     // the interface-to-implementation binding is a client-app concern).
     GetReservationSettingsUseCaseInterface::class    => autowire(GetReservationSettingsUseCase::class),
     UpdateReservationSettingsUseCaseInterface::class => autowire(UpdateReservationSettingsUseCase::class),
+    // MailerSettingsRepositoryInterface must be bound by the client app, same as
+    // ReservationSettingsRepositoryInterface above.
+    GetMailerSettingsUseCaseInterface::class         => autowire(GetMailerSettingsUseCase::class),
+    UpdateMailerSettingsUseCaseInterface::class      => autowire(UpdateMailerSettingsUseCase::class),
     SendReservationCreatedEmailUseCaseInterface::class   => autowire(SendReservationCreatedEmailUseCase::class),
     SendReservationConfirmedEmailUseCaseInterface::class => autowire(SendReservationConfirmedEmailUseCase::class),
     SendReservationCancelledEmailUseCaseInterface::class => autowire(SendReservationCancelledEmailUseCase::class),
