@@ -4,17 +4,20 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Reservation\CreateReservation;
 
+use Rez\Application\Config\MailerConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ReservationSettingsRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\Service\AvailabilityServiceInterface;
+use Rez\Application\Service\ReservationEmailService;
 use Rez\Domain\Exception\ConflictException;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationId;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Shared\CancellationToken;
 
 final class CreateReservationUseCase implements CreateReservationUseCaseInterface
 {
@@ -23,6 +26,8 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
         private readonly ResourceRepositoryInterface $resourceRepository,
         private readonly AvailabilityServiceInterface $availabilityService,
         private readonly ReservationSettingsRepositoryInterface $reservationSettingsRepository,
+        private readonly ReservationEmailService $emailService,
+        private readonly MailerConfig $mailerConfig,
     ) {
     }
 
@@ -71,6 +76,14 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
             $this->reservationRepository->save($reservation);
         } catch (DatabaseException $e) {
             throw new DatabaseException('Failed to save reservation.', 0, $e);
+        }
+
+        $token = CancellationToken::generate($reservation->id, $this->mailerConfig->cancellationSecret);
+
+        if ($settings->autoConfirm) {
+            $this->emailService->sendConfirmedIfEnabled($reservation, $token, $settings);
+        } else {
+            $this->emailService->sendCreatedIfEnabled($reservation, $token, $settings);
         }
 
         return new CreateReservationResponse($reservation);
