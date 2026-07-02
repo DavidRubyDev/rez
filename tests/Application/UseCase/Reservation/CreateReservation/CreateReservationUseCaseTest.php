@@ -7,11 +7,9 @@ namespace Rez\Tests\Application\UseCase\Reservation\CreateReservation;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use Rez\Application\Config\MailerConfig;
-use Rez\Application\Config\PlatformConfig;
-use Rez\Application\Config\ReservationsConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
+use Rez\Application\Port\ReservationSettingsRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\Service\AvailabilityServiceInterface;
 use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationRequest;
@@ -19,6 +17,7 @@ use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationUseCa
 use Rez\Domain\Exception\ConflictException;
 use Rez\Domain\Exception\ResourceNotFoundException;
 use Rez\Domain\Reservation\Party;
+use Rez\Domain\Reservation\ReservationSettings;
 use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\Resource;
@@ -30,6 +29,7 @@ class CreateReservationUseCaseTest extends TestCase
     private ReservationRepositoryInterface&MockObject $reservationRepository;
     private ResourceRepositoryInterface&MockObject $resourceRepository;
     private AvailabilityServiceInterface&MockObject $availabilityService;
+    private ReservationSettingsRepositoryInterface&MockObject $reservationSettingsRepository;
     private CreateReservationUseCase $useCase;
     private ResourceId $resourceId;
     private Resource $resource;
@@ -37,17 +37,18 @@ class CreateReservationUseCaseTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->reservationRepository = $this->createMock(ReservationRepositoryInterface::class);
-        $this->resourceRepository    = $this->createMock(ResourceRepositoryInterface::class);
-        $this->availabilityService   = $this->createMock(AvailabilityServiceInterface::class);
-        $this->useCase               = new CreateReservationUseCase(
+        $this->reservationRepository        = $this->createMock(ReservationRepositoryInterface::class);
+        $this->resourceRepository           = $this->createMock(ResourceRepositoryInterface::class);
+        $this->availabilityService          = $this->createMock(AvailabilityServiceInterface::class);
+        $this->reservationSettingsRepository = $this->createMock(ReservationSettingsRepositoryInterface::class);
+        $this->reservationSettingsRepository
+            ->method('get')
+            ->willReturn(new ReservationSettings(false, true, true, true));
+        $this->useCase = new CreateReservationUseCase(
             $this->reservationRepository,
             $this->resourceRepository,
             $this->availabilityService,
-            new PlatformConfig(
-                mailer:       new MailerConfig('info@studio.cz', 'Studio'),
-                reservations: new ReservationsConfig(),
-            ),
+            $this->reservationSettingsRepository,
         );
 
         $this->resourceId = ResourceId::generate();
@@ -65,6 +66,34 @@ class CreateReservationUseCaseTest extends TestCase
         $this->expectExceptionMessage('Failed to load resource.');
 
         $this->useCase->execute(new CreateReservationRequest(
+            [$this->resourceId],
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+            $this->party,
+        ));
+    }
+
+    public function testReservationSettingsDatabaseExceptionPropagates(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
+
+        $this->reservationSettingsRepository = $this->createMock(ReservationSettingsRepositoryInterface::class);
+        $this->reservationSettingsRepository
+            ->method('get')
+            ->willThrowException(new DatabaseException('pdo error'));
+
+        $useCase = new CreateReservationUseCase(
+            $this->reservationRepository,
+            $this->resourceRepository,
+            $this->availabilityService,
+            $this->reservationSettingsRepository,
+        );
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to load reservation settings.');
+
+        $useCase->execute(new CreateReservationRequest(
             [$this->resourceId],
             new DateTimeImmutable('2024-01-15 10:00:00'),
             new DateTimeImmutable('2024-01-15 11:00:00'),
@@ -139,14 +168,14 @@ class CreateReservationUseCaseTest extends TestCase
 
         $this->reservationRepository->expects($this->once())->method('save');
 
+        $reservationSettingsRepository = $this->createMock(ReservationSettingsRepositoryInterface::class);
+        $reservationSettingsRepository->method('get')->willReturn(new ReservationSettings(true, true, true, true));
+
         $useCase = new CreateReservationUseCase(
             $this->reservationRepository,
             $this->resourceRepository,
             $this->availabilityService,
-            new PlatformConfig(
-                mailer:       new MailerConfig('info@studio.cz', 'Studio'),
-                reservations: new ReservationsConfig(autoConfirm: true),
-            ),
+            $reservationSettingsRepository,
         );
 
         $useCase->execute(new CreateReservationRequest(
@@ -192,14 +221,14 @@ class CreateReservationUseCaseTest extends TestCase
         $this->resourceRepository->method('findById')->willReturn($this->resource);
         $this->availabilityService->method('isSlotAvailable')->willReturn(true);
 
+        $reservationSettingsRepository = $this->createMock(ReservationSettingsRepositoryInterface::class);
+        $reservationSettingsRepository->method('get')->willReturn(new ReservationSettings(false, true, true, true));
+
         $useCase = new CreateReservationUseCase(
             $this->reservationRepository,
             $this->resourceRepository,
             $this->availabilityService,
-            new PlatformConfig(
-                mailer:       new MailerConfig('info@studio.cz', 'Studio'),
-                reservations: new ReservationsConfig(autoConfirm: false),
-            ),
+            $reservationSettingsRepository,
         );
 
         $response = $useCase->execute(new CreateReservationRequest(
@@ -217,14 +246,14 @@ class CreateReservationUseCaseTest extends TestCase
         $this->resourceRepository->method('findById')->willReturn($this->resource);
         $this->availabilityService->method('isSlotAvailable')->willReturn(true);
 
+        $reservationSettingsRepository = $this->createMock(ReservationSettingsRepositoryInterface::class);
+        $reservationSettingsRepository->method('get')->willReturn(new ReservationSettings(true, true, true, true));
+
         $useCase = new CreateReservationUseCase(
             $this->reservationRepository,
             $this->resourceRepository,
             $this->availabilityService,
-            new PlatformConfig(
-                mailer:       new MailerConfig('info@studio.cz', 'Studio'),
-                reservations: new ReservationsConfig(autoConfirm: true),
-            ),
+            $reservationSettingsRepository,
         );
 
         $response = $useCase->execute(new CreateReservationRequest(
@@ -273,5 +302,4 @@ class CreateReservationUseCaseTest extends TestCase
             $this->party,
         ));
     }
-
 }

@@ -6,7 +6,7 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** July 2026
-> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile.
+> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped.
 
 ---
 
@@ -86,6 +86,14 @@ use cases directly. See step 73 in `docs/CONTEXT.md`.
   `externalRef` is a nullable opaque string — platform layer sets it to `userId.toString()`
   for authenticated bookings, null for guests. The library never interprets it.
 - `ResourceIdCollection` — immutable collection of `ResourceId[]`, min 1 element
+- `ReservationSettings` — immutable value object, four `bool` fields: `autoConfirm`,
+  `autoSendReservationCreated`, `autoSendReservationConfirmed`, `autoSendReservationCancelled`.
+  DB-backed single-row settings (`ReservationSettingsRepositoryInterface`, §3.3), not deploy-time
+  config — replaces the removed `ReservationsConfig`. No caching layer (explicit decision, plain
+  per-request DB read — see invariant in §3.6 if one gets added later). `autoConfirm` is read by
+  `CreateReservationUseCase`; the three `autoSend*` toggles aren't wired to anything yet —
+  reading them to gate `sendReservationCreatedEmail`/`sendReservationConfirmedEmail`/
+  `sendReservationCancelledEmail` calls is `rez-lifecycle-email-integration`'s job.
 
 #### Resources (COMPLETE)
 - `Resource` — entity. Fields: `id`, `type`, `name`, `capacity`, `attributes`
@@ -146,6 +154,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `ReservationRepositoryInterface` | `MysqlReservationRepository` | COMPLETE |
 | `ResourceRepositoryInterface` | `MysqlResourceRepository` | COMPLETE |
 | `AvailabilityRepositoryInterface` | `MysqlAvailabilityRepository` | COMPLETE |
+| `ReservationSettingsRepositoryInterface` | `MysqlReservationSettingsRepository` | COMPLETE (binding itself, like all `rez`-owned repos, must be wired by the client app — not bound in `rez`'s own `config/container.php`) |
 | `DatabaseSeederInterface` | `MysqlDatabaseSeeder` | COMPLETE |
 | `StripeEventRepositoryInterface` | `MysqlStripeEventRepository` | NOT YET BUILT |
 | `WalletRepositoryInterface` | `MysqlWalletRepository` | NOT YET BUILT |
@@ -200,6 +209,8 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `GetAvailabilityOverridesUseCase` | `GetAvailabilityOverridesRequest` | `GetAvailabilityOverridesResponse` | Returns overrides for a resource in a date range |
 | `SaveAvailabilityRuleUseCase` | `SaveAvailabilityRuleRequest` | `SaveAvailabilityRuleResponse` | |
 | `SaveAvailabilityOverrideUseCase` | `SaveAvailabilityOverrideRequest` | `SaveAvailabilityOverrideResponse` | |
+| `GetReservationSettingsUseCase` | `GetReservationSettingsRequest` (empty) | `GetReservationSettingsResponse` | Thin read-through to `ReservationSettingsRepositoryInterface` |
+| `UpdateReservationSettingsUseCase` | `UpdateReservationSettingsRequest` | `UpdateReservationSettingsResponse` | PATCH semantics — all fields nullable, same shape as `UpdateResourceUseCase` |
 | `SeedDatabaseUseCase` | `SeedDatabaseRequest(string[] $seedsDirectories)` | `SeedDatabaseResponse` | Globs *.sql, executes in filename order across all directories |
 | `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
 | `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
@@ -261,7 +272,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 `PlatformConfig` is constructed by the client app and injected via PHP-DI. It is the single root of all feature configuration.
 
 `PlatformConfig` — COMPLETE (needs update). `UsersConfig` becomes required (not optional). Dependency chain simplified — users no longer a prerequisite check since they are always present. `hasMailer/Payments/Credits/Subscriptions(): bool`. `hasUsers()` removed — always true.
-`ReservationsConfig` — NOT YET BUILT. `autoConfirm: bool` (default false). Always required alongside `MailerConfig` and `UsersConfig`. When true, `CreateReservationUseCase` transitions the reservation to `Confirmed` immediately after saving, before returning.
+`ReservationsConfig` — **removed** (`rez-reservation-settings`). Never had a `reservations` slot that matched this section's own diagram anyway (drift predates this removal). `autoConfirm` is no longer part of `PlatformConfig` at all — it's DB-backed now, see `ReservationSettings` in §3.2/§3.4 and the `reservation_settings` table in §3.8. **Breaking change for `rez-starter`:** its `PlatformConfig` construction still passes a `reservations` argument that no longer exists — needs updating, not done here.
 `MailerConfig` — COMPLETE. `fromAddress` (validated email), `fromName` (non-empty string).
 `UsersConfig` — COMPLETE (needs update). Now required. Gains `cancellationSecret` field (non-empty string, separate from `jwtSecret`). Fields: `jwtSecret`, `cancellationSecret`, `jwtTtlSeconds` (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1).
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
@@ -273,12 +284,15 @@ These are the contracts the library defines. Implementations live in infrastruct
 PlatformConfig
   ├── MailerConfig          always required (fromAddress, fromName)
   ├── UsersConfig           always required (jwtSecret, cancellationSecret, jwtTtlSeconds, passwordResetTtlMinutes)
-  ├── ReservationsConfig    always required (autoConfirm)
   ├── PaymentsConfig?       currency, webhookSecret
   ├── CreditsConfig?        minimumTopUpAmount, currency
   └── SubscriptionsConfig?  PlanConfig[]
         └── PlanConfig      id, name, priceAmount, currency, intervalDays, stripePriceId
 ```
+
+`autoConfirm` (and the three reservation-lifecycle email toggles) live outside this tree
+entirely now — `ReservationSettings` is a single-row DB table read/written through
+`ReservationSettingsRepositoryInterface`, not deploy-time config. See §3.2 and §3.8.
 
 **Dependency chain enforced at construction time:**
 - `credits` requires `payments`
@@ -310,6 +324,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `reservation_resources` | reservation_id, resource_id (many-to-many join) |
 | `availability_rules` | resource_id, day_of_week, open_time (CHAR 5), close_time (CHAR 5), valid_from (DATE nullable), valid_until (DATE nullable) |
 | `availability_overrides` | resource_id, date, available (TINYINT) |
+| `reservation_settings` | id (always 1, single row by convention), auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at | Seeded via `database/seeds/schema/001_reservation_settings.sql` (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`) — a new numbered file rather than appended to `000_schema.sql`, per explicit instruction on this scaffold |
 
 #### Not yet built
 
@@ -598,9 +613,10 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Reservations | ✅ | ✅ (needs cancel token update) | ✅ | ✅ 188 unit + 22 integration |
 | Resources | ✅ | ✅ | ✅ | ✅ |
 | Availability | ✅ | ✅ | ✅ | ✅ |
+| ReservationSettings | ✅ | ✅ | ✅ | ✅ (`rez-reservation-settings`) |
 | Seeder | ✅ | ✅ | ✅ | ✅ |
 | Currency + Money | ✅ | — | ✅ CurrencyMapper | ✅ |
-| Config / FeatureGuard | ✅ | — | — | ✅ (needs UsersConfig + Feature enum update) |
+| Config / FeatureGuard | ✅ | — | — | ✅ (needs UsersConfig + Feature enum update; `ReservationsConfig` removed — see ReservationSettings row above) |
 | Mailer port | ⚠️ restructured, breaking (`rez-email-restructure`) | — | — | ✅ shape tests |
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
 | CancellationToken | ✅ value object only, unwired | — | — | ✅ |
@@ -630,9 +646,21 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   `CreateReservationUseCase`'s mailer call removed — reintroducing it is `rez-lifecycle-email-integration`'s
   job. **Breaking change for `rez-starter`:** its `SymfonyMailer` still implements the old
   two-method shape and needs updating before it will compile against the new interface.
-11. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; ReservationsConfig added; Feature enum drops Users; dependency chain update
+11. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; Feature enum drops Users; dependency chain update. (No longer touches `ReservationsConfig` — it was removed rather than added; see `rez-reservation-settings` below.)
 12. `rez-guest-cancellation` — HMAC verification in CancelReservationUseCase, `cancellationBaseUrl`
     on `MailerConfig` (CancellationToken value object itself already built — see `rez-email-restructure` above)
+- `rez-reservation-settings` — **COMPLETE**, ad hoc (no `docs/instructions/NN_*` file — see
+  `docs/CONTEXT.md` step 75). Removed `ReservationsConfig` entirely; `autoConfirm` plus three new
+  lifecycle-email toggles (`autoSendReservationCreated/Confirmed/Cancelled`) now live in a
+  DB-backed `ReservationSettings` single-row table, read/written through
+  `ReservationSettingsRepositoryInterface` / `MysqlReservationSettingsRepository`. No caching —
+  explicit decision. `GetReservationSettingsUseCase` / `UpdateReservationSettingsUseCase` added
+  (PATCH semantics, same shape as `UpdateResourceUseCase`). `CreateReservationUseCase` now reads
+  `autoConfirm` from the repository instead of `PlatformConfig`. **Breaking change for
+  `rez-starter`:** `PlatformConfig` construction needs its `reservations` argument removed, and
+  `ReservationSettingsRepositoryInterface` needs binding to `MysqlReservationSettingsRepository`
+  in the client container — neither done here. API surface
+  (`GET`/`PATCH /api/admin/reservation-settings` or similar) is also a `rez-starter` follow-up.
 13. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 14. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
 15. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
@@ -645,7 +673,11 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
 - ✅ Slim bootstrap, PHP-DI wiring, full route surface
 - ✅ Complete exception → HTTP status map
-- ✅ `PlatformConfig` + `ReservationsConfig` construction and DI binding
+- ⚠️ `PlatformConfig` construction — still passes a `reservations: new ReservationsConfig(...)`
+  argument that no longer exists on the constructor (`rez-reservation-settings`); will fail to
+  compile until updated. Container also needs `ReservationSettingsRepositoryInterface` bound to
+  `MysqlReservationSettingsRepository` (not bound in `rez`'s own container, same as every other
+  `rez`-owned repository interface).
 - ⚠️ `SymfonyMailer` implementation — implements the **old** `MailerInterface` shape
   (`sendBookingConfirmation`/`sendBookingCancellation`); needs updating to the three-method
   shape from `rez-email-restructure` (`sendReservationCreatedEmail`/`sendReservationConfirmedEmail`/

@@ -272,7 +272,9 @@ Logic — **strict ordering, do not change**:
    It now exposes `sendReservationCreatedEmail(Reservation $reservation, CancellationToken
    $cancellationToken)` and `sendReservationConfirmedEmail(Reservation $reservation,
    CancellationToken $cancellationToken)` — pick created vs confirmed based on
-   `$reservation->status` (confirmed if `autoConfirm` fired). Generate the token with
+   `$reservation->status` (confirmed if `autoConfirm` fired — read via
+   `ReservationSettingsRepositoryInterface::get()->autoConfirm` since `rez-reservation-settings`,
+   not `PlatformConfig->reservations`, which no longer exists). Generate the token with
    `CancellationToken::generate($reservation->id, $usersConfig->cancellationSecret)`
    (`CreateBookingUseCase` needs a `UsersConfig` dependency for this). Recipient email/name
    come from `$reservation->party` — do not pass them as separate string params, they're no

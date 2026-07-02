@@ -124,7 +124,9 @@ shape was superseded by `rez-email-restructure`.
 
 Calling the new `MailerInterface` methods from `CreateReservationUseCase` (generating a
 `CancellationToken::generate($reservation->id, $usersConfig->cancellationSecret)` and
-choosing created-vs-confirmed based on `autoConfirm`) was deliberately removed from
+choosing created-vs-confirmed based on `$reservation->status`, driven by `autoConfirm` —
+now read from `ReservationSettingsRepositoryInterface::get()`, not `PlatformConfig`; see
+`rez-reservation-settings`) was deliberately removed from
 `CreateReservationUseCase` by `rez-email-restructure` and is **not** this scaffold's job either.
 That wiring — plus whatever settings-gating governs it — belongs to the not-yet-scaffolded
 `rez-lifecycle-email-integration`. This scaffold's job is limited to guest-side cancellation
