@@ -4,6 +4,26 @@
 - `rez-config` complete (`PlatformConfig`, all sub-configs, `FeatureGuard`)
 - `rez-mailer-newsletter` complete
 
+## ⚠️ Conflict: `cancellationSecret` already exists — not on `UsersConfig`
+
+`rez-lifecycle-email-integration` (ad hoc, ran ahead of this scaffold — see `docs/CONTEXT.md`)
+already added `cancellationSecret` to `MailerConfig`, not `UsersConfig`, because
+`CreateReservationUseCase`/`ConfirmReservationUseCase` needed a real HMAC secret and
+`UsersConfig` wasn't required yet (still isn't, until this scaffold runs). **Do not add a
+second `cancellationSecret` field to `UsersConfig` per section 2 below** — that would leave two
+independent secrets for the same token scheme, a real security footgun (tokens generated with
+one would fail to verify against the other). Before running section 2, pick one:
+- Leave it on `MailerConfig` permanently and skip adding it to `UsersConfig` — update section 2
+  and the `PlatformConfig` diagram in `REZ-CONTEXT.md` §3.7 accordingly, or
+- Migrate it: add to `UsersConfig` as planned, delete it from `MailerConfig`, update every call
+  site that reads `$mailerConfig->cancellationSecret` (`CreateReservationUseCase`,
+  `ConfirmReservationUseCase`, the three `SendReservation*EmailUseCase` classes, and
+  `CancelReservationUseCase` once `rez-guest-cancellation` wires its guest path) to read
+  `$usersConfig->cancellationSecret` instead.
+
+Either way, this needs a decision before section 2 is implemented — it isn't a drop-in addition
+anymore.
+
 ## Goal
 
 Users are no longer an optional platform extension — every deployment needs at least one admin
