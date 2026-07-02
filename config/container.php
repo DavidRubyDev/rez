@@ -35,6 +35,10 @@ use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCase
 use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCaseInterface;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowUseCase;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowUseCaseInterface;
+use Rez\Application\UseCase\ReservationSettings\GetReservationSettings\GetReservationSettingsUseCase;
+use Rez\Application\UseCase\ReservationSettings\GetReservationSettings\GetReservationSettingsUseCaseInterface;
+use Rez\Application\UseCase\ReservationSettings\UpdateReservationSettings\UpdateReservationSettingsUseCase;
+use Rez\Application\UseCase\ReservationSettings\UpdateReservationSettings\UpdateReservationSettingsUseCaseInterface;
 use Rez\Application\UseCase\Resource\CreateResource\CreateResourceUseCase;
 use Rez\Application\UseCase\Resource\CreateResource\CreateResourceUseCaseInterface;
 use Rez\Application\UseCase\Resource\GetResource\GetResourceUseCase;
@@ -94,6 +98,11 @@ return [
     DeleteResourceUseCaseInterface::class     => autowire(DeleteResourceUseCase::class),
     DatabaseSeederInterface::class            => autowire(MysqlDatabaseSeeder::class),
     SeedDatabaseUseCaseInterface::class       => autowire(SeedDatabaseUseCase::class),
+    // ReservationSettingsRepositoryInterface must be bound by the client app (same pattern as
+    // NewsletterRepositoryInterface below — the MySQL implementation lives in this library, but
+    // the interface-to-implementation binding is a client-app concern).
+    GetReservationSettingsUseCaseInterface::class    => autowire(GetReservationSettingsUseCase::class),
+    UpdateReservationSettingsUseCaseInterface::class => autowire(UpdateReservationSettingsUseCase::class),
     // PlatformConfig must be bound by the client app — not defined here.
     // FeatureGuard is autowired — PHP-DI resolves PlatformConfig from client binding.
     FeatureGuard::class                       => autowire(),
