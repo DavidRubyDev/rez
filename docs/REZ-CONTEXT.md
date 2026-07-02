@@ -6,7 +6,7 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** July 2026
-> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped. Reservation-lifecycle emails now wired end-to-end (`rez-lifecycle-email-integration`) — settings-gated auto-send in Create/Confirm/Cancel plus three manual-send use cases; `rez-starter` needs a standalone `MailerConfig` container binding.
+> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped. Reservation-lifecycle emails now wired end-to-end (`rez-lifecycle-email-integration`) — settings-gated auto-send in Create/Confirm/Cancel plus three manual-send use cases; `rez-starter` needs a standalone `MailerConfig` container binding. `fromAddress`/`fromName` extracted from `MailerConfig` into DB-backed `MailerSettings` (`rez-mailer-settings`) — `rez-starter`'s `SymfonyMailer` needs to read them from there instead.
 
 ---
 
@@ -136,6 +136,14 @@ required (not optional) part of `PlatformConfig`.
 - `NewsletterSubscriberId` — UUID v4 value object ✅
 - `SubscriberSource` — pure enum: `Guest`, `Registered`, `Admin` ✅ (`Admin` added for subscribers manually added via rez-admin). Serialiser lowercases via `strtolower($subscriber->source->name)`.
 
+#### Mailer (COMPLETE — `rez-mailer-settings`)
+- `MailerSettings` — immutable value object. Fields: `fromAddress` (validated email), `fromName`
+  (non-empty string). DB-backed single-row settings
+  (`MailerSettingsRepositoryInterface`/`MysqlMailerSettingsRepository`, §3.3/§3.8), not
+  deploy-time config — extracted from `MailerConfig`, which now only carries
+  `cancellationSecret` (a security secret, not admin-editable branding — deliberately not
+  moved here). No caching layer, same explicit decision as `ReservationSettings`.
+
 #### Shared
 - `Currency` — pure enum: `Czk`, `Eur`, `Usd`. `getCode()` returns uppercase ISO code — used only in Domain (exceptions, `Money::__toString()`). Infrastructure serialization goes through `CurrencyMapper::toString()`.
 - `Feature` — pure enum: `Payments`, `Credits`, `Subscriptions`. Users removed — users are always present and never gated. Passed to `FeatureDisabledException` so gated feature names are never raw strings in use cases.
@@ -161,6 +169,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `ResourceRepositoryInterface` | `MysqlResourceRepository` | COMPLETE |
 | `AvailabilityRepositoryInterface` | `MysqlAvailabilityRepository` | COMPLETE |
 | `ReservationSettingsRepositoryInterface` | `MysqlReservationSettingsRepository` | COMPLETE (binding itself, like all `rez`-owned repos, must be wired by the client app — not bound in `rez`'s own `config/container.php`) |
+| `MailerSettingsRepositoryInterface` | `MysqlMailerSettingsRepository` | COMPLETE (same binding note as above) |
 | `DatabaseSeederInterface` | `MysqlDatabaseSeeder` | COMPLETE |
 | `StripeEventRepositoryInterface` | `MysqlStripeEventRepository` | NOT YET BUILT |
 | `WalletRepositoryInterface` | `MysqlWalletRepository` | NOT YET BUILT |
@@ -302,9 +311,11 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 `PlatformConfig` — COMPLETE (needs update). `UsersConfig` becomes required (not optional). Dependency chain simplified — users no longer a prerequisite check since they are always present. `hasMailer/Payments/Credits/Subscriptions(): bool`. `hasUsers()` removed — always true.
 `ReservationsConfig` — **removed** (`rez-reservation-settings`). Never had a `reservations` slot that matched this section's own diagram anyway (drift predates this removal). `autoConfirm` is no longer part of `PlatformConfig` at all — it's DB-backed now, see `ReservationSettings` in §3.2/§3.4 and the `reservation_settings` table in §3.8. **Breaking change for `rez-starter`:** its `PlatformConfig` construction still passes a `reservations` argument that no longer exists — needs updating, not done here.
-`MailerConfig` — COMPLETE. `fromAddress` (validated email), `fromName` (non-empty string),
-`cancellationSecret` (non-empty string — added in `rez-lifecycle-email-integration`; see
-invariant 12 for why it landed here instead of `UsersConfig`). Will also gain
+`MailerConfig` — COMPLETE. `cancellationSecret` only (non-empty string — added in
+`rez-lifecycle-email-integration`; see invariant 12 for why it landed here instead of
+`UsersConfig`). **`fromAddress`/`fromName` removed** (`rez-mailer-settings`) — extracted into
+DB-backed `MailerSettings` (§3.2 Mailer, §3.8), since they're admin-editable branding content,
+unlike the security-secret `cancellationSecret` which stays here. Will also gain
 `cancellationBaseUrl` in `rez-guest-cancellation`.
 `UsersConfig` — COMPLETE (needs update). Now required. Fields: `jwtSecret`, `jwtTtlSeconds`
 (default 3600, min 1), `passwordResetTtlMinutes` (default 60, min 1). **Does not** gain
@@ -317,7 +328,7 @@ original `rez-guest-cancellation` plan; see the conflict note in `10_rez-config-
 
 ```
 PlatformConfig
-  ├── MailerConfig          always required (fromAddress, fromName, cancellationSecret)
+  ├── MailerConfig          always required (cancellationSecret)
   ├── UsersConfig           always required (jwtSecret, jwtTtlSeconds, passwordResetTtlMinutes)
   ├── PaymentsConfig?       currency, webhookSecret
   ├── CreditsConfig?        minimumTopUpAmount, currency
@@ -325,9 +336,10 @@ PlatformConfig
         └── PlanConfig      id, name, priceAmount, currency, intervalDays, stripePriceId
 ```
 
-`autoConfirm` (and the three reservation-lifecycle email toggles) live outside this tree
-entirely now — `ReservationSettings` is a single-row DB table read/written through
-`ReservationSettingsRepositoryInterface`, not deploy-time config. See §3.2 and §3.8.
+`autoConfirm` (and the three reservation-lifecycle email toggles) and `fromAddress`/`fromName`
+live outside this tree entirely now — `ReservationSettings` and `MailerSettings` are single-row
+DB tables read/written through `ReservationSettingsRepositoryInterface` and
+`MailerSettingsRepositoryInterface` respectively, not deploy-time config. See §3.2 and §3.8.
 
 **Dependency chain enforced at construction time:**
 - `credits` requires `payments`
@@ -360,6 +372,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `availability_rules` | resource_id, day_of_week, open_time (CHAR 5), close_time (CHAR 5), valid_from (DATE nullable), valid_until (DATE nullable) |
 | `availability_overrides` | resource_id, date, available (TINYINT) |
 | `reservation_settings` | id (always 1, single row by convention), auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at | Seeded via `database/seeds/schema/001_reservation_settings.sql` (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`) — a new numbered file rather than appended to `000_schema.sql`, per explicit instruction on this scaffold |
+| `mailer_settings` | id (always 1, single row by convention), from_address, from_name, updated_at | Seeded via `database/seeds/schema/002_mailer_settings.sql`, same pattern as `reservation_settings`. Seeded defaults (`noreply@example.com` / `Rez`) are placeholders — every deployment must update them before going live |
 
 #### Not yet built
 
@@ -649,10 +662,11 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Resources | ✅ | ✅ | ✅ | ✅ |
 | Availability | ✅ | ✅ | ✅ | ✅ |
 | ReservationSettings | ✅ | ✅ | ✅ | ✅ (`rez-reservation-settings`) |
+| MailerSettings | ✅ | ✅ | ✅ | ✅ (`rez-mailer-settings`) |
 | Reservation lifecycle emails | — | ✅ auto-send (3 use cases wired) + ✅ 3 manual-send use cases | — | ✅ (`rez-lifecycle-email-integration`) |
 | Seeder | ✅ | ✅ | ✅ | ✅ |
 | Currency + Money | ✅ | — | ✅ CurrencyMapper | ✅ |
-| Config / FeatureGuard | ✅ | — | — | ✅ (needs UsersConfig + Feature enum update; `ReservationsConfig` removed — see ReservationSettings row above; `MailerConfig` gained `cancellationSecret` — see Reservation lifecycle emails row) |
+| Config / FeatureGuard | ✅ | — | — | ✅ (needs UsersConfig + Feature enum update; `ReservationsConfig` removed — see ReservationSettings row above; `MailerConfig` now just `cancellationSecret` — `fromAddress`/`fromName` moved to MailerSettings row above) |
 | Mailer port | ⚠️ restructured, breaking (`rez-email-restructure`) | — | — | ✅ shape tests |
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
 | CancellationToken | ✅ value object + generation wired into 5 use cases | — | — | ✅ |
@@ -707,6 +721,14 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   the conflict note in `10_rez-config-update.md`. `rez-starter` follow-up (not done here): needs
   a standalone `MailerConfig::class` container binding (previously only nested inside
   `PlatformConfig`'s factory) for the new direct-dependency use cases to autowire.
+- `rez-mailer-settings` — **COMPLETE**, ad hoc (no `docs/instructions/NN_*` file — see
+  `docs/CONTEXT.md`). Extracts `fromAddress`/`fromName` from `MailerConfig` into a DB-backed
+  `MailerSettings` single-row table (`Domain/Mailer`), same shape as `ReservationSettings`.
+  `MailerConfig` now only carries `cancellationSecret`. `GetMailerSettingsUseCase`/
+  `UpdateMailerSettingsUseCase` added. `rez-starter` follow-up (not done here): `SymfonyMailer`'s
+  "From" header needs to read from `MailerSettingsRepositoryInterface` instead of the now-removed
+  `MailerConfig` fields; container needs `MailerSettingsRepositoryInterface` bound to
+  `MysqlMailerSettingsRepository`.
 13. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 14. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
 15. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
@@ -732,6 +754,13 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   — previously `MailerConfig` only existed nested inside `PlatformConfig`'s factory closure, but
   `CreateReservationUseCase`/`ConfirmReservationUseCase`/the three manual-send use cases now
   depend on it directly via autowiring
+- ⚠️ `MailerConfig` construction (wherever the client builds `new MailerConfig(...)`, e.g. from
+  env vars) still passes `fromAddress`/`fromName`/`cancellationSecret` — the constructor now
+  only takes `cancellationSecret` (`rez-mailer-settings`); will fail to compile until updated
+- ⚠️ `SymfonyMailer`'s "From" header reads `MailerConfig->fromAddress`/`->fromName`, which no
+  longer exist (`rez-mailer-settings`) — needs switching to `MailerSettingsRepositoryInterface`
+  (or `GetMailerSettingsUseCase`) at send time. Container also needs
+  `MailerSettingsRepositoryInterface` bound to `MysqlMailerSettingsRepository`
 - ✅ Twig HTML email templates
 - ✅ PDO boot guard — DB-down returns 503
 - ✅ `bin/seed.php` seed entry point (`composer seed` / `composer seed:fill`)

@@ -1321,3 +1321,70 @@ closure; the new direct-dependency use cases need PHP-DI to autowire it on its o
 1 `MailerConfig`), 1 fixed for a PHPStan error (typed capture instead of untyped array
 destructuring). Total: 436 unit tests passing (37 skipped — all integration), PHPStan max
 clean, CS clean.
+
+---
+
+### 77. MailerSettings extracted from MailerConfig (`rez-mailer-settings`)
+
+Moves `fromAddress`/`fromName` from deploy-time `MailerConfig` to a DB-backed
+`MailerSettings` single-row table, same shape as `rez-reservation-settings`'
+`ReservationSettings`. No caching layer, same explicit decision as that scaffold.
+
+**`MailerSettings`** (`src/Domain/Mailer/MailerSettings.php`) — new `Domain/Mailer` namespace
+(mirrors `ReservationSettings` living in `Domain/Reservation`). Unlike `ReservationSettings`'
+four bools, `fromAddress`/`fromName` have real invariants (email format, non-empty) — moved
+as-is from `MailerConfig`'s old validation, so this one gets its own value-object test
+(3 cases), matching `Party`'s precedent of validating string fields in the constructor rather
+than the no-test precedent for `ReservationSettings`/`AvailabilityOverride`.
+
+**`MailerSettingsRepositoryInterface`** / **`MysqlMailerSettingsRepository`** — identical shape
+to `ReservationSettingsRepositoryInterface`/`MysqlReservationSettingsRepository`: `get()` throws
+`DatabaseException` on a missing row rather than defaulting (deployment bug, not normal state),
+`update()` is a full-row replace. Single-row table, `id` always `1` by convention.
+`tests/Infrastructure/Persistence/Mysql/MysqlMailerSettingsRepositoryLoggerTest.php` — 2 cases.
+`tests/Integration/Persistence/Mysql/MysqlMailerSettingsRepositoryTest.php` — 3 cases (seeded
+defaults, update round-trip, missing-row throws), skipped locally. `MysqlIntegrationTestCase`
+creates the table and re-inserts the default row after each test's `TRUNCATE`, same pattern as
+`reservation_settings`.
+
+**Schema** — `database/seeds/schema/002_mailer_settings.sql`, next number after
+`001_reservation_settings.sql`. `CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`. Seeded defaults
+(`noreply@example.com` / `Rez`) are explicit placeholders — every deployment must update them
+via the settings endpoint before going live; there's no meaningful "current behavior" default
+to preserve here since `fromAddress`/`fromName` were always required, unlike `autoConfirm`.
+
+**`GetMailerSettingsUseCase`** / **`UpdateMailerSettingsUseCase`**
+(`src/Application/UseCase/MailerSettings/`) — same Request/Response/Interface pattern as the
+reservation-settings pair. Get is a thin read-through (2 tests). Update is PATCH semantics
+reusing `UpdateReservationSettingsUseCase`'s/`UpdateResourceUseCase`'s established shape (8
+tests: one field independently ×2, combined, no-fields-provided, `get()`/`update()`
+`DatabaseException` propagation ×2, invalid email throws, empty name throws — the latter two
+have no equivalent in `UpdateReservationSettingsUseCaseTest` since `ReservationSettings` had no
+validation to test). No `@throws \InvalidArgumentException` on the interface/use case docblock,
+matching `UpdateResourceUseCaseInterface`'s existing precedent of omitting it even though the
+underlying value object validates. Both interfaces registered in `config/container.php`; the
+repository binding itself is left to the client app, same as every other `rez`-owned repository
+interface.
+
+**`MailerConfig` shrinks to just `cancellationSecret`.** `fromAddress`/`fromName` removed
+entirely — all six call sites across `CreateReservationUseCase`, `ConfirmReservationUseCase`,
+the two `SendReservation{Created,Confirmed}EmailUseCase` tests, `PlatformConfigTest`, and
+`FeatureGuardTest` updated to the single-arg constructor. `cancellationSecret` stays as
+deploy-time config rather than moving to DB-backed settings too — it's a security secret, not
+admin-editable branding content, so it doesn't belong in the same category as `fromAddress`/
+`fromName`. `MailerConfigTest` — 2 cases now (was 4; the two `fromAddress`/`fromName`
+validation tests moved to `MailerSettingsTest`).
+
+No pending instruction docs (`docs/instructions/*.md`) reference `fromAddress`/`fromName` —
+only `cancellationSecret` and `cancellationBaseUrl`, both untouched by this scaffold and still
+on `MailerConfig`. Nothing to update there this time.
+
+**`rez-starter` follow-up (not done here):** `SymfonyMailer`'s "From" header currently reads
+`MailerConfig->fromAddress`/`->fromName`, which no longer exist — needs switching to
+`GetMailerSettingsUseCase` (or `MailerSettingsRepositoryInterface` directly) at send time.
+Container also needs `MailerSettingsRepositoryInterface` bound to
+`MysqlMailerSettingsRepository`, same as `ReservationSettingsRepositoryInterface`.
+
+16 tests added (3 `MailerSettings`, 2 repository logger, 3 integration, 2 Get-use-case,
+8 Update-use-case, minus 2 removed from `MailerConfigTest`). Total: 452 unit tests passing
+(40 skipped — all integration), PHPStan max clean, CS clean.

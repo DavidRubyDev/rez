@@ -24,7 +24,7 @@ class FeatureGuardTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mailer        = new MailerConfig('info@studio.cz', 'Studio', 'super-secret-cancellation-key');
+        $this->mailer        = new MailerConfig('super-secret-cancellation-key');
         $this->payments      = new PaymentsConfig('CZK', 'whsec_test');
         $this->users         = new UsersConfig('super-secret-jwt');
         $this->credits       = new CreditsConfig(10000, 'CZK');
