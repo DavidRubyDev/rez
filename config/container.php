@@ -7,6 +7,18 @@ use Psr\Log\NullLogger;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Service\AvailabilityService;
 use Rez\Application\Service\AvailabilityServiceInterface;
+use Rez\Application\UseCase\EmailTemplate\CreateEmailTemplate\CreateEmailTemplateUseCase;
+use Rez\Application\UseCase\EmailTemplate\CreateEmailTemplate\CreateEmailTemplateUseCaseInterface;
+use Rez\Application\UseCase\EmailTemplate\DeleteEmailTemplate\DeleteEmailTemplateUseCase;
+use Rez\Application\UseCase\EmailTemplate\DeleteEmailTemplate\DeleteEmailTemplateUseCaseInterface;
+use Rez\Application\UseCase\EmailTemplate\GetEmailTemplate\GetEmailTemplateUseCase;
+use Rez\Application\UseCase\EmailTemplate\GetEmailTemplate\GetEmailTemplateUseCaseInterface;
+use Rez\Application\UseCase\EmailTemplate\ListEmailTemplates\ListEmailTemplatesUseCase;
+use Rez\Application\UseCase\EmailTemplate\ListEmailTemplates\ListEmailTemplatesUseCaseInterface;
+use Rez\Application\UseCase\EmailTemplate\SendEmailTemplate\SendEmailTemplateUseCase;
+use Rez\Application\UseCase\EmailTemplate\SendEmailTemplate\SendEmailTemplateUseCaseInterface;
+use Rez\Application\UseCase\EmailTemplate\UpdateEmailTemplate\UpdateEmailTemplateUseCase;
+use Rez\Application\UseCase\EmailTemplate\UpdateEmailTemplate\UpdateEmailTemplateUseCaseInterface;
 use Rez\Application\UseCase\MailerSettings\GetMailerSettings\GetMailerSettingsUseCase;
 use Rez\Application\UseCase\MailerSettings\GetMailerSettings\GetMailerSettingsUseCaseInterface;
 use Rez\Application\UseCase\MailerSettings\UpdateMailerSettings\UpdateMailerSettingsUseCase;
@@ -118,6 +130,13 @@ return [
     // ReservationSettingsRepositoryInterface above.
     GetMailerSettingsUseCaseInterface::class         => autowire(GetMailerSettingsUseCase::class),
     UpdateMailerSettingsUseCaseInterface::class      => autowire(UpdateMailerSettingsUseCase::class),
+    // EmailTemplateRepositoryInterface must be bound by the client app, same pattern.
+    CreateEmailTemplateUseCaseInterface::class       => autowire(CreateEmailTemplateUseCase::class),
+    GetEmailTemplateUseCaseInterface::class          => autowire(GetEmailTemplateUseCase::class),
+    ListEmailTemplatesUseCaseInterface::class        => autowire(ListEmailTemplatesUseCase::class),
+    UpdateEmailTemplateUseCaseInterface::class       => autowire(UpdateEmailTemplateUseCase::class),
+    DeleteEmailTemplateUseCaseInterface::class       => autowire(DeleteEmailTemplateUseCase::class),
+    SendEmailTemplateUseCaseInterface::class         => autowire(SendEmailTemplateUseCase::class),
     SendReservationCreatedEmailUseCaseInterface::class   => autowire(SendReservationCreatedEmailUseCase::class),
     SendReservationConfirmedEmailUseCaseInterface::class => autowire(SendReservationConfirmedEmailUseCase::class),
     SendReservationCancelledEmailUseCaseInterface::class => autowire(SendReservationCancelledEmailUseCase::class),
