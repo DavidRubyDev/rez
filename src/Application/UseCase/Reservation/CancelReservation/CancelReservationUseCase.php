@@ -6,11 +6,15 @@ namespace Rez\Application\UseCase\Reservation\CancelReservation;
 
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
+use Rez\Application\Port\ReservationSettingsRepositoryInterface;
+use Rez\Application\Service\ReservationEmailService;
 
 final class CancelReservationUseCase implements CancelReservationUseCaseInterface
 {
     public function __construct(
         private readonly ReservationRepositoryInterface $reservationRepository,
+        private readonly ReservationSettingsRepositoryInterface $reservationSettingsRepository,
+        private readonly ReservationEmailService $emailService,
     ) {
     }
 
@@ -34,6 +38,14 @@ final class CancelReservationUseCase implements CancelReservationUseCaseInterfac
         } catch (DatabaseException $e) {
             throw new DatabaseException('Failed to save reservation.', 0, $e);
         }
+
+        try {
+            $settings = $this->reservationSettingsRepository->get();
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load reservation settings.', 0, $e);
+        }
+
+        $this->emailService->sendCancelledIfEnabled($cancelled, $settings);
 
         return new CancelReservationResponse($cancelled);
     }
