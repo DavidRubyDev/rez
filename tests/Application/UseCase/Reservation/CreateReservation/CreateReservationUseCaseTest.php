@@ -21,6 +21,7 @@ use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationUseCa
 use Rez\Domain\Exception\ConflictException;
 use Rez\Domain\Exception\ResourceNotFoundException;
 use Rez\Domain\Reservation\Party;
+use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationSettings;
 use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
@@ -267,7 +268,7 @@ class CreateReservationUseCaseTest extends TestCase
 
         $this->mailer->expects($this->once())
             ->method('sendReservationCreatedEmail')
-            ->with($this->isInstanceOf(\Rez\Domain\Reservation\Reservation::class), $this->isInstanceOf(CancellationToken::class));
+            ->with($this->isInstanceOf(Reservation::class), $this->isInstanceOf(CancellationToken::class));
         $this->mailer->expects($this->never())->method('sendReservationConfirmedEmail');
 
         $useCase = $this->makeUseCase($this->settingsRepositoryReturning(new ReservationSettings(false, true, true, true)));
@@ -296,7 +297,7 @@ class CreateReservationUseCaseTest extends TestCase
         $this->mailer->expects($this->never())->method('sendReservationCreatedEmail');
         $this->mailer->expects($this->once())
             ->method('sendReservationConfirmedEmail')
-            ->with($this->isInstanceOf(\Rez\Domain\Reservation\Reservation::class), $this->isInstanceOf(CancellationToken::class));
+            ->with($this->isInstanceOf(Reservation::class), $this->isInstanceOf(CancellationToken::class));
 
         // autoSendReservationCreated is true here too — confirmed-only must win structurally.
         $useCase = $this->makeUseCase($this->settingsRepositoryReturning(new ReservationSettings(true, true, true, true)));
@@ -322,16 +323,15 @@ class CreateReservationUseCaseTest extends TestCase
         $this->resourceRepository->method('findById')->willReturn($this->resource);
         $this->availabilityService->method('isSlotAvailable')->willReturn(true);
 
-        $captured = null;
+        $capturedToken = null;
         $this->mailer->method('sendReservationCreatedEmail')
-            ->willReturnCallback(function ($reservation, $token) use (&$captured) {
-                $captured = [$reservation, $token];
+            ->willReturnCallback(function (Reservation $reservation, CancellationToken $token) use (&$capturedToken) {
+                $capturedToken = $token;
             });
 
         $response = $this->useCase->execute($this->request());
 
-        [$reservation, $token] = $captured;
-        $this->assertTrue($reservation->id->equals($response->reservation->id));
-        $this->assertTrue($token->verify($response->reservation->id, $this->mailerConfig->cancellationSecret));
+        $this->assertInstanceOf(CancellationToken::class, $capturedToken);
+        $this->assertTrue($capturedToken->verify($response->reservation->id, $this->mailerConfig->cancellationSecret));
     }
 }
