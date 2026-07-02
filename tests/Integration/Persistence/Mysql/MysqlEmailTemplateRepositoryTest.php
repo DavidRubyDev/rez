@@ -36,7 +36,9 @@ class MysqlEmailTemplateRepositoryTest extends MysqlIntegrationTestCase
         $this->assertTrue($template->id->equals($found->id));
         $this->assertSame('Welcome', $found->subject);
         $this->assertSame('<p>Hello</p>', $found->html);
-        $this->assertEquals($template->createdAt, $found->createdAt);
+        // DATETIME columns truncate to whole seconds, so compare at that precision rather
+        // than full DateTimeImmutable equality (which would fail on microseconds).
+        $this->assertSame($template->createdAt->format('Y-m-d H:i:s'), $found->createdAt->format('Y-m-d H:i:s'));
     }
 
     public function testFindByIdMissingThrowsEmailTemplateNotFoundException(): void
