@@ -267,9 +267,17 @@ Logic — **strict ordering, do not change**:
    Newsletter failure must NOT throw — catch any exception and log silently.
    A failed newsletter subscription must never roll back a completed booking.
 
-7. `mailer->sendBookingConfirmation($party->getEmail(), $party->getName(), $reservation)`
-   Mailer failure must NOT throw — catch any exception and log silently.
-   A failed email must never roll back a completed booking.
+7. **Superseded by `rez-email-restructure`** — `MailerInterface` no longer has a single
+   `sendBookingConfirmation(string $email, string $name, Reservation $reservation)` method.
+   It now exposes `sendReservationCreatedEmail(Reservation $reservation, CancellationToken
+   $cancellationToken)` and `sendReservationConfirmedEmail(Reservation $reservation,
+   CancellationToken $cancellationToken)` — pick created vs confirmed based on
+   `$reservation->status` (confirmed if `autoConfirm` fired). Generate the token with
+   `CancellationToken::generate($reservation->id, $usersConfig->cancellationSecret)`
+   (`CreateBookingUseCase` needs a `UsersConfig` dependency for this). Recipient email/name
+   come from `$reservation->party` — do not pass them as separate string params, they're no
+   longer part of the signature. Mailer failure must still NOT throw — catch any exception
+   and log silently. A failed email must never roll back a completed booking.
 
 8. Return `new CreateBookingResponse($reservation)`
 
@@ -323,7 +331,9 @@ Logic:
 3. `$cancelled = cancelReservationUseCase->execute(new CancelReservationRequest($reservationId))->getReservation()`
    Propagates `\DomainException` if already cancelled.
 
-4. `mailer->sendBookingCancellation($reservation->getParty()->getEmail(), $reservation->getParty()->getName(), $cancelled)`
+4. **Superseded by `rez-email-restructure`** — call `mailer->sendReservationCancelledEmail($cancelled)`.
+   No recipient email/name params and no cancellation token — the method only takes the
+   reservation (nothing left to cancel once it's cancelled).
    Catch and log silently — email failure must not throw.
 
 5. Return `new CancelBookingResponse($cancelled)`

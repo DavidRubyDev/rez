@@ -1104,3 +1104,53 @@ Housekeeping pass following a codebase audit. No functional change except where 
 **Handler layer removed entirely** — `src/Handler/**` (14 handler classes + `ReservationSerializer` + `ResourceSerializer`) and `tests/Handler/**` deleted. Confirmed unused: no reference anywhere outside `src/Handler`/`tests/Handler` (`config/container.php` wires use case interfaces directly; no `examples/slim` directory exists in this repo). `phpunit.xml` — removed the now-nonexistent `Handler` testsuite entry. This effectively completes `docs/instructions/18_rez-deprecate-handlers.md` by removal rather than just `@deprecated` annotation (the plan's step 2 phpstan.neon suppression was moot — no `phpstan.neon` file exists; analysis runs via CLI flags in `composer stan`). `Infrastructure/Mapper/**` (`ReservationStatusMapper`, `ResourceTypeMapper`, `DayOfWeekMapper`, `SubscriberSourceMapper`, `CurrencyMapper`) is untouched — still actively used by the MySQL repositories for enum/string persistence, unrelated to the deprecated Handler layer despite living in the same historical delivery step.
 
 Total: 381 unit tests passing (34 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 74. MailerInterface reservation-email restructure (`rez-email-restructure`)
+
+Splits the single, unconditionally-fired reservation email into three lifecycle-specific,
+independently-triggerable emails. Breaking rename, not an addition — the old email's content
+now means "reservation confirmed," not "reservation created." Scope is the port + call-site
+cleanup only; no Twig templates or `SymfonyMailer` implementation (client-repo follow-up).
+
+**`CancellationToken` value object** (`src/Domain/Shared/CancellationToken.php`) — pulled
+forward from the still-pending `rez-guest-cancellation` scaffold (step 11) because the new
+`MailerInterface` shape needs the type to exist. Stateless HMAC-SHA256 over `reservationId` +
+a secret (`generate()`, `fromString()`, `verify()` via `hash_equals()`, `toString()`). No call
+site wires it up yet — that's still `rez-guest-cancellation`'s and the not-yet-scaffolded
+`rez-lifecycle-email-integration`'s job. `tests/Domain/Shared/CancellationTokenTest.php` — 5
+cases.
+
+**`MailerInterface`** (`src/Application/Port/MailerInterface.php`) — `sendBookingConfirmation()`
+and `sendBookingCancellation()` replaced with three typed methods:
+`sendReservationCreatedEmail(Reservation, CancellationToken)`,
+`sendReservationConfirmedEmail(Reservation, CancellationToken)` (both cancellable states need
+the token), `sendReservationCancelledEmail(Reservation)` (nothing left to cancel, no token).
+`sendPasswordReset()` and `sendNewClassNotification()` unchanged. `NullMailer` updated to
+match. `tests/Application/Port/MailerInterfaceTest.php` — 3 cases asserting the new method
+shapes via mocks (per-method, not a use-case wiring test).
+
+**`CreateReservationUseCase`** — the unconditional `sendBookingConfirmation()` call (and the
+`try/catch` + logger-error wrapping it) removed entirely, along with the now-unused
+`MailerInterface $mailer` and `LoggerInterface $logger` constructor parameters. Reintroducing
+a call here — gated by settings and choosing created-vs-confirmed — is deferred to
+`rez-lifecycle-email-integration`, not this scaffold. `sendBookingCancellation()` was never
+actually called anywhere in the codebase, so no other call site needed cleanup.
+`CreateReservationUseCaseTest` — removed `testMailerFailureIsLoggedAndNotPropagated` (tested
+behavior that no longer exists) and the mailer/logger mocks from all other cases.
+
+**Instruction docs updated for conflicts** (per this scaffold's explicit request to check
+`docs/instructions/` before changing config-adjacent things): `11_rez-guest-cancellation.md`
+— section 1 (`CancellationToken`) marked already-built; section 6 (old
+`sendReservationConfirmation(Reservation, string $cancellationUrl)` design) replaced with
+notes that the port now takes the `CancellationToken` object directly and URL-building is the
+concrete mailer implementation's job; test list and checklist updated to match.
+`17_rez-booking.md` — the two `mailer->sendBookingConfirmation(...)` /
+`mailer->sendBookingCancellation(...)` call-outs (steps 7 and 4 of `CreateBookingUseCase` /
+`CancelBookingUseCase`) updated to the new method names and signatures. `10_rez-config-update.md`
+has no mailer references — unaffected.
+
+8 tests added (5 `CancellationToken`, 3 `MailerInterface`), 1 removed
+(`testMailerFailureIsLoggedAndNotPropagated`). Total: 388 unit tests passing (34 skipped — all
+integration), PHPStan max clean, CS clean.

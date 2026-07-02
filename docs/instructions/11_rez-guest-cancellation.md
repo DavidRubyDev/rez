@@ -3,6 +3,12 @@
 ## Prerequisites
 - `rez-config-update` complete (`UsersConfig` required, `cancellationSecret` present)
 - `rez-mailer-newsletter` complete (`MailerInterface` wired, confirmation email exists)
+- `rez-email-restructure` complete (`MailerInterface` now exposes
+  `sendReservationCreatedEmail(Reservation, CancellationToken)`,
+  `sendReservationConfirmedEmail(Reservation, CancellationToken)`, and
+  `sendReservationCancelledEmail(Reservation)` — no more single confirmation method,
+  no more `string $cancellationUrl` parameter. Sections 1 and 6 below are superseded —
+  read the notes inline before doing any work in this file.)
 
 ## Goal
 
@@ -12,18 +18,14 @@ Verification is pure computation. Admin cancellation is unchanged and requires n
 
 ---
 
-## 1. `CancellationToken` value object
+## 1. `CancellationToken` value object — ALREADY BUILT, no action needed
 
-`src/Domain/Shared/CancellationToken.php`
+**Superseded by `rez-email-restructure`.** `src/Domain/Shared/CancellationToken.php` was
+created early because the restructured `MailerInterface` needed the type to exist for its
+method signatures. It matches the spec below exactly. `tests/Domain/Shared/CancellationTokenTest.php`
+already covers generate/verify/fromString round-trips. Skip this section — nothing to do here.
 
-A stateless value object. Never stored. Generated from a `ReservationId` and the
-`cancellationSecret` from `UsersConfig`.
-
-```
-HMAC = hash_hmac('sha256', reservationId, cancellationSecret)
-```
-
-Public interface:
+Public interface (as built):
 
 ```php
 final class CancellationToken
@@ -36,16 +38,6 @@ final class CancellationToken
     public function toString(): string;
 }
 ```
-
-`generate()` produces a new token using `hash_hmac('sha256', $id->toString(), $secret)`.
-
-`fromString()` wraps a raw string (received from the HTTP layer) without validation — the
-value is untrusted until `verify()` is called.
-
-`verify()` recomputes the expected HMAC and compares using `hash_equals()` (timing-safe).
-Returns `bool` — never throws.
-
-No other logic lives here. The token does not know about expiry, HTTP, or databases.
 
 ---
 
@@ -105,15 +97,7 @@ the request object.
 
 ---
 
-## 5. Update `CreateReservationUseCase` — emit cancellation URL
-
-`src/Application/UseCase/CreateReservation/CreateReservationUseCase.php`
-
-After saving the reservation, generate a `CancellationToken` and include the cancellation
-URL in the confirmation email.
-
-The URL is built from a `cancellationBaseUrl` string that must come from outside the library.
-Add it to `MailerConfig` as a required field:
+## 5. `MailerConfig` gains `cancellationBaseUrl`
 
 `src/Application/Config/MailerConfig.php` — add:
 ```php
@@ -122,32 +106,30 @@ public readonly string $cancellationBaseUrl,
 
 Validated as a non-empty string. No URL format validation — keep it simple.
 
-The use case builds the cancellation URL as:
-```
-{cancellationBaseUrl}?reservation={reservationId}&token={hmacToken}
-```
+Under the restructured `MailerInterface` (see `rez-email-restructure`), the port takes the
+`CancellationToken` object itself, not a pre-built URL string — `sendReservationCreatedEmail`
+and `sendReservationConfirmedEmail` both accept `(Reservation $reservation, CancellationToken
+$cancellationToken)`. Building the URL string
+(`{cancellationBaseUrl}?reservation={reservationId}&token={hmacToken}`) is therefore the
+concrete mailer implementation's job (e.g. `rez-starter`'s `SymfonyMailer`), which has
+`MailerConfig` injected and can read `cancellationBaseUrl` directly. The library only hands
+the implementation the reservation and the token — it does not build or pass a URL string.
 
-Pass this URL to whatever mailer method sends the confirmation email. The mailer
-implementation in `rez-starter` is responsible for embedding it in the email body — the
-library only provides the string.
+**Do not** reintroduce a `string $cancellationUrl` parameter on `MailerInterface` — that
+shape was superseded by `rez-email-restructure`.
 
 ---
 
-## 6. Update `MailerInterface`
+## 6. Wiring `sendReservationCreatedEmail` / `sendReservationConfirmedEmail` — out of scope here
 
-`src/Application/Port/MailerInterface.php`
-
-The confirmation email method signature must accept the cancellation URL. Update it to:
-
-```php
-public function sendReservationConfirmation(
-    Reservation $reservation,
-    string $cancellationUrl,
-): void;
-```
-
-Update the `SymfonyMailer` stub in `rez-starter` to accept and embed the `$cancellationUrl`
-in the email body (plain text is fine for now — proper HTML template comes later).
+Calling the new `MailerInterface` methods from `CreateReservationUseCase` (generating a
+`CancellationToken::generate($reservation->id, $usersConfig->cancellationSecret)` and
+choosing created-vs-confirmed based on `autoConfirm`) was deliberately removed from
+`CreateReservationUseCase` by `rez-email-restructure` and is **not** this scaffold's job either.
+That wiring — plus whatever settings-gating governs it — belongs to the not-yet-scaffolded
+`rez-lifecycle-email-integration`. This scaffold's job is limited to guest-side cancellation
+token verification (`CancelReservationUseCase`, sections 3–4 above) and making
+`cancellationBaseUrl` available (section 5 above) for that future wiring to use.
 
 ---
 
@@ -162,12 +144,9 @@ for local development: `http://localhost/zrusit-rezervaci`.
 
 ## 8. Tests
 
-### Unit tests for `CancellationToken`
-- `generate()` returns a token whose `verify()` returns true with the same id and secret
-- `verify()` returns false with a different id
-- `verify()` returns false with a different secret
-- `verify()` returns false with a tampered token string
-- `fromString()` + `verify()` round-trips correctly
+### `CancellationToken` — already covered
+`tests/Domain/Shared/CancellationTokenTest.php` already exists (built with the value object
+in `rez-email-restructure`). No new tests needed here.
 
 ### Unit tests for `CancelReservationUseCase`
 - Admin path (no token) cancels successfully
@@ -176,21 +155,22 @@ for local development: `http://localhost/zrusit-rezervaci`.
 - Guest path with tampered token throws `InvalidTokenException`
 - Existing admin-path tests still pass
 
-### Unit tests for `CreateReservationUseCase`
-- Mailer is called with a non-empty `cancellationUrl` string
-- The URL contains the `reservationId` and a non-empty token segment
+### `CreateReservationUseCase` mailer wiring — not this scaffold
+Deferred to `rez-lifecycle-email-integration` (see section 6 above). No tests for it here.
 
 ---
 
 ## Checklist
 
-- [ ] 1. `CancellationToken` value object created
+- [x] 1. `CancellationToken` value object created (done in `rez-email-restructure`)
 - [ ] 2. `InvalidTokenException` created
 - [ ] 3. `CancelReservationRequest` gains optional `cancellationToken`
 - [ ] 4. `CancelReservationUseCase` updated — two paths, shared cancellation logic
 - [ ] 5. `MailerConfig` gains `cancellationBaseUrl`
-- [ ] 6. `MailerInterface::sendReservationConfirmation()` updated to accept `cancellationUrl`
-- [ ] 7. `CreateReservationUseCase` generates token and passes URL to mailer
-- [ ] 8. `rez-starter` `SymfonyMailer` stub updated to accept and embed the URL
-- [ ] 9. `rez-starter` container wires `cancellationBaseUrl` from env
-- [ ] 10. All new and existing tests pass
+- [x] 6. `MailerInterface` reservation-email shape already updated (done in `rez-email-restructure`
+      — takes `CancellationToken`, not a `cancellationUrl` string; no further change needed here)
+- [ ] 7. `rez-starter` `SymfonyMailer` stub implements the three-method shape and builds the
+      cancellation URL itself from `MailerConfig::cancellationBaseUrl` (wiring the calls from
+      `CreateReservationUseCase` is `rez-lifecycle-email-integration`'s job, not this scaffold's)
+- [ ] 8. `rez-starter` container wires `cancellationBaseUrl` from env
+- [ ] 9. All new and existing tests pass
