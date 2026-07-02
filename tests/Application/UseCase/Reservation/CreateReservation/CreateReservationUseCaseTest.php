@@ -7,12 +7,10 @@ namespace Rez\Tests\Application\UseCase\Reservation\CreateReservation;
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
 use Rez\Application\Config\MailerConfig;
 use Rez\Application\Config\PlatformConfig;
 use Rez\Application\Config\ReservationsConfig;
 use Rez\Application\Exception\DatabaseException;
-use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\Service\AvailabilityServiceInterface;
@@ -32,8 +30,6 @@ class CreateReservationUseCaseTest extends TestCase
     private ReservationRepositoryInterface&MockObject $reservationRepository;
     private ResourceRepositoryInterface&MockObject $resourceRepository;
     private AvailabilityServiceInterface&MockObject $availabilityService;
-    private MailerInterface&MockObject $mailer;
-    private LoggerInterface&MockObject $logger;
     private CreateReservationUseCase $useCase;
     private ResourceId $resourceId;
     private Resource $resource;
@@ -44,8 +40,6 @@ class CreateReservationUseCaseTest extends TestCase
         $this->reservationRepository = $this->createMock(ReservationRepositoryInterface::class);
         $this->resourceRepository    = $this->createMock(ResourceRepositoryInterface::class);
         $this->availabilityService   = $this->createMock(AvailabilityServiceInterface::class);
-        $this->mailer                = $this->createMock(MailerInterface::class);
-        $this->logger                = $this->createMock(LoggerInterface::class);
         $this->useCase               = new CreateReservationUseCase(
             $this->reservationRepository,
             $this->resourceRepository,
@@ -54,8 +48,6 @@ class CreateReservationUseCaseTest extends TestCase
                 mailer:       new MailerConfig('info@studio.cz', 'Studio'),
                 reservations: new ReservationsConfig(),
             ),
-            $this->mailer,
-            $this->logger,
         );
 
         $this->resourceId = ResourceId::generate();
@@ -155,8 +147,6 @@ class CreateReservationUseCaseTest extends TestCase
                 mailer:       new MailerConfig('info@studio.cz', 'Studio'),
                 reservations: new ReservationsConfig(autoConfirm: true),
             ),
-            $this->mailer,
-            $this->logger,
         );
 
         $useCase->execute(new CreateReservationRequest(
@@ -210,8 +200,6 @@ class CreateReservationUseCaseTest extends TestCase
                 mailer:       new MailerConfig('info@studio.cz', 'Studio'),
                 reservations: new ReservationsConfig(autoConfirm: false),
             ),
-            $this->mailer,
-            $this->logger,
         );
 
         $response = $useCase->execute(new CreateReservationRequest(
@@ -237,8 +225,6 @@ class CreateReservationUseCaseTest extends TestCase
                 mailer:       new MailerConfig('info@studio.cz', 'Studio'),
                 reservations: new ReservationsConfig(autoConfirm: true),
             ),
-            $this->mailer,
-            $this->logger,
         );
 
         $response = $useCase->execute(new CreateReservationRequest(
@@ -288,41 +274,4 @@ class CreateReservationUseCaseTest extends TestCase
         ));
     }
 
-    public function testMailerFailureIsLoggedAndNotPropagated(): void
-    {
-        $this->resourceRepository->method('findById')->willReturn($this->resource);
-        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
-
-        $mailer = $this->createMock(MailerInterface::class);
-        $mailer->method('sendBookingConfirmation')->willThrowException(new \RuntimeException('SMTP error'));
-
-        $logger = $this->createMock(LoggerInterface::class);
-        $logger->expects($this->once())
-            ->method('error')
-            ->with(
-                $this->stringContains('confirmation email'),
-                $this->arrayHasKey('reservationId'),
-            );
-
-        $useCase = new CreateReservationUseCase(
-            $this->reservationRepository,
-            $this->resourceRepository,
-            $this->availabilityService,
-            new PlatformConfig(
-                mailer:       new MailerConfig('info@studio.cz', 'Studio'),
-                reservations: new ReservationsConfig(),
-            ),
-            $mailer,
-            $logger,
-        );
-
-        $response = $useCase->execute(new CreateReservationRequest(
-            [$this->resourceId],
-            new DateTimeImmutable('2024-01-15 10:00:00'),
-            new DateTimeImmutable('2024-01-15 11:00:00'),
-            $this->party,
-        ));
-
-        $this->assertSame(ReservationStatus::Pending, $response->reservation->status);
-    }
 }

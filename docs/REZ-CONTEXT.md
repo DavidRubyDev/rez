@@ -6,7 +6,7 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** July 2026
-> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built.
+> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile.
 
 ---
 
@@ -133,7 +133,7 @@ required (not optional) part of `PlatformConfig`.
 - `Feature` — pure enum: `Payments`, `Credits`, `Subscriptions`. Users removed — users are always present and never gated. Passed to `FeatureDisabledException` so gated feature names are never raw strings in use cases.
 - `Money` — immutable value object. `amount: int` (haléře/cents — NEVER floats), `currency: Currency`. Methods: `add()`, `subtract()` (throws `InsufficientFundsException`), `isZero()`, `equals()`, `isGreaterThan()`, `__toString()`.
 - `DateTimeRange` — shared utility, not a domain concept
-- `CancellationToken` — value object. Stateless HMAC-SHA256 of `reservationId + secret`. Generated at booking time, embedded in confirmation email. Verified in `CancelReservationUseCase` for unauthenticated guest cancellations. Secret comes from `UsersConfig::$cancellationSecret` (separate from JWT secret).
+- `CancellationToken` — value object. Stateless HMAC-SHA256 of `reservationId + secret`. **Built** (`rez-email-restructure`, ahead of schedule — `MailerInterface`'s new shape needed the type). Not yet wired to any call site: nothing generates it at booking time yet, and `CancelReservationUseCase` doesn't verify it yet — both are still `rez-guest-cancellation` (step 12). Secret will come from `UsersConfig::$cancellationSecret`, which doesn't exist yet either (`rez-config-update`, step 11 — not done, and a prerequisite of step 12).
 
 ### 3.3 Port interfaces (Application/Port/)
 
@@ -158,7 +158,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 | Interface | Where implementation lives | Why |
 |---|---|---|
-| `MailerInterface` ✅ | `client-*/src/Infrastructure/Mailer/SymfonyMailer.php` | `symfony/mailer` must not be a hard dep on `rez` |
+| `MailerInterface` ⚠️ | `client-*/src/Infrastructure/Mailer/SymfonyMailer.php` | `symfony/mailer` must not be a hard dep on `rez`. **Breaking change (`rez-email-restructure`):** the port dropped `sendBookingConfirmation()`/`sendBookingCancellation()` for `sendReservationCreatedEmail()`/`sendReservationConfirmedEmail()`/`sendReservationCancelledEmail()` (see §3.5, §3.9). `rez-starter`'s `SymfonyMailer` still implements the old two-method shape and needs updating to compile against the new interface — that update is out of scope for `rez` and lives in the client repo. |
 | `StripeGatewayInterface` | `client-*/src/Infrastructure/Stripe/StripeGateway.php` | `stripe/stripe-php` must not be a hard dep on `rez` |
 
 #### Implemented in `rez` application layer
@@ -184,7 +184,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 | Use case | Input | Output | Notes |
 |---|---|---|---|
-| `CreateReservationUseCase` | `CreateReservationRequest` | `CreateReservationResponse` | Checks availability, throws `ConflictException` if slot taken. Generates HMAC cancellation token; fires confirmation email via MailerInterface with cancellation URL containing reservationId + token |
+| `CreateReservationUseCase` | `CreateReservationRequest` | `CreateReservationResponse` | Checks availability, throws `ConflictException` if slot taken. **Does not send any email** — the `MailerInterface` call (and `LoggerInterface` dependency it needed for failure logging) was removed in `rez-email-restructure`; reintroducing a call to `sendReservationCreatedEmail()`/`sendReservationConfirmedEmail()`, gated by settings, is `rez-lifecycle-email-integration`'s job (not yet scaffolded) |
 | `CancelReservationUseCase` | `CancelReservationRequest` | `CancelReservationResponse` | Two paths: (1) admin cancels by reservationId only; (2) guest cancels with reservationId + HMAC cancellation token — verified before cancellation |
 | `ConfirmReservationUseCase` | `ConfirmReservationRequest` | `ConfirmReservationResponse` | |
 | `MarkNoShowUseCase` | `MarkNoShowRequest` | `MarkNoShowResponse` | |
@@ -601,9 +601,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Seeder | ✅ | ✅ | ✅ | ✅ |
 | Currency + Money | ✅ | — | ✅ CurrencyMapper | ✅ |
 | Config / FeatureGuard | ✅ | — | — | ✅ (needs UsersConfig + Feature enum update) |
-| Mailer port | ✅ | — | — | — |
+| Mailer port | ⚠️ restructured, breaking (`rez-email-restructure`) | — | — | ✅ shape tests |
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
-| CancellationToken | ❌ | — | — | — |
+| CancellationToken | ✅ value object only, unwired | — | — | ✅ |
 | Users (core) | ❌ | ❌ | ❌ | — |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
@@ -622,8 +622,17 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 8. `rez-psr-logging` — **COMPLETE** (LoggerInterface + NullLogger in CreateReservationUseCase, BroadcastUseCase, all MySQL repos; mailer integrated into CreateReservationUseCase with email failure logging; CancelReservationUseCase logger deferred to rez-guest-cancellation)
 9. `rez-starter-logging` — **COMPLETE** (Monolog wired as PSR-3 implementation; rotating file handler; request/response middleware logger; exception middleware logs with stack trace)
 10. `rez-bug-fixes` — **COMPLETE** (BUG-01: GetAvailabilityUseCase now checks resource exists before calling service; BUG-02+03: capacity-aware conflict detection — slot available when sum(existing party sizes) + incoming ≤ capacity; DESIGN-01 reverted — strict UUID v4 parsing preserved; party_size query param wired in rez-starter GET /api/availability)
+- `rez-email-restructure` — **COMPLETE**, ad hoc (no `docs/instructions/NN_*` file — ran out of
+  sequence, ahead of `rez-config-update`; see `docs/CONTEXT.md` step 74). `MailerInterface`
+  restructured from a single unconditional confirmation email into three typed methods
+  (`sendReservationCreatedEmail`, `sendReservationConfirmedEmail`, `sendReservationCancelledEmail`).
+  `CancellationToken` pulled forward from step 12 below (value object only, still unwired).
+  `CreateReservationUseCase`'s mailer call removed — reintroducing it is `rez-lifecycle-email-integration`'s
+  job. **Breaking change for `rez-starter`:** its `SymfonyMailer` still implements the old
+  two-method shape and needs updating before it will compile against the new interface.
 11. `rez-config-update` — UsersConfig becomes required + cancellationSecret field; ReservationsConfig added; Feature enum drops Users; dependency chain update
-12. `rez-guest-cancellation` — CancellationToken value object, HMAC verification in CancelReservationUseCase, cancellationUrl in confirmation email
+12. `rez-guest-cancellation` — HMAC verification in CancelReservationUseCase, `cancellationBaseUrl`
+    on `MailerConfig` (CancellationToken value object itself already built — see `rez-email-restructure` above)
 13. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 14. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
 15. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
@@ -637,7 +646,10 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Slim bootstrap, PHP-DI wiring, full route surface
 - ✅ Complete exception → HTTP status map
 - ✅ `PlatformConfig` + `ReservationsConfig` construction and DI binding
-- ✅ `SymfonyMailer` implementation (implements `MailerInterface`)
+- ⚠️ `SymfonyMailer` implementation — implements the **old** `MailerInterface` shape
+  (`sendBookingConfirmation`/`sendBookingCancellation`); needs updating to the three-method
+  shape from `rez-email-restructure` (`sendReservationCreatedEmail`/`sendReservationConfirmedEmail`/
+  `sendReservationCancelledEmail`) or it will fail to satisfy the interface
 - ✅ Twig HTML email templates
 - ✅ PDO boot guard — DB-down returns 503
 - ✅ `bin/seed.php` seed entry point (`composer seed` / `composer seed:fill`)
