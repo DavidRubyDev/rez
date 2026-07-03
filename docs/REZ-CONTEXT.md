@@ -6,7 +6,7 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** July 2026
-> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped. Reservation-lifecycle emails now wired end-to-end (`rez-lifecycle-email-integration`) — settings-gated auto-send in Create/Confirm/Cancel plus three manual-send use cases; `rez-starter` needs a standalone `MailerConfig` container binding. `fromAddress`/`fromName` extracted from `MailerConfig` into DB-backed `MailerSettings` (`rez-mailer-settings`) — `rez-starter`'s `SymfonyMailer` needs to read them from there instead. Custom email template infrastructure added (`rez-custom-email-templates`) — `EmailTemplate` CRUD + `SendEmailTemplateUseCase` + `MailerInterface::sendCustomEmail()`; the rez-admin editor/list/send UI and rez-starter's routes + layout wrapping are separate, not-yet-built follow-ups.
+> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped. Reservation-lifecycle emails now wired end-to-end (`rez-lifecycle-email-integration`) — settings-gated auto-send in Create/Confirm/Cancel plus three manual-send use cases; `rez-starter` needs a standalone `MailerConfig` container binding. `fromAddress`/`fromName` extracted from `MailerConfig` into DB-backed `MailerSettings` (`rez-mailer-settings`) — `rez-starter`'s `SymfonyMailer` needs to read them from there instead. Custom email template infrastructure added (`rez-custom-email-templates`) — `EmailTemplate` CRUD + `SendEmailTemplateUseCase` + `MailerInterface::sendCustomEmail()`; the rez-admin editor/list/send UI is still a not-yet-built follow-up, but `rez-starter` has since wired everything on its side: the container/mailer breaking-change sync (`PlatformConfig`, `SymfonyMailer` against the three-method `MailerInterface`, standalone `MailerConfig` binding, `SymfonyMailer::sendCustomEmail()`), `GET`/`PATCH /api/admin/reservation-settings`, `GET`/`PATCH /api/admin/mailer-settings`, full `EmailTemplate` CRUD + send routes under `/api/admin/email-templates`, and the three manual reservation-lifecycle email-send routes (`POST /api/reservations/{id}/send-{created,confirmed,cancelled}-email`, each returning the updated `Reservation`).
 
 ---
 
@@ -455,7 +455,7 @@ All routes prefixed `/api/`.
 | Principal | Credential | How identified in rez-starter |
 |---|---|---|
 | Guest (public) | None | No middleware |
-| Guest cancelling own booking | HMAC token in query param | Verified in use case, not middleware |
+| Guest cancelling own reservation | HMAC token in query param | Verified in use case, not middleware |
 | Authenticated user | JWT Bearer token | Auth middleware attaches UserId + UserRole |
 | Admin | JWT Bearer token with `role: Admin` | Admin middleware enforces UserRole::Admin |
 
@@ -467,9 +467,16 @@ GET    /api/resources/{id}
 GET    /api/availability
 POST   /api/newsletter/subscribe
 DELETE /api/newsletter/unsubscribe
-POST   /api/bookings
-DELETE /api/bookings/{id}?reservation={uuid}&token={hmac}   ← guest cancellation
 ```
+
+Guest-facing reservation creation (via `<rez-calendar>`, not yet built) and guest self-cancellation
+via HMAC token (`rez-guest-cancellation`, not yet wired into `CancelReservationUseCase`) are
+design targets, not currently-available routes — see §3.2 `CancellationToken` and the "Not yet
+built" use-case table in §3.5. There is no `/api/bookings` route: **booking** (a `CreateBookingUseCase`
+orchestrator layered on top of reservations to add payment/credit/subscription resolution before
+creating the reservation) is a distinct, separately-scoped concept from **reservation** and is not
+yet built — whether it's needed at all is still undecided pending the payments profile. Do not
+conflate the two: every route below operates on `Reservation`, not on a `Booking` entity.
 
 #### Always available — admin JWT required
 
@@ -479,14 +486,28 @@ PATCH  /api/resources/{id}
 DELETE /api/resources/{id}
 PUT    /api/resources/{id}/availability/rules
 PUT    /api/resources/{id}/availability/overrides/{date}
+POST   /api/reservations                                      ← create; today only exercised by rez-admin's manual booking modal
 GET    /api/reservations
 GET    /api/reservations/{id}
 POST   /api/reservations/{id}/confirm
 POST   /api/reservations/{id}/no-show
-DELETE /api/bookings/{id}                                    ← admin cancellation (no token)
+POST   /api/reservations/{id}/cancel                          ← admin cancellation (no token)
+POST   /api/reservations/{id}/send-created-email              ← manual resend; bypasses ReservationSettings, unswallowed mailer failures
+POST   /api/reservations/{id}/send-confirmed-email             ← same
+POST   /api/reservations/{id}/send-cancelled-email             ← same
 GET    /api/newsletter/subscribers
 POST   /api/admin/newsletter/subscribers                     ← admin-add subscriber (sets Admin source)
 POST   /api/newsletter/broadcast                             ← body: { resource_name, resource_date }
+GET    /api/admin/reservation-settings
+PATCH  /api/admin/reservation-settings
+GET    /api/admin/mailer-settings
+PATCH  /api/admin/mailer-settings
+POST   /api/admin/email-templates
+GET    /api/admin/email-templates
+GET    /api/admin/email-templates/{id}
+PATCH  /api/admin/email-templates/{id}
+DELETE /api/admin/email-templates/{id}
+POST   /api/admin/email-templates/{id}/send
 GET    /api/admin/config
 ```
 
@@ -764,34 +785,30 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 ### `rez-starter`
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
 - ✅ Slim bootstrap, PHP-DI wiring, full route surface
-- ✅ Complete exception → HTTP status map
-- ⚠️ `PlatformConfig` construction — still passes a `reservations: new ReservationsConfig(...)`
-  argument that no longer exists on the constructor (`rez-reservation-settings`); will fail to
-  compile until updated. Container also needs `ReservationSettingsRepositoryInterface` bound to
-  `MysqlReservationSettingsRepository` (not bound in `rez`'s own container, same as every other
-  `rez`-owned repository interface).
-- ⚠️ `SymfonyMailer` implementation — implements the **old** `MailerInterface` shape
-  (`sendBookingConfirmation`/`sendBookingCancellation`); needs updating to the three-method
-  shape from `rez-email-restructure` (`sendReservationCreatedEmail`/`sendReservationConfirmedEmail`/
-  `sendReservationCancelledEmail`) or it will fail to satisfy the interface
-- ⚠️ Container needs a standalone `MailerConfig::class` binding (`rez-lifecycle-email-integration`)
-  — previously `MailerConfig` only existed nested inside `PlatformConfig`'s factory closure, but
-  `CreateReservationUseCase`/`ConfirmReservationUseCase`/the three manual-send use cases now
-  depend on it directly via autowiring
-- ⚠️ `MailerConfig` construction (wherever the client builds `new MailerConfig(...)`, e.g. from
-  env vars) still passes `fromAddress`/`fromName`/`cancellationSecret` — the constructor now
-  only takes `cancellationSecret` (`rez-mailer-settings`); will fail to compile until updated
-- ⚠️ `SymfonyMailer`'s "From" header reads `MailerConfig->fromAddress`/`->fromName`, which no
-  longer exist (`rez-mailer-settings`) — needs switching to `MailerSettingsRepositoryInterface`
-  (or `GetMailerSettingsUseCase`) at send time. Container also needs
-  `MailerSettingsRepositoryInterface` bound to `MysqlMailerSettingsRepository`
-- ❌ `SymfonyMailer::sendCustomEmail()` not implemented (`rez-custom-email-templates`) — new
-  `MailerInterface` method, needs a Twig layout template that wraps the raw `htmlBody`. Container
-  also needs `EmailTemplateRepositoryInterface` bound to `MysqlEmailTemplateRepository`
-- ❌ No HTTP routes for the six `EmailTemplate` use cases yet (`rez-custom-email-templates`)
+- ✅ Complete exception → HTTP status map (now also `EmailTemplateNotFoundException` → 404)
+- ✅ `PlatformConfig`/`MailerConfig` construction and container wiring synced against `rez`'s
+  config restructure (`fix/rez-breaking-changes-sync`) — `reservations` argument dropped,
+  `MailerConfig` now only takes `cancellationSecret` (plus new `CANCELLATION_SECRET` env var),
+  standalone `MailerConfig::class` binding added, and `ReservationSettingsRepositoryInterface` /
+  `MailerSettingsRepositoryInterface` / `EmailTemplateRepositoryInterface` all bound to their
+  Mysql implementations
+- ✅ `SymfonyMailer` rewritten against the three-method `MailerInterface`
+  (`sendReservationCreatedEmail`/`sendReservationConfirmedEmail`/`sendReservationCancelledEmail`)
+  plus `sendCustomEmail()`; "From" address/name now read live from
+  `MailerSettingsRepositoryInterface` instead of static config. Templates split into
+  `reservation-{created,confirmed,cancelled}.html.twig` + a `custom-email.html.twig` wrapper.
+  Verified against the dev stack via Mailpit
+- ✅ `GET`/`PATCH /api/admin/reservation-settings` (`feat/reservation-settings-route`)
+- ✅ `GET`/`PATCH /api/admin/mailer-settings` (`feat/mailer-settings-route`)
+- ✅ `EmailTemplate` CRUD + send — `POST`/`GET`/`PATCH`/`DELETE /api/admin/email-templates[/{id}]`,
+  `POST /api/admin/email-templates/{id}/send` (`feat/email-template-routes`)
+- ✅ Manual reservation-lifecycle email send — `POST /api/reservations/{id}/send-created-email`,
+  `.../send-confirmed-email`, `.../send-cancelled-email` (`feat/reservation-email-send-routes`);
+  each returns the updated `Reservation` (same `ReservationSerializer` as confirm/cancel/no-show)
 - ✅ Twig HTML email templates
 - ✅ PDO boot guard — DB-down returns 503
-- ✅ `bin/seed.php` seed entry point (`composer seed` / `composer seed:fill`)
+- ✅ `bin/seed.php` seed entry point (`composer seed` / `composer seed:fill`) — now also applies
+  `rez`'s `reservation_settings`/`mailer_settings`/`email_templates` schema files
 - ✅ Monolog PSR-3 logging (rotating file handler, request/response middleware, exception middleware)
 - ✅ `GET /api/availability` accepts `party_size` query param — capacity-aware slot filtering
 - ✅ CORS middleware (wildcard origin, preflight handled)
