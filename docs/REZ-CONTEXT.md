@@ -6,7 +6,19 @@
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
 > **Last updated:** July 2026
-> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast, list subscribers, admin-add) complete. rez-admin Resources, Reservations, and Newsletter pages built. Users are core (always enabled). Platform extensions (payments, credits, subscriptions) not yet built. `MailerInterface` restructured into three reservation-lifecycle emails (`rez-email-restructure`) — breaking change, `rez-starter`'s `SymfonyMailer` needs a matching update before it will compile. `ReservationsConfig` removed in favor of DB-backed `ReservationSettings` (`rez-reservation-settings`) — also breaking, `rez-starter`'s `PlatformConfig` wiring needs its `reservations` argument dropped. Reservation-lifecycle emails now wired end-to-end (`rez-lifecycle-email-integration`) — settings-gated auto-send in Create/Confirm/Cancel plus three manual-send use cases; `rez-starter` needs a standalone `MailerConfig` container binding. `fromAddress`/`fromName` extracted from `MailerConfig` into DB-backed `MailerSettings` (`rez-mailer-settings`) — `rez-starter`'s `SymfonyMailer` needs to read them from there instead. Custom email template infrastructure added (`rez-custom-email-templates`) — `EmailTemplate` CRUD + `SendEmailTemplateUseCase` + `MailerInterface::sendCustomEmail()`; the rez-admin editor/list/send UI is still a not-yet-built follow-up, but `rez-starter` has since wired everything on its side: the container/mailer breaking-change sync (`PlatformConfig`, `SymfonyMailer` against the three-method `MailerInterface`, standalone `MailerConfig` binding, `SymfonyMailer::sendCustomEmail()`), `GET`/`PATCH /api/admin/reservation-settings`, `GET`/`PATCH /api/admin/mailer-settings`, full `EmailTemplate` CRUD + send routes under `/api/admin/email-templates`, and the three manual reservation-lifecycle email-send routes (`POST /api/reservations/{id}/send-{created,confirmed,cancelled}-email`, each returning the updated `Reservation`).
+> **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast,
+> list subscribers, admin-add) complete. Custom email templates complete end-to-end across all
+> three repos: `rez` (`EmailTemplate` CRUD + `SendEmailTemplateUseCase` +
+> `MailerInterface::sendCustomEmail()`), `rez-starter` (full HTTP surface under
+> `/api/admin/email-templates`, including a `POST .../preview` route that renders an ad-hoc
+> `{subject, html}` body through the real send-time `custom-email.html.twig` wrapper, no
+> persistence), and `rez-admin` (editor with a TipTap rich-text editor, list, send-to-recipients
+> with an extensible recipient-group mechanism, and preview). Reservation-lifecycle emails
+> (auto-send plus three manual-resend routes) and reservation/mailer settings (DB-backed,
+> `GET`/`PATCH` routes) are likewise wired end-to-end, with rez-admin resend buttons on the
+> reservation detail modal and a settings popup for both. rez-admin also has Resources and
+> Reservations pages built. Users are core (always enabled) but not yet built. Platform
+> extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -503,6 +515,7 @@ PATCH  /api/admin/reservation-settings
 GET    /api/admin/mailer-settings
 PATCH  /api/admin/mailer-settings
 POST   /api/admin/email-templates
+POST   /api/admin/email-templates/preview                   ← ad-hoc {subject, html} preview, no persistence
 GET    /api/admin/email-templates
 GET    /api/admin/email-templates/{id}
 PATCH  /api/admin/email-templates/{id}
@@ -802,6 +815,11 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ `GET`/`PATCH /api/admin/mailer-settings` (`feat/mailer-settings-route`)
 - ✅ `EmailTemplate` CRUD + send — `POST`/`GET`/`PATCH`/`DELETE /api/admin/email-templates[/{id}]`,
   `POST /api/admin/email-templates/{id}/send` (`feat/email-template-routes`)
+- ✅ `POST /api/admin/email-templates/preview` (`feat/email-template-preview-route`) — renders an
+  ad-hoc `{subject, html}` body through `custom-email.html.twig` (the same wrapper
+  `SymfonyMailer::sendCustomEmail()` uses) and returns `{ html }`, no persistence. Deliberately
+  skips the usual RequestFactory/use-case pattern — pure Twig render in the Handler, since there's
+  no domain state involved
 - ✅ Manual reservation-lifecycle email send — `POST /api/reservations/{id}/send-created-email`,
   `.../send-confirmed-email`, `.../send-cancelled-email` (`feat/reservation-email-send-routes`);
   each returns the updated `Reservation` (same `ReservationSerializer` as confirm/cancel/no-show)
@@ -834,13 +852,28 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ AppLayout + Sidebar (feature-gated entries via `/api/admin/config`)
 - ✅ Resources page — list, create, edit, delete; availability rules panel + rule modal; overrides panel + override modal; sorting (type/name/capacity/attributes)
 - ✅ Reservations page — list with date-range filter, resource name lookup, search + per-field filters (resource, status, name, email), sorting (date/status/name/email); detail modal with confirm/no-show/cancel actions; manual booking modal
-- ✅ Newsletter page — tabbed layout: broadcast panel (resource selector, date/time, send, result); subscribers panel (list with search + sort by email/name/source/opted-in, inline add with `Admin` source, delete with ConfirmDialog)
-- ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, Modal, PageHeader, StatusBadge, SlotPicker, EditableListPanel, Button, TextInput, Select, FormField, FormActions, RowActions, SearchInput, EmptyTableRow
+- ✅ Newsletter page — tabbed layout: broadcast panel (resource selector, date/time, send, result); subscribers panel (list with search + sort by email/name/source/opted-in, inline add with `Admin` source, delete with ConfirmDialog); **custom emails tab** (see below)
+- ✅ Custom emails tab — `EmailTemplateEditorModal` (subject + `RichTextEditor`, a TipTap
+  editor: bold/italic/strikethrough/underline, headings, alignment, font family/size, color,
+  lists, blockquote, links; `getHTML()` on save) creates via `POST /api/admin/email-templates`
+  or updates via `PATCH .../{id}` (title/submit-label swap between "New email"/Save and
+  "Edit email"/Update). `CustomEmailsPanel` lists saved templates (`EditableListPanel`, newest
+  first) with edit/delete/send/preview actions. `SendEmailTemplateModal` builds a recipient list
+  from manually-added addresses plus a `RecipientGroup[]` list (today just "All newsletter
+  subscribers" via `newsletterApi.listSubscribers()`; built to extend — a future Users/Admins
+  group is one more `useAsyncData` call + array entry, not a rewrite) and posts to
+  `POST .../{id}/send`. `EmailPreviewModal` calls `POST /api/admin/email-templates/preview` with
+  the current `{subject, html}` (works for both a saved template and an unsaved editor draft) and
+  renders the returned fully-wrapped HTML in a `sandbox=""` iframe — deliberately not just the raw
+  content, since the real send wraps it in `custom-email.html.twig` (branded header/footer) first.
+- ✅ Settings popup — sidebar-pinned button opens a tabbed modal: reservation settings (4
+  toggles — auto-confirm, auto-send created/confirmed/cancelled — via
+  `GET`/`PATCH /api/admin/reservation-settings`) and email settings (from address/name via
+  `GET`/`PATCH /api/admin/mailer-settings`)
+- ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, Modal, PageHeader, StatusBadge, SlotPicker, EditableListPanel (now also takes an optional `renderRowExtra` slot for per-row actions beyond edit/delete), Button, TextInput, Select, FormField, FormActions, RowActions, SearchInput, EmptyTableRow, Toggle, RichTextEditor
 - ✅ Shared hooks: useAsyncData, useConfig, useSortable, useConfirmDelete, useSyncedList
 - ✅ Component/hook dedup pass — merged the near-duplicate AvailabilityRulesPanel/AvailabilityOverridesPanel into EditableListPanel, consolidated day-of-week data into lib/days.ts, removed duplicated UTC time-formatting and empty-state table markup
-- ✅ API client modules: resources, reservations, availability, newsletter, config
+- ✅ API client modules: resources, reservations, availability, newsletter, config, reservationSettings, mailerSettings, emailTemplates
+- ✅ Reservation detail modal — resend-lifecycle-email buttons (`send-{created,confirmed,cancelled}-email`), one shown at a time keyed off status
 - ❌ Auth (login/logout, JWT, protected routes) — deferred until rez-users is built
 - ❌ Users page — deferred until rez-users is built
-- ❌ Custom email templates page (rich-text editor, saved-template list, send-to-recipient-list
-  UI) — depends on `rez-custom-email-templates`'s use cases and `rez-starter`'s not-yet-built
-  HTTP routes for them
