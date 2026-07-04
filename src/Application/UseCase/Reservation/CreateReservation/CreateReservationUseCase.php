@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Reservation\CreateReservation;
 
-use Rez\Application\Config\MailerConfig;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ReservationSettingsRepositoryInterface;
@@ -27,7 +27,7 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
         private readonly AvailabilityServiceInterface $availabilityService,
         private readonly ReservationSettingsRepositoryInterface $reservationSettingsRepository,
         private readonly ReservationEmailService $emailService,
-        private readonly MailerConfig $mailerConfig,
+        private readonly UsersConfig $usersConfig,
     ) {
     }
 
@@ -78,7 +78,7 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
             throw new DatabaseException('Failed to save reservation.', 0, $e);
         }
 
-        $token = CancellationToken::generate($reservation->id, $this->mailerConfig->cancellationSecret);
+        $token = CancellationToken::generate($reservation->id, $this->usersConfig->cancellationSecret);
 
         if ($settings->autoConfirm) {
             $this->emailService->sendConfirmedIfEnabled($reservation, $token, $settings);

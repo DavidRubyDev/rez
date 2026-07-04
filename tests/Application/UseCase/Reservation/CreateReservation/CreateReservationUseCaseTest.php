@@ -8,7 +8,7 @@ use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
-use Rez\Application\Config\MailerConfig;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
@@ -38,7 +38,7 @@ class CreateReservationUseCaseTest extends TestCase
     private ReservationSettingsRepositoryInterface&MockObject $reservationSettingsRepository;
     private MailerInterface&MockObject $mailer;
     private ReservationEmailService $emailService;
-    private MailerConfig $mailerConfig;
+    private UsersConfig $usersConfig;
     private CreateReservationUseCase $useCase;
     private ResourceId $resourceId;
     private Resource $resource;
@@ -55,7 +55,7 @@ class CreateReservationUseCaseTest extends TestCase
             ->willReturn(new ReservationSettings(false, true, true, true));
         $this->mailer       = $this->createMock(MailerInterface::class);
         $this->emailService = new ReservationEmailService($this->mailer, new NullLogger());
-        $this->mailerConfig = new MailerConfig('super-secret-cancellation-key');
+        $this->usersConfig = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
         $this->useCase      = $this->makeUseCase($this->reservationSettingsRepository);
 
         $this->resourceId = ResourceId::generate();
@@ -72,7 +72,7 @@ class CreateReservationUseCaseTest extends TestCase
             $this->availabilityService,
             $reservationSettingsRepository,
             $this->emailService,
-            $this->mailerConfig,
+            $this->usersConfig,
         );
     }
 
@@ -332,6 +332,6 @@ class CreateReservationUseCaseTest extends TestCase
         $response = $this->useCase->execute($this->request());
 
         $this->assertInstanceOf(CancellationToken::class, $capturedToken);
-        $this->assertTrue($capturedToken->verify($response->reservation->id, $this->mailerConfig->cancellationSecret));
+        $this->assertTrue($capturedToken->verify($response->reservation->id, $this->usersConfig->cancellationSecret));
     }
 }
