@@ -28,16 +28,6 @@ final class FeatureGuard
     /**
      * @throws FeatureDisabledException
      */
-    public function requireUsers(): void
-    {
-        if (!$this->config->hasUsers()) {
-            throw new FeatureDisabledException(Feature::Users);
-        }
-    }
-
-    /**
-     * @throws FeatureDisabledException
-     */
     public function requireCredits(): void
     {
         if (!$this->config->hasCredits()) {

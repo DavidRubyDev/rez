@@ -17,23 +17,25 @@ use Rez\Domain\Exception\FeatureDisabledException;
 class FeatureGuardTest extends TestCase
 {
     private MailerConfig $mailer;
-    private PaymentsConfig $payments;
     private UsersConfig $users;
+    private PaymentsConfig $payments;
     private CreditsConfig $credits;
     private SubscriptionsConfig $subscriptions;
 
     protected function setUp(): void
     {
-        $this->mailer        = new MailerConfig('super-secret-cancellation-key');
+        $this->mailer        = new MailerConfig();
+        $this->users         = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
         $this->payments      = new PaymentsConfig('CZK', 'whsec_test');
-        $this->users         = new UsersConfig('super-secret-jwt');
         $this->credits       = new CreditsConfig(10000, 'CZK');
         $this->subscriptions = new SubscriptionsConfig([]);
     }
 
     public function testRequirePaymentsPassesWhenConfigured(): void
     {
-        $guard = new FeatureGuard(new PlatformConfig(mailer: $this->mailer, payments: $this->payments));
+        $guard = new FeatureGuard(
+            new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments)
+        );
         $this->expectNotToPerformAssertions();
         $guard->requirePayments();
     }
@@ -41,26 +43,13 @@ class FeatureGuardTest extends TestCase
     public function testRequirePaymentsThrowsWhenNotConfigured(): void
     {
         $this->expectException(FeatureDisabledException::class);
-        (new FeatureGuard(new PlatformConfig(mailer: $this->mailer)))->requirePayments();
-    }
-
-    public function testRequireUsersPassesWhenConfigured(): void
-    {
-        $guard = new FeatureGuard(new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users));
-        $this->expectNotToPerformAssertions();
-        $guard->requireUsers();
-    }
-
-    public function testRequireUsersThrowsWhenNotConfigured(): void
-    {
-        $this->expectException(FeatureDisabledException::class);
-        (new FeatureGuard(new PlatformConfig(mailer: $this->mailer, payments: $this->payments)))->requireUsers();
+        (new FeatureGuard(new PlatformConfig(mailer: $this->mailer, users: $this->users)))->requirePayments();
     }
 
     public function testRequireCreditsPassesWhenConfigured(): void
     {
         $guard = new FeatureGuard(
-            new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users, credits: $this->credits)
+            new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments, credits: $this->credits)
         );
         $this->expectNotToPerformAssertions();
         $guard->requireCredits();
@@ -69,13 +58,13 @@ class FeatureGuardTest extends TestCase
     public function testRequireCreditsThrowsWhenNotConfigured(): void
     {
         $this->expectException(FeatureDisabledException::class);
-        (new FeatureGuard(new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users)))->requireCredits();
+        (new FeatureGuard(new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments)))->requireCredits();
     }
 
     public function testRequireSubscriptionsPassesWhenConfigured(): void
     {
         $guard = new FeatureGuard(
-            new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users, subscriptions: $this->subscriptions)
+            new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments, subscriptions: $this->subscriptions)
         );
         $this->expectNotToPerformAssertions();
         $guard->requireSubscriptions();
@@ -84,6 +73,6 @@ class FeatureGuardTest extends TestCase
     public function testRequireSubscriptionsThrowsWhenNotConfigured(): void
     {
         $this->expectException(FeatureDisabledException::class);
-        (new FeatureGuard(new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users)))->requireSubscriptions();
+        (new FeatureGuard(new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments)))->requireSubscriptions();
     }
 }
