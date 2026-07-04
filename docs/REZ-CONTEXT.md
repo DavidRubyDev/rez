@@ -870,7 +870,20 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   toggles — auto-confirm, auto-send created/confirmed/cancelled — via
   `GET`/`PATCH /api/admin/reservation-settings`) and email settings (from address/name via
   `GET`/`PATCH /api/admin/mailer-settings`)
-- ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, Modal, PageHeader, StatusBadge, SlotPicker, EditableListPanel (now also takes an optional `renderRowExtra` slot for per-row actions beyond edit/delete), Button, TextInput, Select, FormField, FormActions, RowActions, SearchInput, EmptyTableRow, Toggle, RichTextEditor
+- ✅ Export buttons (Reservations page, Subscribers panel) — shared `ExportModal` (format:
+  JSON or XML; `DateRangeFilter`) takes a per-caller `fetchData(range)` callback and handles
+  Blob/download entirely client-side, no new backend endpoint. Reservations exports via the
+  existing `GET /api/reservations?from=&to=` (server-side filtered); subscribers has no
+  server-side date filter, so it fetches everything and filters by `opted_in_at` client-side.
+  XML goes through a small generic JSON-to-XML converter (`lib/xml.ts`), not a full XML library
+- ✅ 24-hour time inputs — all 5 native `<input type="time">` fields (broadcast time, manual
+  booking start/end, availability rule open/close) replaced with a custom `TimeInput` (two
+  `<select>`s, hour 00-23 + minute 00-59, hand-written option text). Native time inputs follow
+  the browser/OS locale for their picker; the `lang="en-GB"` workaround that used to force
+  24-hour display no longer works in current Chrome, which ignores it and follows the OS
+  locale unconditionally — the custom control sidesteps the problem entirely, no locale
+  dependency at all
+- ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, ExportModal, Modal, PageHeader, StatusBadge, SlotPicker, EditableListPanel (now also takes an optional `renderRowExtra` slot for per-row actions beyond edit/delete), Button, TextInput, TimeInput, Select, FormField, FormActions, RowActions, SearchInput, EmptyTableRow, Toggle, RichTextEditor
 - ✅ Shared hooks: useAsyncData, useConfig, useSortable, useConfirmDelete, useSyncedList
 - ✅ Component/hook dedup pass — merged the near-duplicate AvailabilityRulesPanel/AvailabilityOverridesPanel into EditableListPanel, consolidated day-of-week data into lib/days.ts, removed duplicated UTC time-formatting and empty-state table markup
 - ✅ API client modules: resources, reservations, availability, newsletter, config, reservationSettings, mailerSettings, emailTemplates
