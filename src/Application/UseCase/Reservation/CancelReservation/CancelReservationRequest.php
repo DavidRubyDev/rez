@@ -10,6 +10,7 @@ final class CancelReservationRequest
 {
     public function __construct(
         public readonly ReservationId $reservationId,
+        public readonly ?string $cancellationToken = null,
     ) {
     }
 }
