@@ -6,5 +6,6 @@ namespace Rez\Application\Port;
 
 interface TokenGeneratorInterface
 {
+    /** @throws \InvalidArgumentException */
     public function generate(int $bytes = 32): string;
 }
