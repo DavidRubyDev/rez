@@ -22,22 +22,23 @@ class PlatformConfigTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mailer        = new MailerConfig('super-secret-cancellation-key');
+        $this->mailer        = new MailerConfig();
         $this->payments      = new PaymentsConfig('CZK', 'whsec_test');
-        $this->users         = new UsersConfig('super-secret-jwt');
+        $this->users         = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
         $this->credits       = new CreditsConfig(10000, 'CZK');
         $this->subscriptions = new SubscriptionsConfig([]);
     }
 
-    public function testValidConstructionWithMailerOnly(): void
+    public function testValidConstructionWithMailerAndUsersOnly(): void
     {
         $config = new PlatformConfig(
             mailer: $this->mailer,
+            users:  $this->users,
         );
 
         $this->assertSame($this->mailer, $config->mailer);
+        $this->assertSame($this->users, $config->users);
         $this->assertNull($config->payments);
-        $this->assertNull($config->users);
         $this->assertNull($config->credits);
         $this->assertNull($config->subscriptions);
     }
@@ -46,8 +47,8 @@ class PlatformConfigTest extends TestCase
     {
         $config = new PlatformConfig(
             mailer:        $this->mailer,
-            payments:      $this->payments,
             users:         $this->users,
+            payments:      $this->payments,
             credits:       $this->credits,
             subscriptions: $this->subscriptions,
         );
@@ -58,22 +59,10 @@ class PlatformConfigTest extends TestCase
         $this->assertSame($this->subscriptions, $config->subscriptions);
     }
 
-    public function testUsersWithoutPaymentsThrows(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        new PlatformConfig(mailer: $this->mailer, users: $this->users);
-    }
-
     public function testCreditsWithoutPaymentsThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
         new PlatformConfig(mailer: $this->mailer, users: $this->users, credits: $this->credits);
-    }
-
-    public function testCreditsWithoutUsersThrows(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        new PlatformConfig(mailer: $this->mailer, payments: $this->payments, credits: $this->credits);
     }
 
     public function testSubscriptionsWithoutPaymentsThrows(): void
@@ -82,68 +71,50 @@ class PlatformConfigTest extends TestCase
         new PlatformConfig(mailer: $this->mailer, users: $this->users, subscriptions: $this->subscriptions);
     }
 
-    public function testSubscriptionsWithoutUsersThrows(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        new PlatformConfig(mailer: $this->mailer, payments: $this->payments, subscriptions: $this->subscriptions);
-    }
-
     public function testHasMailerAlwaysTrue(): void
     {
-        $this->assertTrue((new PlatformConfig(mailer: $this->mailer))->hasMailer());
+        $this->assertTrue((new PlatformConfig(mailer: $this->mailer, users: $this->users))->hasMailer());
     }
 
     public function testHasPaymentsFalseWhenNull(): void
     {
-        $this->assertFalse((new PlatformConfig(mailer: $this->mailer))->hasPayments());
+        $this->assertFalse(
+            (new PlatformConfig(mailer: $this->mailer, users: $this->users))->hasPayments()
+        );
     }
 
     public function testHasPaymentsTrueWhenSet(): void
     {
         $this->assertTrue(
-            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments))->hasPayments()
-        );
-    }
-
-    public function testHasUsersFalseWhenNull(): void
-    {
-        $this->assertFalse(
-            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments))->hasUsers()
-        );
-    }
-
-    public function testHasUsersTrueWhenSet(): void
-    {
-        $this->assertTrue(
-            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users))->hasUsers()
+            (new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments))->hasPayments()
         );
     }
 
     public function testHasCreditsFalseWhenNull(): void
     {
         $this->assertFalse(
-            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users))->hasCredits()
+            (new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments))->hasCredits()
         );
     }
 
     public function testHasCreditsTrueWhenSet(): void
     {
         $this->assertTrue(
-            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users, credits: $this->credits))->hasCredits()
+            (new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments, credits: $this->credits))->hasCredits()
         );
     }
 
     public function testHasSubscriptionsFalseWhenNull(): void
     {
         $this->assertFalse(
-            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users))->hasSubscriptions()
+            (new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments))->hasSubscriptions()
         );
     }
 
     public function testHasSubscriptionsTrueWhenSet(): void
     {
         $this->assertTrue(
-            (new PlatformConfig(mailer: $this->mailer, payments: $this->payments, users: $this->users, subscriptions: $this->subscriptions))->hasSubscriptions()
+            (new PlatformConfig(mailer: $this->mailer, users: $this->users, payments: $this->payments, subscriptions: $this->subscriptions))->hasSubscriptions()
         );
     }
 }

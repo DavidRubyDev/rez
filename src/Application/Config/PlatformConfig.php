@@ -11,29 +11,17 @@ final class PlatformConfig
      */
     public function __construct(
         public readonly MailerConfig $mailer,
+        public readonly UsersConfig $users,
         public readonly ?PaymentsConfig $payments = null,
-        public readonly ?UsersConfig $users = null,
         public readonly ?CreditsConfig $credits = null,
         public readonly ?SubscriptionsConfig $subscriptions = null,
     ) {
-        if ($users !== null && $payments === null) {
-            throw new \InvalidArgumentException('users requires payments to be configured.');
-        }
-
         if ($credits !== null && $payments === null) {
             throw new \InvalidArgumentException('credits requires payments to be configured.');
         }
 
-        if ($credits !== null && $users === null) {
-            throw new \InvalidArgumentException('credits requires users to be configured.');
-        }
-
         if ($subscriptions !== null && $payments === null) {
             throw new \InvalidArgumentException('subscriptions requires payments to be configured.');
-        }
-
-        if ($subscriptions !== null && $users === null) {
-            throw new \InvalidArgumentException('subscriptions requires users to be configured.');
         }
     }
 
@@ -45,11 +33,6 @@ final class PlatformConfig
     public function hasPayments(): bool
     {
         return $this->payments !== null;
-    }
-
-    public function hasUsers(): bool
-    {
-        return $this->users !== null;
     }
 
     public function hasCredits(): bool
