@@ -839,9 +839,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   `MailerInterface::sendCustomEmail()`. Covers only `rez` — the rez-admin editor/list/send UI
   and rez-starter's HTTP routes + Twig layout wrapping are separate, not-yet-built follow-ups
   in those repos.
-13. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
-14. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
-15. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
+13. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
+14. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
+15. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 16. `rez-credits` — Wallet, WalletTransaction, wallet use cases
 17. `rez-subscriptions` — Subscription, Plan, subscription use cases
 18. `rez-booking` — CreateBookingUseCase, CancelBookingUseCase, PartyResolver, PaymentResolver
