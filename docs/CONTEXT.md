@@ -1463,3 +1463,65 @@ request.
 
 51 tests added. Total: 503 unit tests passing (45 skipped — all integration), PHPStan max
 clean, CS clean.
+
+---
+
+### 79. Users promoted to required + `cancellationSecret` migrated to `UsersConfig` (`10_rez-config-update.md`)
+
+Resolves the conflict flagged in `10_rez-config-update.md` and `rez-lifecycle-email-integration`
+(`docs/CONTEXT.md` step 76): `cancellationSecret` had landed on `MailerConfig` ahead of schedule
+because `UsersConfig` wasn't required yet. This scaffold makes `UsersConfig` required and — per
+explicit instruction, choosing the "migrate" option over "leave on MailerConfig" — moves
+`cancellationSecret` onto it, deleting it from `MailerConfig`.
+
+**`UsersConfig`** — gained `cancellationSecret` as a second required constructor parameter
+(non-empty string, validated the same way as `jwtSecret`; separate field, never shares the
+`jwtSecret` value). Final signature:
+`__construct(string $jwtSecret, string $cancellationSecret, int $jwtTtlSeconds = 3600, int $passwordResetTtlMinutes = 60)`.
+
+**`MailerConfig`** — `cancellationSecret` removed. The class now has zero properties (a
+temporary placeholder — `REZ-CONTEXT.md` §3.7 already documents it gaining
+`cancellationBaseUrl` in the not-yet-built `rez-guest-cancellation`). `MailerConfigTest`
+deleted — no logic left to test, matching this codebase's convention for trivial classes.
+
+**Four use cases switched from `MailerConfig->cancellationSecret` to
+`UsersConfig->cancellationSecret`:** `CreateReservationUseCase`, `ConfirmReservationUseCase`,
+`SendReservationCreatedEmailUseCase`, `SendReservationConfirmedEmailUseCase`. Each had
+`MailerConfig $mailerConfig` as its sole use of that class — replaced outright with
+`UsersConfig $usersConfig`, not added alongside it.
+
+**`PlatformConfig`** — `UsersConfig $users` moved from the third, nullable parameter to the
+second, required parameter (right after `mailer`). Dependency chain simplified from
+`users → payments`, `credits → payments + users`, `subscriptions → payments + users` down to
+just `credits → payments` and `subscriptions → payments` — users are implicitly always present,
+so no separate check is needed. `hasUsers(): bool` removed. **No `getUsersConfig()` getter
+added** despite `10_rez-config-update.md` section 3 suggesting one — `CLAUDE.md`'s "never add
+getters when a public readonly property suffices" rule applies directly here: `$config->users`
+is already a required, non-nullable `public readonly` property, so a getter would be pure
+duplication.
+
+**`Feature` enum** — `Users` case removed (three cases remain: `Payments`, `Credits`,
+`Subscriptions`). **`FeatureGuard::requireUsers()`** removed entirely — no call site referenced
+it (grepped and confirmed before removal, per the instruction's own verification step).
+
+**Container wiring** — `rez`'s own `config/container.php` binds neither `PlatformConfig` nor any
+of its sub-configs (comment: "must be bound by the client app"), so section 5 of the scaffold
+(container wiring) is a `rez-starter`-only change, not made here.
+
+**`rez-starter` follow-up (not done here, breaking change on top of an earlier one):**
+`rez-starter` had already been synced once for `MailerConfig::cancellationSecret` (see
+`docs/CONTEXT.md` step 76/77 and the `rez-starter` status block in `REZ-CONTEXT.md` §9) —
+`CANCELLATION_SECRET` env var, a standalone `MailerConfig::class` binding, and the four call
+sites reading `$mailerConfig->cancellationSecret`. All of that now needs re-pointing at
+`UsersConfig->cancellationSecret` instead, and `UsersConfig`'s own container construction needs
+the new required parameter wired from env. `MailerConfig::class`'s binding can be simplified to
+a no-arg construction once `rez-guest-cancellation`'s `cancellationBaseUrl` isn't needed on it
+yet either.
+
+Test changes: `UsersConfigTest` (+2 cases: cancellationSecret round-trips, empty throws),
+`MailerConfigTest` deleted (2 cases removed), `PlatformConfigTest` (removed 4 dependency-chain
+tests for the deleted `users`/`hasUsers` checks, updated remaining 11 to pass `users` as
+required), `FeatureGuardTest` (removed 2 `requireUsers` cases), plus the 4 use case test files
+updated to construct `UsersConfig` instead of `MailerConfig`. Total: 495 unit tests passing (45
+skipped — all integration), PHPStan max clean, CS clean. `10_rez-config-update.md` fully
+complete.
