@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\ReservationEmail\SendReservationConfirmedEmail;
 
-use Rez\Application\Config\MailerConfig;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
@@ -15,7 +15,7 @@ final class SendReservationConfirmedEmailUseCase implements SendReservationConfi
     public function __construct(
         private readonly ReservationRepositoryInterface $reservationRepository,
         private readonly MailerInterface $mailer,
-        private readonly MailerConfig $mailerConfig,
+        private readonly UsersConfig $usersConfig,
     ) {
     }
 
@@ -31,7 +31,7 @@ final class SendReservationConfirmedEmailUseCase implements SendReservationConfi
             throw new DatabaseException('Failed to load reservation.', 0, $e);
         }
 
-        $token = CancellationToken::generate($reservation->id, $this->mailerConfig->cancellationSecret);
+        $token = CancellationToken::generate($reservation->id, $this->usersConfig->cancellationSecret);
 
         // Deliberately not caught — see SendReservationCreatedEmailUseCase.
         $this->mailer->sendReservationConfirmedEmail($reservation, $token);

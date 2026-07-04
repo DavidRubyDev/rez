@@ -7,7 +7,7 @@ namespace Rez\Tests\Application\UseCase\ReservationEmail\SendReservationConfirme
 use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use Rez\Application\Config\MailerConfig;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
@@ -33,11 +33,11 @@ class SendReservationConfirmedEmailUseCaseTest extends TestCase
     {
         $this->reservationRepository = $this->createMock(ReservationRepositoryInterface::class);
         $this->mailer                = $this->createMock(MailerInterface::class);
-        $mailerConfig                = new MailerConfig('super-secret-cancellation-key');
+        $usersConfig                = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
         $this->useCase                = new SendReservationConfirmedEmailUseCase(
             $this->reservationRepository,
             $this->mailer,
-            $mailerConfig,
+            $usersConfig,
         );
 
         $this->reservation = Reservation::create(

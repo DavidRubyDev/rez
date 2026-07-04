@@ -11,11 +11,16 @@ final class UsersConfig
      */
     public function __construct(
         public readonly string $jwtSecret,
+        public readonly string $cancellationSecret,
         public readonly int $jwtTtlSeconds = 3600,
         public readonly int $passwordResetTtlMinutes = 60,
     ) {
         if ($jwtSecret === '') {
             throw new \InvalidArgumentException('jwtSecret must not be empty.');
+        }
+
+        if ($cancellationSecret === '') {
+            throw new \InvalidArgumentException('cancellationSecret must not be empty.');
         }
 
         if ($jwtTtlSeconds < 1) {

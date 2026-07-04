@@ -1,11 +1,11 @@
 # Scaffold: rez-guest-cancellation
 
 ## Prerequisites
-- `rez-config-update` complete (`UsersConfig` required, `cancellationSecret` present) —
-  **note:** `cancellationSecret` ended up on `MailerConfig` instead, not `UsersConfig` — see
-  `10_rez-config-update.md`'s own updated note. Do not add a second `cancellationSecret` to
-  `UsersConfig` when running that scaffold; either drop it there or migrate this one, don't
-  duplicate the source of truth for the same secret.
+- `rez-config-update` complete (`UsersConfig` required, `cancellationSecret` present) — **note:**
+  `cancellationSecret` briefly lived on `MailerConfig` (`rez-lifecycle-email-integration`, ahead
+  of `rez-config-update`) but has since been migrated onto `UsersConfig` by `rez-config-update`
+  itself, per its own "migrate" decision — matching this scaffold's original plan. Sections 4–6
+  below have been updated to read `UsersConfig->cancellationSecret`, not `MailerConfig`.
 - `rez-mailer-newsletter` complete (`MailerInterface` wired, confirmation email exists)
 - `rez-email-restructure` complete (`MailerInterface` now exposes
   `sendReservationCreatedEmail(Reservation, CancellationToken)`,
@@ -16,10 +16,12 @@
 - `rez-reservation-settings` complete (DB-backed `ReservationSettings`/
   `ReservationSettingsRepositoryInterface`, replacing `ReservationsConfig`)
 - `rez-lifecycle-email-integration` complete (ad hoc, no `docs/instructions/NN_*` file —
-  see `docs/CONTEXT.md`). **This ran section 6's wiring already** — `ReservationEmailService`,
-  `MailerConfig::cancellationSecret`, and settings-gated sends in `CreateReservationUseCase`/
-  `ConfirmReservationUseCase`/`CancelReservationUseCase` all exist now. Section 6 below is
-  superseded — read its inline note before doing any work in this file.
+  see `docs/CONTEXT.md`). **This ran section 6's wiring already** — `ReservationEmailService`
+  and settings-gated sends in `CreateReservationUseCase`/`ConfirmReservationUseCase`/
+  `CancelReservationUseCase` all exist now (the secret they use for `CancellationToken`
+  generation now reads from `UsersConfig::cancellationSecret`, not `MailerConfig` — see the
+  `rez-config-update` note above). Section 6 below is superseded — read its inline note before
+  doing any work in this file.
 
 ## Goal
 
@@ -87,14 +89,14 @@ public function __construct(
 **Updated for current reality:** as of `rez-lifecycle-email-integration`, this use case already
 has constructor deps on `ReservationSettingsRepositoryInterface` and `ReservationEmailService`
 (for the settings-gated `sendReservationCancelledEmail`, fired unconditionally after save —
-see that scaffold). Add a `MailerConfig $mailerConfig` dependency alongside those (it's already
-a required, always-available config object per `rez-lifecycle-email-integration` — no
-nullability concern). The property/method names below (`reservationId()`, `usersConfig`) are
-this doc's original pre-refactor style; the codebase now uses `public readonly` properties
-directly (`$reservation->id`, not `$reservation->id()`) — write it that way, not as shown here.
+see that scaffold). Add a `UsersConfig $usersConfig` dependency alongside those (it's a
+required, always-available config object on `PlatformConfig` since `rez-config-update` — no
+nullability concern). The property/method names below (`reservationId()`) are this doc's
+original pre-refactor style; the codebase now uses `public readonly` properties directly
+(`$reservation->id`, not `$reservation->id()`) — write it that way, not as shown here.
 
-The use case gains a dependency on `MailerConfig` (to read `cancellationSecret` — **not**
-`UsersConfig`; that field lives on `MailerConfig` now, see `rez-lifecycle-email-integration`).
+The use case gains a dependency on `UsersConfig` (to read `cancellationSecret` — it migrated
+there from `MailerConfig` when `rez-config-update` ran; see the prerequisites note above).
 
 Two paths inside `execute()`:
 
@@ -106,7 +108,7 @@ Two paths inside `execute()`:
 **Guest path** (`$request->cancellationToken !== null`):
 - Load reservation by id
 - Construct `CancellationToken::fromString($request->cancellationToken)`
-- Call `$token->verify($reservation->id, $this->mailerConfig->cancellationSecret)`
+- Call `$token->verify($reservation->id, $this->usersConfig->cancellationSecret)`
 - If `false` → throw `InvalidTokenException`
 - Cancel it
 
@@ -123,10 +125,12 @@ the request object.
 
 ## 5. `MailerConfig` gains `cancellationBaseUrl`
 
-`src/Application/Config/MailerConfig.php` — **already has `cancellationSecret`** (added in
-`rez-lifecycle-email-integration`, ahead of this scaffold, because `CreateReservationUseCase`/
-`ConfirmReservationUseCase` needed a real HMAC secret before `rez-config-update` had made
-`UsersConfig` required). This section only needs to add:
+`src/Application/Config/MailerConfig.php` — currently an empty placeholder class.
+`cancellationSecret` was briefly added here (`rez-lifecycle-email-integration`, ahead of this
+scaffold, because `CreateReservationUseCase`/`ConfirmReservationUseCase` needed a real HMAC
+secret before `rez-config-update` had made `UsersConfig` required) but has since moved to
+`UsersConfig` (`rez-config-update`) — `MailerConfig` does not carry it anymore. This section
+only needs to add:
 ```php
 public readonly string $cancellationBaseUrl,
 ```
@@ -157,7 +161,7 @@ staying deferred, that scaffold wired all three lifecycle emails:
   `sendCancelledIfEnabled`), reading `ReservationSettings` passed in by the caller.
 - `CreateReservationUseCase` — single `if ($settings->autoConfirm) { …confirmed… } else {
   …created… }` after save, generating one `CancellationToken` from
-  `$this->mailerConfig->cancellationSecret`.
+  `$this->usersConfig->cancellationSecret`.
 - `ConfirmReservationUseCase` — the manual admin-confirm path, also routes through
   `sendConfirmedIfEnabled()`.
 - `CancelReservationUseCase` — routes through `sendCancelledIfEnabled()` unconditionally,
@@ -170,7 +174,7 @@ staying deferred, that scaffold wired all three lifecycle emails:
 This scaffold's job is now limited to guest-side cancellation token verification
 (`CancelReservationUseCase`, sections 3–4 above — note section 4's dependency list already
 includes `ReservationSettingsRepositoryInterface`/`ReservationEmailService` from the wiring
-above; add `MailerConfig` alongside them for the token secret) and making `cancellationBaseUrl`
+above; add `UsersConfig` alongside them for the token secret) and making `cancellationBaseUrl`
 available (section 5 above).
 
 ---
@@ -200,7 +204,7 @@ in `rez-email-restructure`). No new tests needed here.
 ### `CreateReservationUseCase`/`ConfirmReservationUseCase`/`CancelReservationUseCase` mailer wiring — already done
 Done in `rez-lifecycle-email-integration` (see section 6 above), including the
 autoConfirm/created-vs-confirmed test matrix and settings on/off toggle tests for all three
-use cases. No tests for it here — just add `MailerConfig` to whatever mock setup
+use cases. No tests for it here — just add `UsersConfig` to whatever mock setup
 `CancelReservationUseCaseTest` already has from that scaffold when adding the guest-token tests.
 
 ---
@@ -213,8 +217,9 @@ use cases. No tests for it here — just add `MailerConfig` to whatever mock set
 - [ ] 4. `CancelReservationUseCase` updated — two paths, shared cancellation logic (settings-gated
       email send already wired by `rez-lifecycle-email-integration` — don't touch that part,
       just add the token verification branch and the `MailerConfig` dependency for the secret)
-- [x] 5. `MailerConfig::cancellationSecret` already present (done in `rez-lifecycle-email-integration`);
-      this scaffold only adds `cancellationBaseUrl`
+- [x] 5. `UsersConfig::cancellationSecret` already present (added in `rez-lifecycle-email-integration`
+      on `MailerConfig`, migrated to `UsersConfig` by `rez-config-update`); this scaffold only
+      adds `cancellationBaseUrl` to `MailerConfig`
 - [x] 6. `MailerInterface` reservation-email shape already updated (done in `rez-email-restructure`
       — takes `CancellationToken`, not a `cancellationUrl` string; no further change needed here)
 - [x] 6b. Settings-gated wiring of all three `MailerInterface` methods into

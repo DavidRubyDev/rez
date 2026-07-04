@@ -8,7 +8,7 @@ use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
-use Rez\Application\Config\MailerConfig;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
@@ -34,7 +34,7 @@ class ConfirmReservationUseCaseTest extends TestCase
     private ReservationSettingsRepositoryInterface&MockObject $reservationSettingsRepository;
     private MailerInterface&MockObject $mailer;
     private ReservationEmailService $emailService;
-    private MailerConfig $mailerConfig;
+    private UsersConfig $usersConfig;
     private ConfirmReservationUseCase $useCase;
     private Reservation $reservation;
 
@@ -47,7 +47,7 @@ class ConfirmReservationUseCaseTest extends TestCase
             ->willReturn(new ReservationSettings(true, true, true, true));
         $this->mailer       = $this->createMock(MailerInterface::class);
         $this->emailService = new ReservationEmailService($this->mailer, new NullLogger());
-        $this->mailerConfig = new MailerConfig('super-secret-cancellation-key');
+        $this->usersConfig = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
         $this->useCase      = $this->makeUseCase($this->reservationSettingsRepository);
 
         $this->reservation = Reservation::create(
@@ -65,7 +65,7 @@ class ConfirmReservationUseCaseTest extends TestCase
             $this->reservationRepository,
             $reservationSettingsRepository,
             $this->emailService,
-            $this->mailerConfig,
+            $this->usersConfig,
         );
     }
 

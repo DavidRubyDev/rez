@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\ReservationEmail\SendReservationCreatedEmail;
 
-use Rez\Application\Config\MailerConfig;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
@@ -15,7 +15,7 @@ final class SendReservationCreatedEmailUseCase implements SendReservationCreated
     public function __construct(
         private readonly ReservationRepositoryInterface $reservationRepository,
         private readonly MailerInterface $mailer,
-        private readonly MailerConfig $mailerConfig,
+        private readonly UsersConfig $usersConfig,
     ) {
     }
 
@@ -31,7 +31,7 @@ final class SendReservationCreatedEmailUseCase implements SendReservationCreated
             throw new DatabaseException('Failed to load reservation.', 0, $e);
         }
 
-        $token = CancellationToken::generate($reservation->id, $this->mailerConfig->cancellationSecret);
+        $token = CancellationToken::generate($reservation->id, $this->usersConfig->cancellationSecret);
 
         // Deliberately not caught: this is a manual, explicit admin action — unlike the
         // settings-gated auto-send path (ReservationEmailService), a mailer failure here must
