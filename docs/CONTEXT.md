@@ -1525,3 +1525,60 @@ required), `FeatureGuardTest` (removed 2 `requireUsers` cases), plus the 4 use c
 updated to construct `UsersConfig` instead of `MailerConfig`. Total: 495 unit tests passing (45
 skipped — all integration), PHPStan max clean, CS clean. `10_rez-config-update.md` fully
 complete.
+
+---
+
+### 80. Guest cancellation token verification (`11_rez-guest-cancellation.md`)
+
+Wires guest-side HMAC token verification into `CancelReservationUseCase`. The
+`CancellationToken` value object itself was already built (`rez-email-restructure`); this step
+wires its *verification* path, mirroring the *generation* path already wired into
+`CreateReservationUseCase`/`ConfirmReservationUseCase`/the two manual-send use cases.
+
+**`InvalidTokenException`** (`src/Domain/Exception/InvalidTokenException.php`) — empty stub
+extending the project's own `DomainException` base (not the built-in `\DomainException`),
+matching every other domain exception's location and base class. The instruction doc suggested
+`Domain/Shared/Exception/InvalidTokenException.php` extending the built-in `\DomainException` —
+both diverge from the established convention (every other exception lives flat under
+`Domain/Exception/`), so this step followed the codebase's actual pattern instead of the doc.
+Already listed in `REZ-CONTEXT.md`'s exception → HTTP table as `InvalidTokenException → 401`
+(that mapping predates this step and needed no change). No dedicated test — trivial constructor,
+same convention as `InvalidReservationStateException`.
+
+**`MailerConfig`** — gained `cancellationBaseUrl` (required, non-empty string, no URL-format
+validation). `MailerConfigTest` recreated (deleted in `rez-config-update` when the class went
+empty) — 2 cases: valid construction, empty throws.
+
+**`CancelReservationRequest`** — gained `public readonly ?string $cancellationToken = null`.
+`null` means admin cancellation (existing behavior, unchanged); non-null means guest
+cancellation, subject to verification.
+
+**`CancelReservationUseCase`** — gained a `UsersConfig $usersConfig` constructor dependency (to
+read `cancellationSecret`, same as the other four use cases already using it since
+`rez-config-update`). `execute()` now: loads the reservation, and if `cancellationToken` is
+non-null calls a new private `assertValidToken()` — `CancellationToken::fromString($token)`,
+then `->verify($reservation->id, $usersConfig->cancellationSecret)`, throwing
+`InvalidTokenException` on a `false` result — *before* any state change or repository write. The
+rest of the cancellation logic (call `Reservation::cancel()`, save, load settings, send the
+cancelled email via `ReservationEmailService::sendCancelledIfEnabled()`) was extracted into a
+private `cancel()` method shared by both the admin and guest paths, so there's exactly one place
+that performs the state transition regardless of which path validated the caller — matching the
+instruction's explicit "both paths call the same internal cancellation logic" requirement.
+`CancelReservationUseCaseInterface` gained `@throws InvalidTokenException`.
+
+4 new tests in `CancelReservationUseCaseTest`: guest path with valid token cancels successfully,
+guest path with a token signed by the wrong secret throws `InvalidTokenException`, guest path
+with a tampered token string throws `InvalidTokenException`, and a token-invalid case asserts
+`save()` is never called (no partial state change on a rejected token). All existing admin-path
+tests pass unchanged since the new request field defaults to `null`.
+
+**Explicitly out of scope (per this scaffold's own instructions, separate repos):**
+`rez-starter` — a public guest-facing cancel HTTP route (token in query param, mapping
+`InvalidTokenException` to the already-documented 401), `CANCELLATION_BASE_URL` env wiring into
+the `MailerConfig` container binding, and `SymfonyMailer` building the actual cancellation URL
+string from `cancellationBaseUrl` + reservation id + token (the port only ever receives the
+`CancellationToken` object, never a pre-built URL — unchanged since `rez-email-restructure`).
+`rez-components` — the `<rez-cancel>` confirmation-page component reading the token from the URL.
+
+Total: 501 unit tests passing (45 skipped — all integration), PHPStan max clean, CS clean.
+`11_rez-guest-cancellation.md` fully complete.

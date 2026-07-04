@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
@@ -16,6 +17,7 @@ use Rez\Application\Service\ReservationEmailService;
 use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationRequest;
 use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationUseCase;
 use Rez\Domain\Exception\DomainException;
+use Rez\Domain\Exception\InvalidTokenException;
 use Rez\Domain\Exception\ReservationNotFoundException;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
@@ -25,6 +27,7 @@ use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Shared\CancellationToken;
 
 class CancelReservationUseCaseTest extends TestCase
 {
@@ -32,6 +35,7 @@ class CancelReservationUseCaseTest extends TestCase
     private ReservationSettingsRepositoryInterface&MockObject $reservationSettingsRepository;
     private MailerInterface&MockObject $mailer;
     private ReservationEmailService $emailService;
+    private UsersConfig $usersConfig;
     private CancelReservationUseCase $useCase;
     private Reservation $reservation;
 
@@ -44,6 +48,7 @@ class CancelReservationUseCaseTest extends TestCase
             ->willReturn(new ReservationSettings(true, true, true, true));
         $this->mailer       = $this->createMock(MailerInterface::class);
         $this->emailService = new ReservationEmailService($this->mailer, new NullLogger());
+        $this->usersConfig  = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
         $this->useCase      = $this->makeUseCase($this->reservationSettingsRepository);
 
         $this->reservation = Reservation::create(
@@ -61,6 +66,7 @@ class CancelReservationUseCaseTest extends TestCase
             $this->reservationRepository,
             $reservationSettingsRepository,
             $this->emailService,
+            $this->usersConfig,
         );
     }
 
@@ -177,5 +183,59 @@ class CancelReservationUseCaseTest extends TestCase
         $response = $this->useCase->execute(new CancelReservationRequest($this->reservation->id));
 
         $this->assertSame(ReservationStatus::Cancelled, $response->reservation->status);
+    }
+
+    public function testGuestPathWithValidTokenCancelsSuccessfully(): void
+    {
+        $this->reservationRepository->method('findById')->willReturn($this->reservation);
+
+        $token = CancellationToken::generate($this->reservation->id, $this->usersConfig->cancellationSecret);
+
+        $response = $this->useCase->execute(
+            new CancelReservationRequest($this->reservation->id, $token->toString()),
+        );
+
+        $this->assertSame(ReservationStatus::Cancelled, $response->reservation->status);
+    }
+
+    public function testGuestPathWithInvalidTokenThrowsInvalidTokenException(): void
+    {
+        $this->reservationRepository->method('findById')->willReturn($this->reservation);
+
+        $token = CancellationToken::generate($this->reservation->id, 'wrong-secret');
+
+        $this->expectException(InvalidTokenException::class);
+
+        $this->useCase->execute(
+            new CancelReservationRequest($this->reservation->id, $token->toString()),
+        );
+    }
+
+    public function testGuestPathWithTamperedTokenThrowsInvalidTokenException(): void
+    {
+        $this->reservationRepository->method('findById')->willReturn($this->reservation);
+
+        $token = CancellationToken::generate($this->reservation->id, $this->usersConfig->cancellationSecret);
+
+        $this->expectException(InvalidTokenException::class);
+
+        $this->useCase->execute(
+            new CancelReservationRequest($this->reservation->id, $token->toString() . 'tampered'),
+        );
+    }
+
+    public function testGuestPathDoesNotSaveWhenTokenInvalid(): void
+    {
+        $this->reservationRepository->method('findById')->willReturn($this->reservation);
+        $this->reservationRepository->expects($this->never())->method('save');
+
+        $token = CancellationToken::generate($this->reservation->id, 'wrong-secret');
+
+        try {
+            $this->useCase->execute(
+                new CancelReservationRequest($this->reservation->id, $token->toString()),
+            );
+        } catch (InvalidTokenException) {
+        }
     }
 }

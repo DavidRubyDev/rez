@@ -175,8 +175,10 @@ required (not optional) part of `PlatformConfig`.
   `ConfirmReservationUseCase`, and the two `SendReservation{Created,Confirmed}EmailUseCase`
   manual-send use cases all generate one from `UsersConfig::$cancellationSecret` (migrated from
   `MailerConfig` in `rez-config-update`, see §3.6 invariant 12).
-  **Verification still not wired** — `CancelReservationUseCase` has no guest token-check path
-  yet; that's still `rez-guest-cancellation` (step 12).
+  **Verification now wired** (`rez-guest-cancellation`): `CancelReservationUseCase` accepts an
+  optional `cancellationToken` on its request — `null` means admin cancellation (no check);
+  non-null means guest cancellation, verified against `UsersConfig::$cancellationSecret` before
+  cancelling, throwing `InvalidTokenException` on mismatch.
 
 ### 3.3 Port interfaces (Application/Port/)
 
@@ -232,7 +234,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | Use case | Input | Output | Notes |
 |---|---|---|---|
 | `CreateReservationUseCase` | `CreateReservationRequest` | `CreateReservationResponse` | Checks availability, throws `ConflictException` if slot taken. After save: single `if ($settings->autoConfirm) { …confirmed… } else { …created… }` — generates one `CancellationToken` and sends exactly one of the two emails via `ReservationEmailService`, gated by `ReservationSettings` (`rez-lifecycle-email-integration`) |
-| `CancelReservationUseCase` | `CancelReservationRequest` | `CancelReservationResponse` | Currently one path (admin cancel by reservationId only) — the second path (guest cancels with reservationId + HMAC cancellation token, verified before cancellation) is `rez-guest-cancellation`, not yet built. After save: sends the cancelled email via `ReservationEmailService::sendCancelledIfEnabled()` unconditionally, no actor-type branching (`rez-lifecycle-email-integration`) |
+| `CancelReservationUseCase` | `CancelReservationRequest` | `CancelReservationResponse` | Two paths, same underlying cancellation logic: admin (`cancellationToken === null`, no check) and guest (`cancellationToken !== null`, verified via `CancellationToken::verify()` against `UsersConfig::cancellationSecret`, throws `InvalidTokenException` on mismatch before any state change — `rez-guest-cancellation`). After save: sends the cancelled email via `ReservationEmailService::sendCancelledIfEnabled()` unconditionally, no actor-type branching (`rez-lifecycle-email-integration`) |
 | `ConfirmReservationUseCase` | `ConfirmReservationRequest` | `ConfirmReservationResponse` | Manual admin-confirm path. After save: generates a `CancellationToken` and sends the confirmed email via the same `ReservationEmailService::sendConfirmedIfEnabled()` that `CreateReservationUseCase`'s autoConfirm branch uses — exactly one place decides whether a confirmed email goes out (`rez-lifecycle-email-integration`) |
 | `SendReservationCreatedEmailUseCase` | `SendReservationCreatedEmailRequest(ReservationId)` | `SendReservationCreatedEmailResponse` | Manual escape hatch for rez-admin's "send anyway" button. Ignores `ReservationSettings` and reservation state entirely; calls `MailerInterface::sendReservationCreatedEmail()` directly, not through `ReservationEmailService`. Mailer failures propagate unswallowed |
 | `SendReservationConfirmedEmailUseCase` | `SendReservationConfirmedEmailRequest(ReservationId)` | `SendReservationConfirmedEmailResponse` | Same pattern as above, for the confirmed email |
@@ -330,9 +332,13 @@ These are the contracts the library defines. Implementations live in infrastruct
     it briefly lived on `MailerConfig` (`rez-lifecycle-email-integration`, because `UsersConfig`
     wasn't required yet at that point) and was migrated to `UsersConfig` once `rez-config-update`
     made it required, per that scaffold's own instructions. Guest-side token *verification* in
-    `CancelReservationUseCase` (both admin and guest paths ultimately call the same cancellation
-    logic — only the auth check differs) is still `rez-guest-cancellation`'s job, not yet built;
-    token *generation* for the created/confirmed emails is already wired.
+    `CancelReservationUseCase` is now wired (`rez-guest-cancellation`): both admin and guest paths
+    call the same private cancellation logic — only the auth check differs. `null`
+    `cancellationToken` on `CancelReservationRequest` means admin (no check, unchanged
+    behavior); a non-null value means guest — verified via `CancellationToken::verify()` against
+    `UsersConfig::$cancellationSecret` *before* calling `Reservation::cancel()`, throwing
+    `InvalidTokenException` (mapped to HTTP 401) on mismatch without touching repository state.
+    Token *generation* for the created/confirmed emails was already wired.
 
 ### 3.7 Configuration system
 
@@ -345,11 +351,14 @@ longer a prerequisite check since they are always present. `hasMailer/Payments/C
 `public readonly` property, so no `getUsersConfig()` getter was added (see `CLAUDE.md`'s getter
 rule — a public readonly property already suffices).
 `ReservationsConfig` — **removed** (`rez-reservation-settings`). Never had a `reservations` slot that matched this section's own diagram anyway (drift predates this removal). `autoConfirm` is no longer part of `PlatformConfig` at all — it's DB-backed now, see `ReservationSettings` in §3.2/§3.4 and the `reservation_settings` table in §3.8. **Breaking change for `rez-starter`:** its `PlatformConfig` construction still passes a `reservations` argument that no longer exists — needs updating, not done here.
-`MailerConfig` — COMPLETE, currently an empty placeholder class (`rez-config-update`).
-`cancellationSecret` — the only field it briefly carried (`rez-lifecycle-email-integration`) —
-migrated onward to `UsersConfig` (below), per this scaffold's explicit "migrate" instruction.
-Kept as a class (not removed from `PlatformConfig`) because it's expected to gain
-`cancellationBaseUrl` in `rez-guest-cancellation`.
+`MailerConfig` — COMPLETE. `cancellationSecret` — the only field it briefly carried
+(`rez-lifecycle-email-integration`) — migrated onward to `UsersConfig` (below) in
+`rez-config-update`, per that scaffold's explicit "migrate" instruction, leaving it briefly
+empty. `rez-guest-cancellation` gave it its permanent field: `cancellationBaseUrl` (non-empty
+string, no URL-format validation — kept simple). The concrete mailer implementation (e.g.
+`rez-starter`'s `SymfonyMailer`) reads this to build the cancellation link URL itself — `rez`
+only hands the mailer port the `Reservation` and `CancellationToken` object, never a pre-built
+URL string (see `MailerInterface` in §3.3).
 `UsersConfig` — COMPLETE (`rez-config-update`). Required. Fields: `jwtSecret`,
 `cancellationSecret` (non-empty string, validated the same way as `jwtSecret`, always a
 separate value — never shares `jwtSecret`), `jwtTtlSeconds` (default 3600, min 1),
@@ -362,7 +371,7 @@ separate value — never shares `jwtSecret`), `jwtTtlSeconds` (default 3600, min
 
 ```
 PlatformConfig
-  ├── MailerConfig          always required (currently empty — cancellationBaseUrl pending)
+  ├── MailerConfig          always required (cancellationBaseUrl)
   ├── UsersConfig           always required (jwtSecret, cancellationSecret, jwtTtlSeconds, passwordResetTtlMinutes)
   ├── PaymentsConfig?       currency, webhookSecret
   ├── CreditsConfig?        minimumTopUpAmount, currency
@@ -488,10 +497,14 @@ POST   /api/newsletter/subscribe
 DELETE /api/newsletter/unsubscribe
 ```
 
-Guest-facing reservation creation (via `<rez-calendar>`, not yet built) and guest self-cancellation
-via HMAC token (`rez-guest-cancellation`, not yet wired into `CancelReservationUseCase`) are
-design targets, not currently-available routes — see §3.2 `CancellationToken` and the "Not yet
-built" use-case table in §3.5. There is no `/api/bookings` route: **booking** (a `CreateBookingUseCase`
+Guest-facing reservation creation (via `<rez-calendar>`, not yet built) is a design target, not
+a currently-available route. Guest self-cancellation via HMAC token is now wired at the `rez`
+layer (`rez-guest-cancellation` — `CancelReservationUseCase` accepts an optional
+`cancellationToken`), but there is still no public `rez-starter` HTTP route exposing it — the
+only existing cancel route (`POST /api/reservations/{id}/cancel` below) is admin-only and JWT-
+gated; a guest-facing route (token in query param, per the authorization model table above) is a
+`rez-starter` follow-up, not built here. See §3.2 `CancellationToken` and the `CancelReservationUseCase`
+row in §3.5. There is no `/api/bookings` route: **booking** (a `CreateBookingUseCase`
 orchestrator layered on top of reservations to add payment/credit/subscription resolution before
 creating the reservation) is a distinct, separately-scoped concept from **reservation** and is not
 yet built — whether it's needed at all is still undecided pending the payments profile. Do not
@@ -715,7 +728,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 
 | Module | Domain | Use cases | Infrastructure | Tests |
 |---|---|---|---|---|
-| Reservations | ✅ | ✅ (needs guest cancel-token verification — `rez-guest-cancellation`) | ✅ | ✅ 188 unit + 22 integration |
+| Reservations | ✅ | ✅ (guest cancel-token verification wired — `rez-guest-cancellation`) | ✅ | ✅ |
 | Resources | ✅ | ✅ | ✅ | ✅ |
 | Availability | ✅ | ✅ | ✅ | ✅ |
 | ReservationSettings | ✅ | ✅ | ✅ | ✅ (`rez-reservation-settings`) |
@@ -766,8 +779,27 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
     already caused): the `CANCELLATION_SECRET` env var, the standalone `MailerConfig::class`
     binding, and the four call sites reading `$mailerConfig->cancellationSecret` all need
     re-pointing at `UsersConfig->cancellationSecret`; not done here.
-12. `rez-guest-cancellation` — HMAC verification in CancelReservationUseCase, `cancellationBaseUrl`
-    on `MailerConfig` (CancellationToken value object itself already built — see `rez-email-restructure` above)
+12. `rez-guest-cancellation` — **COMPLETE** (see `docs/CONTEXT.md` step 80). Added
+    `InvalidTokenException` (`src/Domain/Exception/` — the instruction doc suggested
+    `Domain/Shared/Exception`, but every other domain exception lives flat under `Domain/Exception/`
+    extending the project's own `DomainException` base, not the built-in `\DomainException`; this
+    scaffold followed the established convention over the doc's suggestion). `CancelReservationRequest`
+    gained an optional `?string $cancellationToken`. `CancelReservationUseCase` gained a
+    `UsersConfig` dependency and now has two paths sharing one private `cancel()` method: admin
+    (`cancellationToken === null`, unchanged behavior) and guest (non-null, verified via
+    `CancellationToken::fromString()->verify()` against `UsersConfig::cancellationSecret` *before*
+    calling `Reservation::cancel()`, throwing `InvalidTokenException` on mismatch — no repository
+    write happens on a bad token). `MailerConfig` gained `cancellationBaseUrl` (non-empty string).
+    `CancellationToken` value object itself was already built — see `rez-email-restructure` above.
+    **`rez-starter` follow-up (not done here, separate repo):** a public guest-facing cancel route
+    (token in query param, per the authorization model in §4) that maps `InvalidTokenException` to
+    401 (already documented in the exception table) and passes the token through to
+    `CancelReservationRequest`; `cancellationBaseUrl` wired from an env var (e.g.
+    `CANCELLATION_BASE_URL`) into the container's `MailerConfig` binding; `SymfonyMailer` building
+    the actual cancellation URL string from `cancellationBaseUrl` + reservation id + token, since
+    `MailerInterface` hands it the `CancellationToken` object, not a pre-built URL (see §3.7).
+    `<rez-cancel>` web component (confirmation page reading the token from the URL) is a
+    `rez-components` follow-up, also not built here.
 - `rez-reservation-settings` — **COMPLETE**, ad hoc (no `docs/instructions/NN_*` file — see
   `docs/CONTEXT.md` step 75). Removed `ReservationsConfig` entirely; `autoConfirm` plus three new
   lifecycle-email toggles (`autoSendReservationCreated/Confirmed/Cancelled`) now live in a
@@ -862,6 +894,11 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ❌ Auth middleware, admin middleware
 - ❌ `StripeGateway` implementation
 - ❌ Auth routes, booking routes, feature-gated routes — blocked on rez users module
+- ❌ Guest cancellation route (`rez-guest-cancellation` complete on the `rez` side —
+  `CancelReservationUseCase` accepts a `cancellationToken`, `MailerConfig.cancellationBaseUrl`
+  exists; needs a public route reading the token from a query param, `CANCELLATION_BASE_URL` env
+  wiring, and `SymfonyMailer` building the actual cancellation link URL from
+  `cancellationBaseUrl` + reservation id + token)
 
 ### `rez-demo`
 - ❌ Not initialised (init from rez-starter, local Docker only, for API testing)
