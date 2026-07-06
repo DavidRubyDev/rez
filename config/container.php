@@ -102,6 +102,8 @@ use Rez\Application\UseCase\User\ListUsers\ListUsersUseCase;
 use Rez\Application\UseCase\User\ListUsers\ListUsersUseCaseInterface;
 use Rez\Application\UseCase\User\AdminUpdateUser\AdminUpdateUserUseCase;
 use Rez\Application\UseCase\User\AdminUpdateUser\AdminUpdateUserUseCaseInterface;
+use Rez\Application\UseCase\User\AdminCreateUser\AdminCreateUserUseCase;
+use Rez\Application\UseCase\User\AdminCreateUser\AdminCreateUserUseCaseInterface;
 use Rez\Application\Service\JwtService;
 use Rez\Infrastructure\Mailer\NullMailer;
 use Rez\Infrastructure\Persistence\Mysql\MysqlDatabaseSeeder;
@@ -186,4 +188,5 @@ return [
     UpdateUserUseCaseInterface::class         => autowire(UpdateUserUseCase::class),
     ListUsersUseCaseInterface::class          => autowire(ListUsersUseCase::class),
     AdminUpdateUserUseCaseInterface::class    => autowire(AdminUpdateUserUseCase::class),
+    AdminCreateUserUseCaseInterface::class    => autowire(AdminCreateUserUseCase::class),
 ];
