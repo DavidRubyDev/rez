@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Rez\Application\Port\MailerInterface;
+use Rez\Application\Port\TokenGeneratorInterface;
+use Rez\Infrastructure\Token\RandomTokenGenerator;
 use Rez\Application\Service\AvailabilityService;
 use Rez\Application\Service\AvailabilityServiceInterface;
 use Rez\Application\UseCase\EmailTemplate\CreateEmailTemplate\CreateEmailTemplateUseCase;
@@ -167,12 +169,14 @@ return [
     UnsubscribeUseCaseInterface::class        => autowire(UnsubscribeUseCase::class),
     BroadcastUseCaseInterface::class          => autowire(BroadcastUseCase::class),
     ListSubscribersUseCaseInterface::class    => autowire(ListSubscribersUseCase::class),
-    // Users are core (always present, never gated). UserRepositoryInterface,
-    // PasswordResetRepositoryInterface, and TokenGeneratorInterface must all be bound by the
-    // client app — same pattern as every other rez-owned repository interface above, even
-    // though RandomTokenGenerator (Infrastructure/Token/) has no external dependency of its
-    // own. MailerInterface (already bound above) must resolve to a concrete implementation
-    // that implements sendPasswordReset() for RequestPasswordResetUseCase to work.
+    // Users are core (always present, never gated). UserRepositoryInterface and
+    // PasswordResetRepositoryInterface must be bound by the client app — same pattern as every
+    // other rez-owned repository interface above. TokenGeneratorInterface is bound directly
+    // below (unlike the repositories) since RandomTokenGenerator has no external dependency of
+    // its own — nothing client-specific to override. MailerInterface (already bound above) must
+    // resolve to a concrete implementation that implements sendPasswordReset() for
+    // RequestPasswordResetUseCase to work.
+    TokenGeneratorInterface::class            => autowire(RandomTokenGenerator::class),
     JwtService::class                         => autowire(),
     RegisterUseCaseInterface::class           => autowire(RegisterUseCase::class),
     LoginUseCaseInterface::class              => autowire(LoginUseCase::class),
