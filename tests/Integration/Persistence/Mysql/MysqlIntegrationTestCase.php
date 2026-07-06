@@ -142,6 +142,27 @@ abstract class MysqlIntegrationTestCase extends TestCase
                 created_at DATETIME     NOT NULL
             )
         ');
+
+        $pdo->exec('
+            CREATE TABLE IF NOT EXISTS users (
+                id                 CHAR(36)     NOT NULL PRIMARY KEY,
+                name               VARCHAR(255) NOT NULL,
+                email              VARCHAR(255) NOT NULL UNIQUE,
+                password_hash      VARCHAR(255) NOT NULL,
+                role               VARCHAR(20)  NOT NULL DEFAULT "customer",
+                newsletter_opt_in  TINYINT(1)   NOT NULL DEFAULT 0,
+                stripe_customer_id VARCHAR(255) NULL,
+                created_at         DATETIME     NOT NULL
+            )
+        ');
+
+        $pdo->exec('
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                email      VARCHAR(255) NOT NULL PRIMARY KEY,
+                token_hash CHAR(64)     NOT NULL,
+                expires_at DATETIME     NOT NULL
+            )
+        ');
     }
 
     private function truncateTables(PDO $pdo): void
@@ -156,6 +177,8 @@ abstract class MysqlIntegrationTestCase extends TestCase
         $pdo->exec('TRUNCATE TABLE reservation_settings');
         $pdo->exec('TRUNCATE TABLE mailer_settings');
         $pdo->exec('TRUNCATE TABLE email_templates');
+        $pdo->exec('TRUNCATE TABLE users');
+        $pdo->exec('TRUNCATE TABLE password_reset_tokens');
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
 
         // reservation_settings and mailer_settings are required singleton rows (id = 1) —

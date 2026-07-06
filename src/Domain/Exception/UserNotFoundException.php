@@ -1,0 +1,13 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Rez\Domain\Exception;
+
+final class UserNotFoundException extends DomainException
+{
+    public function __construct(string $identifier)
+    {
+        parent::__construct("User '{$identifier}' not found.");
+    }
+}

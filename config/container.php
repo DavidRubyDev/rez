@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Rez\Application\Port\MailerInterface;
+use Rez\Application\Port\TokenGeneratorInterface;
+use Rez\Infrastructure\Token\RandomTokenGenerator;
 use Rez\Application\Service\AvailabilityService;
 use Rez\Application\Service\AvailabilityServiceInterface;
 use Rez\Application\UseCase\EmailTemplate\CreateEmailTemplate\CreateEmailTemplateUseCase;
@@ -84,6 +86,25 @@ use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCase;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
 use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCase;
 use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCaseInterface;
+use Rez\Application\UseCase\Auth\Register\RegisterUseCase;
+use Rez\Application\UseCase\Auth\Register\RegisterUseCaseInterface;
+use Rez\Application\UseCase\Auth\Login\LoginUseCase;
+use Rez\Application\UseCase\Auth\Login\LoginUseCaseInterface;
+use Rez\Application\UseCase\Auth\RequestPasswordReset\RequestPasswordResetUseCase;
+use Rez\Application\UseCase\Auth\RequestPasswordReset\RequestPasswordResetUseCaseInterface;
+use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordUseCase;
+use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordUseCaseInterface;
+use Rez\Application\UseCase\User\GetUser\GetUserUseCase;
+use Rez\Application\UseCase\User\GetUser\GetUserUseCaseInterface;
+use Rez\Application\UseCase\User\UpdateUser\UpdateUserUseCase;
+use Rez\Application\UseCase\User\UpdateUser\UpdateUserUseCaseInterface;
+use Rez\Application\UseCase\User\ListUsers\ListUsersUseCase;
+use Rez\Application\UseCase\User\ListUsers\ListUsersUseCaseInterface;
+use Rez\Application\UseCase\User\AdminUpdateUser\AdminUpdateUserUseCase;
+use Rez\Application\UseCase\User\AdminUpdateUser\AdminUpdateUserUseCaseInterface;
+use Rez\Application\UseCase\User\AdminCreateUser\AdminCreateUserUseCase;
+use Rez\Application\UseCase\User\AdminCreateUser\AdminCreateUserUseCaseInterface;
+use Rez\Application\Service\JwtService;
 use Rez\Infrastructure\Mailer\NullMailer;
 use Rez\Infrastructure\Persistence\Mysql\MysqlDatabaseSeeder;
 
@@ -150,4 +171,22 @@ return [
     UnsubscribeUseCaseInterface::class        => autowire(UnsubscribeUseCase::class),
     BroadcastUseCaseInterface::class          => autowire(BroadcastUseCase::class),
     ListSubscribersUseCaseInterface::class    => autowire(ListSubscribersUseCase::class),
+    // Users are core (always present, never gated). UserRepositoryInterface and
+    // PasswordResetRepositoryInterface must be bound by the client app — same pattern as every
+    // other rez-owned repository interface above. TokenGeneratorInterface is bound directly
+    // below (unlike the repositories) since RandomTokenGenerator has no external dependency of
+    // its own — nothing client-specific to override. MailerInterface (already bound above) must
+    // resolve to a concrete implementation that implements sendPasswordReset() for
+    // RequestPasswordResetUseCase to work.
+    TokenGeneratorInterface::class            => autowire(RandomTokenGenerator::class),
+    JwtService::class                         => autowire(),
+    RegisterUseCaseInterface::class           => autowire(RegisterUseCase::class),
+    LoginUseCaseInterface::class              => autowire(LoginUseCase::class),
+    RequestPasswordResetUseCaseInterface::class => autowire(RequestPasswordResetUseCase::class),
+    ResetPasswordUseCaseInterface::class      => autowire(ResetPasswordUseCase::class),
+    GetUserUseCaseInterface::class            => autowire(GetUserUseCase::class),
+    UpdateUserUseCaseInterface::class         => autowire(UpdateUserUseCase::class),
+    ListUsersUseCaseInterface::class          => autowire(ListUsersUseCase::class),
+    AdminUpdateUserUseCaseInterface::class    => autowire(AdminUpdateUserUseCase::class),
+    AdminCreateUserUseCaseInterface::class    => autowire(AdminCreateUserUseCase::class),
 ];

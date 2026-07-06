@@ -119,17 +119,31 @@ use cases directly. See step 73 in `docs/CONTEXT.md`.
 - `AvailabilityWindow` — value object. Resolved available `TimeSlot[]` for a resource on a date.
 - `DayOfWeek` — pure enum. Monday-first (ISO-8601). String mapping in `DayOfWeekMapper`.
 
-#### Users (CORE — NOT YET BUILT)
+#### Users (CORE — COMPLETE, `rez-users`)
 
 Users are always present regardless of which optional features are enabled. Every client
 deployment requires at least one Admin user to operate rez-admin. `UsersConfig` is a
-required (not optional) part of `PlatformConfig`.
+required (not optional) part of `PlatformConfig`. No `FeatureGuard`/`requireUsers()` call
+anywhere in this module — users are never gated (invariant 10); the instruction doc predated
+`rez-config-update` and still described a `requireUsers()` guard that no longer exists by the
+time this module was built.
 
-- `User` — entity. Fields: `id`, `name`, `email`, `passwordHash`, `role`, `newsletterOptIn`, `stripeCustomerId`, `createdAt`
-- `UserId` — UUID v4 value object
-- `HashedPassword` — value object wrapping bcrypt hash
-- `UserRole` — pure enum: `Customer`, `Admin`
-- `UserCollection` — immutable collection
+- `User` — immutable entity, static factory only (`create()`/`reconstruct()`, matching
+  `Reservation`/`NewsletterSubscriber`). Fields: `id`, `name`, `email`, `password`
+  (`HashedPassword`), `role`, `newsletterOptIn`, `stripeCustomerId` (nullable), `createdAt` — all
+  `public readonly`, **no getter methods**. The instruction doc specified `getId()`/`getName()`/
+  etc., which was this codebase's convention before the step-73 cleanup; `CLAUDE.md` now
+  explicitly forbids getters when a public readonly property suffices, so this module follows
+  the current rule (and every other recently-built entity) instead of the stale doc. Immutable
+  updaters: `withName()`, `withNewsletterOptIn()`, `withStripeCustomerId()`, `withPassword()`,
+  `withRole()` (same pattern as `EmailTemplate::withContent()`). `isAdmin(): bool`.
+- `UserId` — UUID v4 value object, `UuidV4Id` trait (same as `ResourceId`/`NewsletterSubscriberId`).
+- `HashedPassword` — value object wrapping a bcrypt hash. `fromPlainText()` (hashes via
+  `password_hash(..., PASSWORD_BCRYPT)`), `fromHash()` (DB hydration), `verify()`
+  (`password_verify()`).
+- `UserRole` — pure enum: `Customer`, `Admin`. String mapping in `UserRoleMapper`.
+- `UserCollection` — immutable collection, same pattern as `ResourceCollection`, plus
+  `findByEmail(string): ?User`.
 
 #### Wallet / Credits (NOT YET BUILT)
 - `Wallet` — aggregate computed from `WalletTransaction[]`. Balance = SUM, never stored as column.
@@ -199,8 +213,8 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `WalletRepositoryInterface` | `MysqlWalletRepository` | NOT YET BUILT |
 | `SubscriptionRepositoryInterface` | `MysqlSubscriptionRepository` | NOT YET BUILT |
 | `NewsletterRepositoryInterface` ✅ | `MysqlNewsletterRepository` ✅ | COMPLETE |
-| `UserRepositoryInterface` | `MysqlUserRepository` | NOT YET BUILT |
-| `PasswordResetRepositoryInterface` | `MysqlPasswordResetRepository` | NOT YET BUILT |
+| `UserRepositoryInterface` | `MysqlUserRepository` | COMPLETE (same binding note as above) |
+| `PasswordResetRepositoryInterface` | `MysqlPasswordResetRepository` | COMPLETE (same binding note as above) |
 
 #### Implemented in client repo (NOT in `rez`)
 
@@ -213,7 +227,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 | Interface | Implementation |
 |---|---|
-| `TokenGeneratorInterface` | `RandomTokenGenerator` (Infrastructure/Token/) |
+| `TokenGeneratorInterface` | `RandomTokenGenerator` (Infrastructure/Token/) — bound directly in `config/container.php`, not left to the client, since it has no external dependency to override |
 
 ### 3.4 Application services
 
@@ -222,7 +236,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `AvailabilityService` | Capacity-aware slot availability logic used by CreateReservation + GetAvailability. Injects `ResourceRepositoryInterface`. `isSlotAvailable(ResourceId, TimeSlot, int $partySize = 1)` sums existing party sizes and checks against `resource->capacity`. `getAvailableSlots()` accepts `int $partySize = 1` and filters candidates by the same capacity rule. | COMPLETE |
 | `FeatureGuard` | Throws `FeatureDisabledException` if a gated feature is not configured | COMPLETE |
 | `ReservationEmailService` | Settings-gated send/log/swallow for all three reservation-lifecycle emails (`sendCreatedIfEnabled`, `sendConfirmedIfEnabled`, `sendCancelledIfEnabled`). Takes `ReservationSettings` from the caller rather than loading it — avoids a second DB read per request. Single home for invariant 11. No interface, injected as a concrete class (same pattern as `FeatureGuard`) | COMPLETE (`rez-lifecycle-email-integration`) |
-| `JwtService` | JWT generation and validation using `firebase/php-jwt` | NOT YET BUILT |
+| `JwtService` | JWT generation and validation using `firebase/php-jwt` v7 (HS256). `generate(UserId, UserRole): string`, `validate(string): array` (throws `InvalidTokenException` on bad signature or expiry), `extractUserId()`, `extractRole()`. No interface — injected as a concrete class (same pattern as `FeatureGuard`) | COMPLETE (`rez-users`) |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
 | `LoggerInterface` (PSR-3) | Injected via container. `NullLogger` default. Concrete implementation (Monolog) wired in `rez-starter`. | COMPLETE |
@@ -267,20 +281,21 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
 | `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). |
 | `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse` | Returns all newsletter subscribers |
+| `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, string $token)` | No `FeatureGuard` — users are never gated. `findByEmail()` first (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; generates a JWT via `JwtService` (`rez-users`) |
+| `LoginUseCase` | `LoginRequest` | `LoginResponse(User, string $token)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6). Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed (`rez-users`) |
+| `RequestPasswordResetUseCase` | `RequestPasswordResetRequest(email, resetBaseUrl)` | `RequestPasswordResetResponse(bool $sent)` | Unknown email → `sent: true` silently, no token generated, no email sent (never reveals existence). Known email: generates a raw token via `TokenGeneratorInterface`, stores only `SHA-256(rawToken)` via `PasswordResetRepositoryInterface` (invariant 5), emails the raw token in a URL via `MailerInterface::sendPasswordReset()` (`rez-users`) |
+| `ResetPasswordUseCase` | `ResetPasswordRequest(token, newPassword)` | `ResetPasswordResponse(bool $success)` | Hashes the incoming token and looks it up (never by raw token — invariant 5); `InvalidTokenException` if not found or expired; on success, re-hashes the new password, saves the user, and deletes the reset token row (`rez-users`) |
+| `GetUserUseCase` | `GetUserRequest(UserId)` | `GetUserResponse(User)` | (`rez-users`) |
+| `UpdateUserUseCase` | `UpdateUserRequest(UserId, ?name, ?newsletterOptIn)` | `UpdateUserResponse(User)` | PATCH semantics via `User`'s `with*()` methods — self-service profile update, no role field (`rez-users`) |
+| `ListUsersUseCase` | `ListUsersRequest` (empty) | `ListUsersResponse(UserCollection)` | Admin-only by convention — auth enforcement is the HTTP layer's job, not this use case's (`rez-users`) |
+| `AdminUpdateUserUseCase` | `AdminUpdateUserRequest(UserId, ?UserRole, ?newsletterOptIn)` | `AdminUpdateUserResponse(User)` | Role/newsletter override, PATCH semantics. Admin-only by convention — same auth-enforcement note as `ListUsersUseCase` (`rez-users`) |
+| `AdminCreateUserUseCase` | `AdminCreateUserRequest(name, email, resetBaseUrl, UserRole = Customer, newsletterOptIn = false)` | `AdminCreateUserResponse(User)` | No password field — generates and hashes a random one nobody is ever told, saves the user, then delegates to `RequestPasswordResetUseCaseInterface` (reused, not duplicated) to email a real reset link. No JWT in the response — the admin isn't logging in as the new user. `newsletterOptIn: true` subscribes via `SubscriberSource::Admin`, not `Registered` |
 
 #### Not yet built
 
 | Use case | Module | Notes |
 |---|---|---|
 | `GetAdminConfigUseCase` | AdminConfig | Pure read from PlatformConfig — no DB. Returns feature flags + currency + plan summaries for rez-admin |
-| `RegisterUseCase` | Users (core) | Also saves newsletter subscriber if opt-in |
-| `LoginUseCase` | Users (core) | Returns JWT. Unknown email → `InvalidCredentialsException` (never reveal existence) |
-| `RequestPasswordResetUseCase` | Users (core) | Stores hashed token. Unknown email → silent success |
-| `ResetPasswordUseCase` | Users (core) | Verifies hashed token, updates password, deletes token |
-| `GetUserUseCase` | Users (core) | |
-| `UpdateUserUseCase` | Users (core) | |
-| `ListUsersUseCase` | Users (core) | Admin only |
-| `AdminUpdateUserUseCase` | Users (core) | Role/newsletter override. Auth enforcement in HTTP layer, not here |
 | `GetWalletUseCase` | Credits | Returns Wallet computed from transactions |
 | `CreditWalletUseCase` | Credits | Saves Credit transaction |
 | `DebitWalletUseCase` | Credits | Checks canAfford() BEFORE saving. Throws InsufficientFundsException if not |
@@ -417,17 +432,17 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `reservation_settings` | id (always 1, single row by convention), auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at | Seeded via `database/seeds/schema/001_reservation_settings.sql` (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`) — a new numbered file rather than appended to `000_schema.sql`, per explicit instruction on this scaffold |
 | `mailer_settings` | id (always 1, single row by convention), from_address, from_name, updated_at | Seeded via `database/seeds/schema/002_mailer_settings.sql`, same pattern as `reservation_settings`. Seeded defaults (`noreply@example.com` / `Rez`) are placeholders — every deployment must update them before going live |
 | `email_templates` | id, subject, html (MEDIUMTEXT), created_at | Seeded via `database/seeds/schema/003_email_templates.sql` — `CREATE TABLE IF NOT EXISTS` only, no seed rows (a real collection, not a singleton settings table) |
+| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Seeded via `database/seeds/schema/004_users.sql` — `CREATE TABLE IF NOT EXISTS` only, no seed rows (`rez-users`). Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
+| `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites. Same file as `users` (`rez-users`) |
 
 #### Not yet built
 
 | Table | Purpose | Notes |
 |---|---|---|
-| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Must exist before wallet_transactions, subscriptions |
 | `wallet_transactions` | id, user_id, amount (INT), currency, type, description, reservation_id (nullable, no FK), created_at | FK to users. No FK to reservations — audit trail must survive reservation deletion |
 | `subscriptions` | id, user_id (UNIQUE), plan_id, status, stripe_subscription_id (UNIQUE), current_period_end, created_at | FK to users. One subscription per user — upsert by user_id |
 | `stripe_events` | stripe_event_id (PK), type, payload (JSON), processed_at | PK is the Stripe event ID — provides idempotency |
 | `newsletter_subscribers` ✅ | id, email (UNIQUE), name, source, opted_in_at | Upsert by email |
-| `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites |
 
 #### Seed directory convention
 
@@ -545,6 +560,12 @@ GET    /api/admin/config
 ```
 
 #### Always available — auth routes (users are core)
+
+The `rez` use cases behind every route below are complete (`rez-users`:
+`RegisterUseCase`/`LoginUseCase`/`RequestPasswordResetUseCase`/`ResetPasswordUseCase`/
+`GetUserUseCase`/`UpdateUserUseCase`/`ListUsersUseCase`/`AdminUpdateUserUseCase`), but none of
+these routes exist yet in `rez-starter` — no auth or admin middleware, no route wiring. This
+table is a design target, same status as the guest-cancellation route above.
 
 ```
 POST   /api/auth/register
@@ -741,7 +762,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Mailer port | ⚠️ restructured, breaking (`rez-email-restructure`) | — | — | ✅ shape tests |
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
 | CancellationToken | ✅ value object + generation wired into 5 use cases | — | — | ✅ |
-| Users (core) | ❌ | ❌ | ❌ | — |
+| Users (core) | ✅ | ✅ (9 use cases + JwtService) | ✅ | ✅ (`rez-users`) |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
 | Subscriptions | ❌ | ❌ | ❌ | — |
@@ -839,7 +860,32 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   `MailerInterface::sendCustomEmail()`. Covers only `rez` — the rez-admin editor/list/send UI
   and rez-starter's HTTP routes + Twig layout wrapping are separate, not-yet-built follow-ups
   in those repos.
-13. `rez-users` — User domain, JwtService, auth use cases, RandomTokenGenerator
+13. `rez-users` — **COMPLETE** (see `docs/CONTEXT.md` step 81). User domain (`User`, `UserId`,
+    `HashedPassword`, `UserRole`, `UserCollection`), `JwtService` (firebase/php-jwt v7, HS256),
+    `RandomTokenGenerator`, four auth use cases (Register, Login, RequestPasswordReset,
+    ResetPassword) and four user-management use cases (GetUser, UpdateUser, ListUsers,
+    AdminUpdateUser), `MysqlUserRepository` + `MysqlPasswordResetRepository`. No `FeatureGuard`
+    anywhere in this module — the instruction doc predated `rez-config-update` and still
+    specified `$guard->requireUsers()` at the top of every use case, a method that no longer
+    exists (users are never gated). `firebase/php-jwt` pinned to `^7.0`, not the doc's `^6.0` —
+    the entire 6.x branch is flagged by `composer audit` (advisory `PKSA-y2cr-5h3j-g3ys`); 7.x
+    resolves clean with no API changes needed. `User` uses `public readonly` properties with
+    `with*()` immutable updaters, not the doc's `getId()`/`getName()`-style getters — matches
+    `CLAUDE.md`'s getter rule and every other entity built since the step-73 cleanup.
+    **Ad hoc follow-up** (see `docs/CONTEXT.md` step 82): `AdminCreateUserUseCase` — admin
+    creates a user without ever setting a password; a random one is generated and immediately
+    discarded (never told to anyone), and the new user is forced through
+    `RequestPasswordResetUseCaseInterface` (reused, not duplicated) to set their own via emailed
+    link. `newsletterOptIn: true` subscribes via `SubscriberSource::Admin`. Also discussed but
+    **not built**: registration confirmation email — deferred; full double opt-in (verification
+    required before login) is the agreed target for a future separate branch, not the simpler
+    "welcome email only" variant, whenever this is picked back up.
+    **`rez-starter` follow-up (not done here, separate repo):** auth routes
+    (`/api/auth/register`, `/login`, `/password-reset/request`, `/password-reset/confirm`),
+    an admin `POST /api/admin/users` route for `AdminCreateUserUseCase`, JWT + admin middleware,
+    `/api/users/*` routes, `CANCELLATION_BASE_URL`/`JWT_SECRET`/`CANCELLATION_SECRET` env wiring,
+    container bindings for `UserRepositoryInterface` → `MysqlUserRepository` and
+    `PasswordResetRepositoryInterface` → `MysqlPasswordResetRepository`.
 14. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
 15. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 16. `rez-credits` — Wallet, WalletTransaction, wallet use cases
@@ -950,5 +996,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Component/hook dedup pass — merged the near-duplicate AvailabilityRulesPanel/AvailabilityOverridesPanel into EditableListPanel, consolidated day-of-week data into lib/days.ts, removed duplicated UTC time-formatting and empty-state table markup
 - ✅ API client modules: resources, reservations, availability, newsletter, config, reservationSettings, mailerSettings, emailTemplates
 - ✅ Reservation detail modal — resend-lifecycle-email buttons (`send-{created,confirmed,cancelled}-email`), one shown at a time keyed off status
-- ❌ Auth (login/logout, JWT, protected routes) — deferred until rez-users is built
-- ❌ Users page — deferred until rez-users is built
+- ❌ Auth (login/logout, JWT, protected routes) — `rez`'s auth use cases and `JwtService` are
+  complete (`rez-users`); blocked on `rez-starter`'s auth routes/JWT middleware, not built here
+- ❌ Users page — same blocker as above (`GetUser`/`UpdateUser`/`ListUsers`/`AdminUpdateUser`
+  use cases are complete; blocked on `rez-starter`'s `/api/users/*` routes)

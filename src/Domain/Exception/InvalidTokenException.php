@@ -6,4 +6,8 @@ namespace Rez\Domain\Exception;
 
 class InvalidTokenException extends DomainException
 {
+    public function __construct(?string $reason = null)
+    {
+        parent::__construct($reason === null ? 'Invalid token.' : "Invalid token: {$reason}");
+    }
 }
