@@ -1712,3 +1712,42 @@ wiring for `UserRepositoryInterface`, `PasswordResetRepositoryInterface`, `JWT_S
 
 97 tests added. Total: 600 unit tests passing (56 skipped — all integration), PHPStan max clean,
 CS clean. `12_rez-users.md` fully complete.
+
+---
+
+### 82. AdminCreateUserUseCase
+
+Ad hoc addition (post-`rez-users` discussion, no `docs/instructions/NN_*` file). Admins creating
+a user in rez-admin should never type a password for that user — this use case generates one,
+and the new user is forced through the existing password-reset flow to set their own.
+
+`src/Application/UseCase/User/AdminCreateUser/AdminCreateUserUseCase.php` — constructor:
+`UserRepositoryInterface`, `TokenGeneratorInterface`, `SubscribeUseCaseInterface`,
+`RequestPasswordResetUseCaseInterface`. Logic: `findByEmail()` first (throws
+`EmailAlreadyRegisteredException` if taken, same pattern as `RegisterUseCase`); generates a
+random temporary password via `TokenGeneratorInterface::generate()` and hashes it — nobody is
+ever told this value, it only exists to satisfy `password_hash`'s NOT NULL constraint; builds
+and saves the `User` with the requested `name`/`email`/`role`/`newsletterOptIn`; if
+`newsletterOptIn`, calls `SubscribeUseCaseInterface` with `SubscriberSource::Admin` (not
+`Registered` — this is the existing source value reserved for subscribers added via rez-admin);
+finally **delegates to `RequestPasswordResetUseCaseInterface`** to generate the real reset token
+and send the "set your password" email, reusing that use case's hash-before-storing and
+never-reveals-existence logic rather than duplicating it. `AdminCreateUserRequest` takes
+`resetBaseUrl` (passed straight through to the reset use case, same as every other caller of
+`RequestPasswordResetUseCase` — the admin UI and the public site can point users at different
+reset pages by passing different URLs, no code branching needed). `AdminCreateUserResponse`
+returns just the `User` — no JWT, since the admin isn't logging in as the new user.
+
+10 tests: duplicate email, `findByEmail` `DatabaseException` propagation, save called once,
+saved password hash matches the generated token, default role Customer, role settable to Admin,
+newsletter opt-in true/false subscribe behavior (with `SubscriberSource::Admin` asserted), reset
+use case called with the correct email/resetBaseUrl, returned user fields correct. Registered in
+`config/container.php`.
+
+**Also discussed, not built:** registration confirmation email. Decided to defer — neither a
+plain "welcome" email nor full double opt-in (email verification gating login) is being built
+now. **Full double opt-in (verification required before login) is the agreed target for a
+future separate branch, when explicitly requested** — do not build the simpler "welcome email
+only" variant instead if asked to pick this back up.
+
+Total: 610 unit tests passing (56 skipped — all integration), PHPStan max clean, CS clean.

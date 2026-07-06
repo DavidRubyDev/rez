@@ -289,6 +289,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `UpdateUserUseCase` | `UpdateUserRequest(UserId, ?name, ?newsletterOptIn)` | `UpdateUserResponse(User)` | PATCH semantics via `User`'s `with*()` methods — self-service profile update, no role field (`rez-users`) |
 | `ListUsersUseCase` | `ListUsersRequest` (empty) | `ListUsersResponse(UserCollection)` | Admin-only by convention — auth enforcement is the HTTP layer's job, not this use case's (`rez-users`) |
 | `AdminUpdateUserUseCase` | `AdminUpdateUserRequest(UserId, ?UserRole, ?newsletterOptIn)` | `AdminUpdateUserResponse(User)` | Role/newsletter override, PATCH semantics. Admin-only by convention — same auth-enforcement note as `ListUsersUseCase` (`rez-users`) |
+| `AdminCreateUserUseCase` | `AdminCreateUserRequest(name, email, resetBaseUrl, UserRole = Customer, newsletterOptIn = false)` | `AdminCreateUserResponse(User)` | No password field — generates and hashes a random one nobody is ever told, saves the user, then delegates to `RequestPasswordResetUseCaseInterface` (reused, not duplicated) to email a real reset link. No JWT in the response — the admin isn't logging in as the new user. `newsletterOptIn: true` subscribes via `SubscriberSource::Admin`, not `Registered` |
 
 #### Not yet built
 
@@ -761,7 +762,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Mailer port | ⚠️ restructured, breaking (`rez-email-restructure`) | — | — | ✅ shape tests |
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
 | CancellationToken | ✅ value object + generation wired into 5 use cases | — | — | ✅ |
-| Users (core) | ✅ | ✅ (8 use cases + JwtService) | ✅ | ✅ (`rez-users`) |
+| Users (core) | ✅ | ✅ (9 use cases + JwtService) | ✅ | ✅ (`rez-users`) |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
 | Subscriptions | ❌ | ❌ | ❌ | — |
@@ -871,11 +872,20 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
     resolves clean with no API changes needed. `User` uses `public readonly` properties with
     `with*()` immutable updaters, not the doc's `getId()`/`getName()`-style getters — matches
     `CLAUDE.md`'s getter rule and every other entity built since the step-73 cleanup.
+    **Ad hoc follow-up** (see `docs/CONTEXT.md` step 82): `AdminCreateUserUseCase` — admin
+    creates a user without ever setting a password; a random one is generated and immediately
+    discarded (never told to anyone), and the new user is forced through
+    `RequestPasswordResetUseCaseInterface` (reused, not duplicated) to set their own via emailed
+    link. `newsletterOptIn: true` subscribes via `SubscriberSource::Admin`. Also discussed but
+    **not built**: registration confirmation email — deferred; full double opt-in (verification
+    required before login) is the agreed target for a future separate branch, not the simpler
+    "welcome email only" variant, whenever this is picked back up.
     **`rez-starter` follow-up (not done here, separate repo):** auth routes
     (`/api/auth/register`, `/login`, `/password-reset/request`, `/password-reset/confirm`),
-    JWT + admin middleware, `/api/users/*` routes, `CANCELLATION_BASE_URL`/`JWT_SECRET`/
-    `CANCELLATION_SECRET` env wiring, container bindings for `UserRepositoryInterface` →
-    `MysqlUserRepository` and `PasswordResetRepositoryInterface` → `MysqlPasswordResetRepository`.
+    an admin `POST /api/admin/users` route for `AdminCreateUserUseCase`, JWT + admin middleware,
+    `/api/users/*` routes, `CANCELLATION_BASE_URL`/`JWT_SECRET`/`CANCELLATION_SECRET` env wiring,
+    container bindings for `UserRepositoryInterface` → `MysqlUserRepository` and
+    `PasswordResetRepositoryInterface` → `MysqlPasswordResetRepository`.
 14. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
 15. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 16. `rez-credits` — Wallet, WalletTransaction, wallet use cases
