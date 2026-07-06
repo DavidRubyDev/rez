@@ -17,8 +17,15 @@
 > (auto-send plus three manual-resend routes) and reservation/mailer settings (DB-backed,
 > `GET`/`PATCH` routes) are likewise wired end-to-end, with rez-admin resend buttons on the
 > reservation detail modal and a settings popup for both. rez-admin also has Resources and
-> Reservations pages built. Users are core (always enabled) but not yet built. Platform
-> extensions (payments, credits, subscriptions) not yet built.
+> Reservations pages built. Guest self-cancellation is wired end-to-end (`rez`'s
+> `CancelReservationUseCase` token verification, `rez-starter`'s public `DELETE
+> /api/reservations/{id}?token=` route and the real cancellation link in reservation emails) —
+> only the guest-facing `<rez-cancel>` confirmation page (`rez-components`) is still missing.
+> Users are core (always enabled) and now complete end-to-end too: `rez` (`rez-users` — domain,
+> use cases, `JwtService`) and `rez-starter` (auth routes, `/api/users/me`, admin user routes,
+> `AuthMiddleware`/`AdminMiddleware` now enforced on every admin route). `rez-admin`'s auth UI and
+> Users page are the only pieces still missing — blocked on nothing now that `rez-starter`'s side
+> is wired. Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -480,9 +487,11 @@ Thin HTTP delivery layer. Contains no business logic. All logic lives in `rez`.
 | `UserNotFoundException` | 404 |
 | `SubscriptionNotFoundException` | 404 |
 | `ConflictException` | 409 |
+| `EmailAlreadyRegisteredException` | 409 |
 | `FeatureDisabledException` | 501 |
 | `InvalidCredentialsException` | 401 |
 | `InvalidTokenException` | 401 |
+| `ForbiddenException` (`App\Http\Middleware\ForbiddenException` — `rez-starter`'s own, not `rez`'s) | 403 |
 | `InsufficientFundsException` | 422 |
 | `\InvalidArgumentException` | 422 |
 | `DomainException` | 422 |
@@ -507,32 +516,60 @@ All routes prefixed `/api/`.
 ```
 GET    /api/resources
 GET    /api/resources/{id}
+GET    /api/resources/{id}/availability/rules
+GET    /api/resources/{id}/availability/overrides
 GET    /api/availability
 POST   /api/newsletter/subscribe
 DELETE /api/newsletter/unsubscribe
+DELETE /api/reservations/{id}?token={hmac}                    ← guest self-cancellation
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/auth/password-reset/request
+POST   /api/auth/password-reset/confirm
 ```
 
-Guest-facing reservation creation (via `<rez-calendar>`, not yet built) is a design target, not
-a currently-available route. Guest self-cancellation via HMAC token is now wired at the `rez`
-layer (`rez-guest-cancellation` — `CancelReservationUseCase` accepts an optional
-`cancellationToken`), but there is still no public `rez-starter` HTTP route exposing it — the
-only existing cancel route (`POST /api/reservations/{id}/cancel` below) is admin-only and JWT-
-gated; a guest-facing route (token in query param, per the authorization model table above) is a
-`rez-starter` follow-up, not built here. See §3.2 `CancellationToken` and the `CancelReservationUseCase`
-row in §3.5. There is no `/api/bookings` route: **booking** (a `CreateBookingUseCase`
-orchestrator layered on top of reservations to add payment/credit/subscription resolution before
-creating the reservation) is a distinct, separately-scoped concept from **reservation** and is not
-yet built — whether it's needed at all is still undecided pending the payments profile. Do not
-conflate the two: every route below operates on `Reservation`, not on a `Booking` entity.
+Guest-facing reservation creation (via `<rez-calendar>`, not yet built) is still a design target,
+not a currently-available route. Guest self-cancellation, however, is now wired end-to-end:
+`CancelReservationUseCase` accepts an optional `cancellationToken` (`rez-guest-cancellation`), and
+`rez-starter` exposes it as `DELETE /api/reservations/{id}?token=` — a public route, distinct from
+the admin `POST /api/reservations/{id}/cancel` below, verified inside the use case rather than by
+middleware. `SymfonyMailer` builds the actual link (`CANCELLATION_BASE_URL` + reservation id +
+token) into the reservation-created/confirmed emails; the guest-facing confirmation page itself
+(`<rez-cancel>`) is still not built in `rez-components`. See §3.2 `CancellationToken` and the
+`CancelReservationUseCase` row in §3.5. There is no `/api/bookings` route: **booking** (a
+`CreateBookingUseCase` orchestrator layered on top of reservations to add payment/credit/
+subscription resolution before creating the reservation) is a distinct, separately-scoped concept
+from **reservation** and is not yet built — whether it's needed at all is still undecided pending
+the payments profile. Do not conflate the two: every route below operates on `Reservation`, not on
+a `Booking` entity.
+
+The four auth routes above are genuinely public and unauthenticated (`RegisterUseCase`/
+`LoginUseCase`/`RequestPasswordResetUseCase`/`ResetPasswordUseCase`) — that's the point, they're
+how a caller obtains a JWT or resets a forgotten password in the first place.
+
+#### Always available — any authenticated user (JWT required, any role)
+
+```
+GET    /api/users/me
+PATCH  /api/users/me
+```
+
+`AuthMiddleware` (`rez-starter`, not `rez`) verifies the JWT via `rez`'s `JwtService` and attaches
+`UserId`/`UserRole` request attributes; missing/invalid token → `InvalidTokenException` → 401.
 
 #### Always available — admin JWT required
+
+`AdminMiddleware` (`rez-starter`) requires `UserRole::Admin` on the attribute `AuthMiddleware` set
+(so it always runs after `AuthMiddleware` in the pipeline); non-admin → `ForbiddenException` → 403.
 
 ```
 POST   /api/resources
 PATCH  /api/resources/{id}
 DELETE /api/resources/{id}
 PUT    /api/resources/{id}/availability/rules
+DELETE /api/resources/{id}/availability/rules/{day_of_week}
 PUT    /api/resources/{id}/availability/overrides/{date}
+DELETE /api/resources/{id}/availability/overrides/{date}
 POST   /api/reservations                                      ← create; today only exercised by rez-admin's manual booking modal
 GET    /api/reservations
 GET    /api/reservations/{id}
@@ -556,26 +593,10 @@ GET    /api/admin/email-templates/{id}
 PATCH  /api/admin/email-templates/{id}
 DELETE /api/admin/email-templates/{id}
 POST   /api/admin/email-templates/{id}/send
-GET    /api/admin/config
-```
-
-#### Always available — auth routes (users are core)
-
-The `rez` use cases behind every route below are complete (`rez-users`:
-`RegisterUseCase`/`LoginUseCase`/`RequestPasswordResetUseCase`/`ResetPasswordUseCase`/
-`GetUserUseCase`/`UpdateUserUseCase`/`ListUsersUseCase`/`AdminUpdateUserUseCase`), but none of
-these routes exist yet in `rez-starter` — no auth or admin middleware, no route wiring. This
-table is a design target, same status as the guest-cancellation route above.
-
-```
-POST   /api/auth/register
-POST   /api/auth/login
-POST   /api/auth/password-reset/request
-POST   /api/auth/password-reset/confirm
-GET    /api/users/me                      (JWT required)
-PATCH  /api/users/me                      (JWT required)
-GET    /api/users                         (admin)
-PATCH  /api/users/{id}                    (admin)
+GET    /api/users
+PATCH  /api/users/{id}
+POST   /api/admin/users                                      ← AdminCreateUserUseCase; no password field, forces a reset link via RequestPasswordResetUseCase
+GET    /api/admin/config                                     ❌ still not wired — blocked on GetAdminConfigUseCase (rez-admin-config)
 ```
 
 #### Profile 2+ (payments)
@@ -897,17 +918,15 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
 - ✅ Slim bootstrap, PHP-DI wiring, full route surface
 - ✅ Complete exception → HTTP status map (now also `EmailTemplateNotFoundException` → 404)
-- ✅ `PlatformConfig`/`MailerConfig` construction and container wiring synced against `rez`'s
-  config restructure (`fix/rez-breaking-changes-sync`) — `reservations` argument dropped,
-  `MailerConfig` now only takes `cancellationSecret` (plus new `CANCELLATION_SECRET` env var),
-  standalone `MailerConfig::class` binding added, and `ReservationSettingsRepositoryInterface` /
-  `MailerSettingsRepositoryInterface` / `EmailTemplateRepositoryInterface` all bound to their
-  Mysql implementations
-  — ⚠️ **out of date again** as of `rez-config-update` (`rez` `docs/CONTEXT.md` step 79):
-  `cancellationSecret` moved on to `UsersConfig`, `UsersConfig` is now required, and
-  `MailerConfig` is now an empty placeholder. `CANCELLATION_SECRET` wiring, the standalone
-  `MailerConfig::class` binding, and every call site above need re-pointing at `UsersConfig`;
-  not done here (separate repo)
+- ✅ `PlatformConfig`/`MailerConfig`/`UsersConfig` construction and container wiring fully synced
+  against `rez`'s `rez-config-update` (`fix/sync-platformconfig-userssettings`): `MailerConfig`
+  now only takes `cancellationBaseUrl`, `UsersConfig` (required — `jwtSecret`, `cancellationSecret`)
+  is bound standalone alongside it, `reservations` argument long gone, and
+  `ReservationSettingsRepositoryInterface` / `MailerSettingsRepositoryInterface` /
+  `EmailTemplateRepositoryInterface` / `UserRepositoryInterface` /
+  `PasswordResetRepositoryInterface` are all bound to their Mysql implementations. Verified via
+  `composer test-api` (was silently 422-ing on every reservation create before this fix, since
+  the container was still constructing the old, no-longer-existent `MailerConfig` shape)
 - ✅ `SymfonyMailer` rewritten against the three-method `MailerInterface`
   (`sendReservationCreatedEmail`/`sendReservationConfirmedEmail`/`sendReservationCancelledEmail`)
   plus `sendCustomEmail()`; "From" address/name now read live from
@@ -937,14 +956,24 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ PHPUnit + PHPStan (level max) + PHP-CS-Fixer (PSR-12) — mirrors `davidrubydev/rez`'s toolchain; `composer ca` now works
 - ✅ `bootstrap/app.php` — app construction extracted from `public/index.php` so tests reuse the exact same wiring
 - ✅ Api test suite (`tests/Api/`) — real HTTP lifecycle against a dedicated `rez_starter_test` database, run in-process (`composer test-api`)
-- ❌ Auth middleware, admin middleware
+- ✅ Guest self-cancellation route — `DELETE /api/reservations/{id}?token=` (public,
+  `feat/guest-cancellation-route`); `SymfonyMailer` now injects `MailerConfig` and builds the
+  actual cancellation link (`cancellationBaseUrl` + reservation id + token) into the
+  reservation-created/confirmed emails; `InvalidTokenException` newly mapped to 401 (was
+  documented before this but not actually wired in `bootstrap/app.php`). The `<rez-cancel>`
+  confirmation page the link points to still isn't built in `rez-components`
+- ✅ Auth + user routes (`feat/wire-user-usecases`) — `POST /api/auth/{register,login,
+  password-reset/request,password-reset/confirm}`, `GET`/`PATCH /api/users/me`,
+  admin `GET /api/users` / `PATCH /api/users/{id}` / `POST /api/admin/users`
+- ✅ Auth middleware (`AuthMiddleware`) / admin middleware (`AdminMiddleware`) — built as part of
+  the same PR, since `/api/users/me` needs to know who's calling. Retrofitted onto every
+  previously-unprotected admin route (resources writes, reservations, settings, email templates,
+  newsletter admin ops), not just the new user routes — every one of those now returns 401
+  without a JWT and 403 for a non-admin JWT
 - ❌ `StripeGateway` implementation
-- ❌ Auth routes, booking routes, feature-gated routes — blocked on rez users module
-- ❌ Guest cancellation route (`rez-guest-cancellation` complete on the `rez` side —
-  `CancelReservationUseCase` accepts a `cancellationToken`, `MailerConfig.cancellationBaseUrl`
-  exists; needs a public route reading the token from a query param, `CANCELLATION_BASE_URL` env
-  wiring, and `SymfonyMailer` building the actual cancellation link URL from
-  `cancellationBaseUrl` + reservation id + token)
+- ❌ Booking routes, feature-gated routes (payments/credits/subscriptions) — booking's
+  orchestrator use cases (`CreateBookingUseCase`/`CancelBookingUseCase`) don't exist in `rez`
+  yet; payments/credits/subscriptions aren't built in `rez` or `rez-starter` at all
 
 ### `rez-demo`
 - ❌ Not initialised (init from rez-starter, local Docker only, for API testing)
@@ -996,7 +1025,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Component/hook dedup pass — merged the near-duplicate AvailabilityRulesPanel/AvailabilityOverridesPanel into EditableListPanel, consolidated day-of-week data into lib/days.ts, removed duplicated UTC time-formatting and empty-state table markup
 - ✅ API client modules: resources, reservations, availability, newsletter, config, reservationSettings, mailerSettings, emailTemplates
 - ✅ Reservation detail modal — resend-lifecycle-email buttons (`send-{created,confirmed,cancelled}-email`), one shown at a time keyed off status
-- ❌ Auth (login/logout, JWT, protected routes) — `rez`'s auth use cases and `JwtService` are
-  complete (`rez-users`); blocked on `rez-starter`'s auth routes/JWT middleware, not built here
-- ❌ Users page — same blocker as above (`GetUser`/`UpdateUser`/`ListUsers`/`AdminUpdateUser`
-  use cases are complete; blocked on `rez-starter`'s `/api/users/*` routes)
+- ❌ Auth (login/logout, JWT, protected routes) — `rez`'s auth use cases/`JwtService` and
+  `rez-starter`'s auth routes + `AuthMiddleware`/`AdminMiddleware` are now both complete; nothing
+  left to unblock this except building it in `rez-admin` itself
+- ❌ Users page — same status as above (`GetUser`/`UpdateUser`/`ListUsers`/`AdminUpdateUser`/
+  `AdminCreateUser` use cases and `rez-starter`'s `/api/users/*` + `/api/admin/users` routes are
+  both complete; nothing left to unblock this except building it in `rez-admin` itself)
