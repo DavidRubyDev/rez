@@ -1582,3 +1582,133 @@ string from `cancellationBaseUrl` + reservation id + token (the port only ever r
 
 Total: 501 unit tests passing (45 skipped — all integration), PHPStan max clean, CS clean.
 `11_rez-guest-cancellation.md` fully complete.
+
+---
+
+### 81. Users & Auth (`12_rez-users.md`)
+
+Adds the core Users module: domain entity, JWT auth, password reset, and full user-management
+CRUD. Users are always present (never gated), so every use case here has no `FeatureGuard`
+dependency — the instruction doc predated `rez-config-update` and still specified
+`$guard->requireUsers()` as the first line of every use case; that method no longer exists
+(`Feature::Users` and `FeatureGuard::requireUsers()` were both removed — see `docs/CONTEXT.md`
+step 79). No call site anywhere in this module references `FeatureGuard`.
+
+**`firebase/php-jwt` pinned to `^7.0`, not the doc's `^6.0`.** `composer require` for `^6.0`
+failed outright — the entire 6.x branch (`v6.0.0` through `v6.11.1`) is flagged by `composer
+audit` under advisory `PKSA-y2cr-5h3j-g3ys`. `^7.0` resolves with zero advisories and the same
+public API (`JWT::encode()`/`JWT::decode()`/`Key`), so no code had to change for the version
+bump.
+
+**Domain (`src/Domain/User/`):**
+- `UserId` — `UuidV4Id` trait, same as `ResourceId`/`NewsletterSubscriberId`. 5 tests.
+- `HashedPassword` — value object wrapping a bcrypt hash. `fromPlainText()` (validates non-empty,
+  hashes via `password_hash(..., PASSWORD_BCRYPT)`), `fromHash()` (DB hydration, validates
+  non-empty), `verify()` (`password_verify()`). 6 tests.
+- `UserRole` — pure enum (`Customer`, `Admin`). No test, same convention as other pure enums.
+  `UserRoleMapper` (`Infrastructure/Mapper/`) handles string persistence, same pattern as
+  `SubscriberSourceMapper`. 5 tests.
+- `User` — immutable entity, static factory only (`create()`/`reconstruct()`). **Uses `public
+  readonly` properties with no getter methods** — the instruction doc specified `getId()`,
+  `getName()`, `getEmail()`, etc. (this codebase's pre-step-73 convention), but `CLAUDE.md` now
+  explicitly forbids getters when a public readonly property suffices, and every entity built
+  since (`Reservation`, `Party`, `EmailTemplate`, `NewsletterSubscriber`) already follows the
+  newer rule. Immutable updaters `withName()`, `withNewsletterOptIn()`, `withStripeCustomerId()`,
+  `withPassword()`, `withRole()` mirror `EmailTemplate::withContent()`'s pattern (validate,
+  return a new instance preserving `id`/`createdAt`). `isAdmin(): bool`. 15 tests.
+- `UserCollection` — same immutable collection pattern as `ResourceCollection`, plus
+  `findByEmail(string): ?User`. No dedicated test — matches `ResourceCollection`'s "tested
+  indirectly" convention.
+
+**Domain exceptions (`src/Domain/Exception/`):** `UserNotFoundException(string $identifier)`,
+`EmailAlreadyRegisteredException(string $email)`, `InvalidCredentialsException()` (no args,
+never reveals which field was wrong) — all follow the `NewsletterSubscriberNotFoundException`
+constructor-with-message pattern. **`InvalidTokenException` reconciled, not duplicated:** this
+class already existed from `rez-guest-cancellation` as a zero-arg exception for HMAC
+cancellation-token failures. Rather than creating a second, differently-shaped exception for
+JWT/password-reset token failures (the doc's original ask), it gained an optional
+`?string $reason = null` constructor param — `new InvalidTokenException()` (guest cancellation,
+unchanged call site) still works, and `new InvalidTokenException('Token has expired')` covers
+the new JWT/password-reset cases. Already mapped to HTTP 401 in `REZ-CONTEXT.md`'s exception
+table from the earlier scaffold — no change needed there.
+
+**`JwtService`** (`src/Application/Service/JwtService.php`) — no interface, concrete class
+injected directly (same pattern as `FeatureGuard`/`ReservationEmailService`). `generate(UserId,
+UserRole): string` — HS256, payload `{sub, role, iat, exp}`, `role` is the enum case name
+(`'Customer'`/`'Admin'`). `validate(string): array` — decodes via `Key($secret, 'HS256')`,
+catches every `\Throwable` from the JWT library and rethrows as `InvalidTokenException`;
+converts the decoded `stdClass` to `array<string, mixed>` via `get_object_vars()` + a
+string-keyed rebuild loop (needed to satisfy PHPStan max — a direct `(array)` cast or a
+`foreach` directly over the `stdClass` both fail static analysis). `extractUserId()`/
+`extractRole()` call `validate()` and narrow the claim with `is_string()` before use (`(string)`
+casts on `mixed` also fail PHPStan max). **Expired-token test uses `JWT::$timestamp` override,
+not the doc's suggested `jwtTtlSeconds: -1`** — `UsersConfig` has required `jwtTtlSeconds >= 1`
+since `02_rez-config.md`, so `-1` throws at construction; firebase/php-jwt's own
+`JWT::$timestamp` static property (designed for exactly this) fakes a future "now" during
+`decode()` instead. 7 tests.
+
+**`RandomTokenGenerator`** (`src/Infrastructure/Token/RandomTokenGenerator.php`) implements
+`TokenGeneratorInterface` — `bin2hex(random_bytes($bytes))`, validates `$bytes >= 1` (needed to
+satisfy PHPStan's `int<1, max>` requirement on `random_bytes()`). 3 tests.
+
+**Port interfaces (`src/Application/Port/`):** `UserRepositoryInterface` (`findById`,
+`findByEmail`, `findAll`, `save`, `delete`), `PasswordResetRepositoryInterface` (`save`,
+`findByTokenHash` returning `array{email: string, expires_at: DateTimeImmutable}`,
+`deleteByEmail`), `TokenGeneratorInterface` (`generate(int $bytes = 32): string`). No tests —
+interfaces only, matching `MailerInterface`/`NewsletterRepositoryInterface` convention.
+
+**Auth use cases (`src/Application/UseCase/Auth/`):**
+- `RegisterUseCase` — `findByEmail()` first (catches `UserNotFoundException` to confirm the
+  email is free, throws `EmailAlreadyRegisteredException` if found), builds `User::create()`,
+  saves, conditionally calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered` when
+  `newsletterOptIn`, generates a JWT. 7 tests.
+- `LoginUseCase` — `findByEmail()` (catches `UserNotFoundException` → `InvalidCredentialsException`,
+  never lets the real not-found exception leak, per invariant 6), verifies the password, generates
+  a JWT. 4 tests.
+- `RequestPasswordResetUseCase` — unknown email returns `sent: true` silently (no token generated,
+  no save, no email — never reveals existence); known email generates a token via
+  `TokenGeneratorInterface`, stores only its SHA-256 hash via `PasswordResetRepositoryInterface`
+  (raw token never touches storage — invariant 5), emails a URL containing the raw token via
+  `MailerInterface::sendPasswordReset()` (already existed from `03_rez-mailer-newsletter.md`, no
+  port change needed). 6 tests.
+- `ResetPasswordUseCase` — hashes the incoming token before lookup (mirrors the storage side —
+  never queries by raw token), `InvalidTokenException` if not found or expired, re-hashes the new
+  password via `User::withPassword()`, saves, deletes the reset-token row. 6 tests.
+
+**User management use cases (`src/Application/UseCase/User/`):** `GetUserUseCase` (3 tests),
+`UpdateUserUseCase` (PATCH semantics via `with*()`, no role field — self-service, 6 tests),
+`ListUsersUseCase` (2 tests), `AdminUpdateUserUseCase` (PATCH semantics, role + newsletter,
+2 tests) — auth/admin enforcement is explicitly the HTTP layer's job, not these use cases',
+matching the doc's own note.
+
+**Infrastructure:** `MysqlUserRepository` (findById/findByEmail/findAll ordered by
+`created_at ASC`/save upsert/delete, same shape as `MysqlResourceRepository`) and
+`MysqlPasswordResetRepository` (save upsert-by-email/findByTokenHash/deleteByEmail, same shape
+as the settings-repository pair). Both wrap `\PDOException` as `DatabaseException` +
+`logger->critical()`, matching every other MySQL repository. 8 logger tests (unit, mocked PDO),
+11 integration tests (skip locally, run in CI).
+
+**Schema:** `database/seeds/schema/004_users.sql` — `users` and `password_reset_tokens` tables,
+`CREATE TABLE IF NOT EXISTS` only, no seed rows (a real per-user collection, not a singleton
+settings table — matches `003_email_templates.sql`'s convention). `MysqlIntegrationTestCase`
+updated with both tables' `CREATE`/`TRUNCATE`.
+
+**Container (`config/container.php`):** all 8 use case interfaces + `JwtService` autowired.
+**`TokenGeneratorInterface` bound directly to `RandomTokenGenerator`, not left to the client** —
+a deliberate deviation from the doc's "client app must bind" instruction, because
+`RandomTokenGenerator` has zero external dependency (unlike the two repositories, which need
+`PDO`, or `MailerInterface`/`StripeGatewayInterface`, which need external libraries `rez` won't
+hard-depend on). This matches `REZ-CONTEXT.md`'s own pre-existing (aspirational) categorization
+of `TokenGeneratorInterface` under "Implemented in rez application layer," and the existing
+precedent of `DatabaseSeederInterface` → `MysqlDatabaseSeeder` also being bound directly despite
+needing `PDO`. `UserRepositoryInterface` and `PasswordResetRepositoryInterface` remain
+client-bound, same as every other true per-tenant repository interface.
+
+**Explicitly out of scope (per this scaffold's own instructions, separate repos):**
+`rez-starter` — auth routes (`/api/auth/register`, `/login`, `/password-reset/request`,
+`/password-reset/confirm`), JWT + admin middleware, `/api/users/*` routes, and container/env
+wiring for `UserRepositoryInterface`, `PasswordResetRepositoryInterface`, `JWT_SECRET`,
+`JWT_TTL_SECONDS`, `PASSWORD_RESET_TTL_MINUTES`. `rez-admin` — login screen and Users page.
+
+97 tests added. Total: 600 unit tests passing (56 skipped — all integration), PHPStan max clean,
+CS clean. `12_rez-users.md` fully complete.
