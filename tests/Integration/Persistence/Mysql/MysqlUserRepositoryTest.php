@@ -94,7 +94,7 @@ class MysqlUserRepositoryTest extends MysqlIntegrationTestCase
         $this->repository->save($this->makeUser('b@example.com'));
         $this->repository->save($this->makeUser('c@example.com'));
 
-        $this->assertCount(3, $this->repository->findAll());
+        $this->assertSame(3, $this->repository->findAll()->count());
     }
 
     public function testDeleteRemovesUser(): void
