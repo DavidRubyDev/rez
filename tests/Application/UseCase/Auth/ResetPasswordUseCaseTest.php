@@ -33,6 +33,7 @@ class ResetPasswordUseCaseTest extends TestCase
         $this->user = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('old-password'));
     }
 
+    /** @return array{email: string, expires_at: \DateTimeImmutable} */
     private function record(\DateTimeImmutable $expiresAt): array
     {
         return ['email' => 'john@example.com', 'expires_at' => $expiresAt];

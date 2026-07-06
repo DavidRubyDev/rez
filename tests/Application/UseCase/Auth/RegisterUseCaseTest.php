@@ -11,6 +11,7 @@ use Rez\Application\Port\UserRepositoryInterface;
 use Rez\Application\Service\JwtService;
 use Rez\Application\UseCase\Auth\Register\RegisterRequest;
 use Rez\Application\UseCase\Auth\Register\RegisterUseCase;
+use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeRequest;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
 use Rez\Domain\Exception\EmailAlreadyRegisteredException;
 use Rez\Domain\Exception\UserNotFoundException;
@@ -89,7 +90,7 @@ class RegisterUseCaseTest extends TestCase
         $this->subscribeUseCase->expects($this->once())
             ->method('execute')
             ->with($this->callback(
-                fn ($request) => $request->email === 'john@example.com'
+                fn (SubscribeRequest $request) => $request->email === 'john@example.com'
                     && $request->name === 'John Doe'
                     && $request->source === SubscriberSource::Registered
             ))
