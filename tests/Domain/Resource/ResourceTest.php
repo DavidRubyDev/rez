@@ -58,4 +58,27 @@ class ResourceTest extends TestCase
 
         $this->assertSame([], $resource->attributes);
     }
+
+    public function testActiveDefaultsToTrue(): void
+    {
+        $resource = new Resource($this->id, $this->type, 'Room A', 10);
+
+        $this->assertTrue($resource->active);
+    }
+
+    public function testDeactivateReturnsNewInstanceWithActiveFalse(): void
+    {
+        $resource   = new Resource($this->id, $this->type, 'Room A', 10);
+        $deactivated = $resource->deactivate();
+
+        $this->assertFalse($deactivated->active);
+    }
+
+    public function testDeactivateDoesNotMutateOriginal(): void
+    {
+        $resource = new Resource($this->id, $this->type, 'Room A', 10);
+        $resource->deactivate();
+
+        $this->assertTrue($resource->active);
+    }
 }
