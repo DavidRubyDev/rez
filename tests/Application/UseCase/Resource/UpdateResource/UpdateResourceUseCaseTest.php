@@ -143,4 +143,21 @@ class UpdateResourceUseCaseTest extends TestCase
 
         $this->useCase->execute(new UpdateResourceRequest($this->resourceId, null, 0, null));
     }
+
+    public function testPreservesActiveFlagAcrossUpdate(): void
+    {
+        $inactive = new Resource(
+            $this->resourceId,
+            ResourceType::fromString('table'),
+            'Table 1',
+            4,
+            ['location' => 'window'],
+            active: false,
+        );
+        $this->repository->method('findById')->willReturn($inactive);
+
+        $response = $this->useCase->execute(new UpdateResourceRequest($this->resourceId, 'Renamed', null, null));
+
+        $this->assertFalse($response->resource->active);
+    }
 }

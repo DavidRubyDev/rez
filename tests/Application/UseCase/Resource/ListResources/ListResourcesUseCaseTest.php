@@ -38,7 +38,7 @@ class ListResourcesUseCaseTest extends TestCase
         $this->useCase->execute(new ListResourcesRequest());
     }
 
-    public function testReturnsAllResources(): void
+    public function testReturnsAllActiveResources(): void
     {
         $collection = ResourceCollection::fromArray([
             new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Table 1', 4),
@@ -49,6 +49,20 @@ class ListResourcesUseCaseTest extends TestCase
 
         $response = $this->useCase->execute(new ListResourcesRequest());
 
-        $this->assertSame($collection, $response->resources);
+        $this->assertSame(2, $response->resources->count());
+    }
+
+    public function testExcludesInactiveResources(): void
+    {
+        $active   = new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Table 1', 4);
+        $inactive = new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Table 2', 2, active: false);
+
+        $this->repository->method('findAll')->willReturn(ResourceCollection::fromArray([$active, $inactive]));
+
+        $response = $this->useCase->execute(new ListResourcesRequest());
+
+        $this->assertSame(1, $response->resources->count());
+        $this->assertTrue($response->resources->findById($active->id)?->active);
+        $this->assertNull($response->resources->findById($inactive->id));
     }
 }

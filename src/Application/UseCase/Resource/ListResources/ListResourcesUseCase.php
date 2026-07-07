@@ -6,6 +6,7 @@ namespace Rez\Application\UseCase\Resource\ListResources;
 
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ResourceRepositoryInterface;
+use Rez\Domain\Resource\Resource;
 
 final class ListResourcesUseCase implements ListResourcesUseCaseInterface
 {
@@ -23,6 +24,6 @@ final class ListResourcesUseCase implements ListResourcesUseCaseInterface
             throw new DatabaseException('Failed to list resources.', 0, $e);
         }
 
-        return new ListResourcesResponse($resources);
+        return new ListResourcesResponse($resources->filter(fn (Resource $resource): bool => $resource->active));
     }
 }
