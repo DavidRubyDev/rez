@@ -21,11 +21,18 @@
 > `CancelReservationUseCase` token verification, `rez-starter`'s public `DELETE
 > /api/reservations/{id}?token=` route and the real cancellation link in reservation emails) —
 > only the guest-facing `<rez-cancel>` confirmation page (`rez-components`) is still missing.
-> Users are core (always enabled) and now complete end-to-end too: `rez` (`rez-users` — domain,
-> use cases, `JwtService`) and `rez-starter` (auth routes, `/api/users/me`, admin user routes,
-> `AuthMiddleware`/`AdminMiddleware` now enforced on every admin route). `rez-admin`'s auth UI and
-> Users page are the only pieces still missing — blocked on nothing now that `rez-starter`'s side
-> is wired. Platform extensions (payments, credits, subscriptions) not yet built.
+> Users are core (always enabled) and now complete end-to-end too, including `rez-admin`: `rez`
+> (`rez-users` — domain, use cases, `JwtService`), `rez-starter` (auth routes, `/api/users/me`,
+> admin user routes, `AuthMiddleware`/`AdminMiddleware` now enforced on every admin route), and
+> `rez-admin` (`LoginPage`, an in-memory-only Zustand auth store, `Authorization: Bearer` on every
+> request, route gating via `RequireAuth`, and a Users page — list, admin invite, admin
+> role/newsletter edit, and self profile edit — honoring the asymmetric API surface: an admin can
+> only change another user's `role`/`newsletter_opt_in`, never `name`/`email`, and a user editing
+> themselves can only change `name`/`newsletter_opt_in`, never `role`/`email`). Resource deletion
+> is now a soft delete (`Resource.active`, invariant 13) rather than a hard delete, after a bug
+> where a resource's `ON DELETE CASCADE` join rows could orphan a reservation's resource
+> references and throw on later hydration. Platform extensions (payments, credits, subscriptions)
+> not yet built.
 
 ---
 
@@ -268,7 +275,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `ListReservationsUseCase` | `ListReservationsRequest` | `ListReservationsResponse` | Optional from/to/resourceId filters |
 | `CreateResourceUseCase` | `CreateResourceRequest` | `CreateResourceResponse` | |
 | `GetResourceUseCase` | `GetResourceRequest` | `GetResourceResponse` | |
-| `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable |
+| `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable. No `active` field — carries the existing resource's `active` forward unchanged; there's no reactivate path anywhere in the API yet |
 | `DeleteResourceUseCase` | `DeleteResourceRequest` | `DeleteResourceResponse` | Soft delete — repository's `delete()` deactivates rather than removes (invariant 13) |
 | `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse` | Thin pass-through — the repository's `findAll()` already excludes deactivated resources (invariant 13); still reachable via `GetResourceUseCase` |
 | `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Validates resource exists (throws `ResourceNotFoundException`) then delegates to AvailabilityService, which returns an empty window for a deactivated resource (invariant 13). `GetAvailabilityRequest` accepts optional `int $partySize = 1`. |
@@ -568,7 +575,7 @@ how a caller obtains a JWT or resets a forgotten password in the first place.
 
 ```
 GET    /api/users/me
-PATCH  /api/users/me
+PATCH  /api/users/me                                          ← name + newsletter_opt_in only, never role/email
 ```
 
 `AuthMiddleware` (`rez-starter`, not `rez`) verifies the JWT via `rez`'s `JwtService` and attaches
@@ -581,8 +588,8 @@ PATCH  /api/users/me
 
 ```
 POST   /api/resources
-PATCH  /api/resources/{id}
-DELETE /api/resources/{id}
+PATCH  /api/resources/{id}                                    ← no active field — cannot reactivate a deleted resource
+DELETE /api/resources/{id}                                    ← soft delete (active = false); 204, same as before
 PUT    /api/resources/{id}/availability/rules
 DELETE /api/resources/{id}/availability/rules/{day_of_week}
 PUT    /api/resources/{id}/availability/overrides/{date}
@@ -610,8 +617,8 @@ GET    /api/admin/email-templates/{id}
 PATCH  /api/admin/email-templates/{id}
 DELETE /api/admin/email-templates/{id}
 POST   /api/admin/email-templates/{id}/send
-GET    /api/users
-PATCH  /api/users/{id}
+GET    /api/users                                             ← no pagination/search
+PATCH  /api/users/{id}                                        ← role + newsletter_opt_in only, never name/email
 POST   /api/admin/users                                      ← AdminCreateUserUseCase; no password field, forces a reset link via RequestPasswordResetUseCase
 GET    /api/admin/config                                     ❌ still not wired — blocked on GetAdminConfigUseCase (rez-admin-config)
 ```
@@ -701,6 +708,11 @@ Each component accepts `api-base` pointing to the client app API:
 - Authorization: Bearer header on every request
 
 ### Feature detection
+
+**Target design — not implemented yet.** `GET /api/admin/config` doesn't exist in `rez-starter`
+(blocked on `GetAdminConfigUseCase`/`rez-admin-config`, see §9). `LoginPage` does not fetch it
+today; it just logs in and navigates to `/`. The Sidebar's nav items are a static list, not
+config-driven. This section describes the intended shape once that endpoint is built:
 
 On login, fetches `GET /api/admin/config`:
 ```json
@@ -924,6 +936,21 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
     `/api/users/*` routes, `CANCELLATION_BASE_URL`/`JWT_SECRET`/`CANCELLATION_SECRET` env wiring,
     container bindings for `UserRepositoryInterface` → `MysqlUserRepository` and
     `PasswordResetRepositoryInterface` → `MysqlPasswordResetRepository`.
+- `rez-resource-soft-delete` — **COMPLETE**, ad hoc (no `docs/instructions/NN_*` file). Bug found
+  via `rez-admin`: hard-deleting a `Resource` cascade-deleted its `reservation_resources` rows
+  (`ON DELETE CASCADE`), orphaning any reservation still referencing it —
+  `MysqlReservationRepository::loadResourceIds()` then threw on that reservation's next hydration
+  (e.g. a plain `GET /api/reservations`), independent of any `resource_id` filter and deterministic
+  the moment such a resource was deleted, not a race condition. Fixed by making resource deletion
+  soft — see invariant 13 (§3.6) for the full mechanism. `rez-starter`: `ResourceSerializer` now
+  includes `active`; `DELETE /api/resources/{id}` keeps its existing `204` no-body contract, soft
+  delete is transparent at the HTTP layer. `rez-admin`: `Resource` type gained `active: boolean`,
+  omitted from `create`/`update` request bodies (the API rejects/ignores it there); delete confirm
+  copy softened since deletion no longer destroys reservation history.
+  `docs/instructions/11_delete-resource-notifications.md` (notify affected parties before
+  deleting) is **still needed** despite this fix — it solves a data-integrity problem, not the
+  separate operational one of a resource having real upcoming reservations at the moment it's
+  deactivated.
 14. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
 15. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 16. `rez-credits` — Wallet, WalletTransaction, wallet use cases
@@ -987,6 +1014,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   previously-unprotected admin route (resources writes, reservations, settings, email templates,
   newsletter admin ops), not just the new user routes — every one of those now returns 401
   without a JWT and 403 for a non-admin JWT
+- ✅ Resource soft delete (`rez-resource-soft-delete`, see the `davidrubydev/rez` list above) —
+  `ResourceSerializer` includes `active`; `DELETE /api/resources/{id}` keeps its existing `204`
+  no-body contract, soft delete is transparent at the HTTP layer
 - ❌ `StripeGateway` implementation
 - ❌ Booking routes, feature-gated routes (payments/credits/subscriptions) — booking's
   orchestrator use cases (`CreateBookingUseCase`/`CancelBookingUseCase`) don't exist in `rez`
@@ -1003,7 +1033,12 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 
 ### `rez-admin`
 - ✅ Project scaffold (Vite + React + TypeScript + Tailwind, Vitest, Dockerfile + nginx)
-- ✅ AppLayout + Sidebar (feature-gated entries via `/api/admin/config`)
+- ✅ AppLayout + Sidebar. Feature-gating via `/api/admin/config` is still just a target design,
+  not implemented — that endpoint doesn't exist yet (`GetAdminConfigUseCase`/`rez-admin-config` is
+  still ❌, see the `davidrubydev/rez` list above), so `useConfig()` 404s against a real backend
+  and the Sidebar's nav items are currently just a static list, not actually config-driven yet.
+  Users is always shown (core, never gated); a future Payments/Subscriptions entry is what would
+  need the real feature-gating once `/api/admin/config` exists
 - ✅ Resources page — list, create, edit, delete; availability rules panel + rule modal; overrides panel + override modal; sorting (type/name/capacity/attributes)
 - ✅ Reservations page — list with date-range filter, resource name lookup, search + per-field filters (resource, status, name, email), sorting (date/status/name/email); detail modal with confirm/no-show/cancel actions; manual booking modal
 - ✅ Newsletter page — tabbed layout: broadcast panel (resource selector, date/time, send, result); subscribers panel (list with search + sort by email/name/source/opted-in, inline add with `Admin` source, delete with ConfirmDialog); **custom emails tab** (see below)
@@ -1040,11 +1075,25 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, ExportModal, Modal, PageHeader, StatusBadge, SlotPicker, EditableListPanel (now also takes an optional `renderRowExtra` slot for per-row actions beyond edit/delete), Button, TextInput, TimeInput, Select, FormField, FormActions, RowActions, SearchInput, EmptyTableRow, Toggle, RichTextEditor
 - ✅ Shared hooks: useAsyncData, useConfig, useSortable, useConfirmDelete, useSyncedList
 - ✅ Component/hook dedup pass — merged the near-duplicate AvailabilityRulesPanel/AvailabilityOverridesPanel into EditableListPanel, consolidated day-of-week data into lib/days.ts, removed duplicated UTC time-formatting and empty-state table markup
-- ✅ API client modules: resources, reservations, availability, newsletter, config, reservationSettings, mailerSettings, emailTemplates
+- ✅ API client modules: resources, reservations, availability, newsletter, config, reservationSettings, mailerSettings, emailTemplates, auth, users
 - ✅ Reservation detail modal — resend-lifecycle-email buttons (`send-{created,confirmed,cancelled}-email`), one shown at a time keyed off status
-- ❌ Auth (login/logout, JWT, protected routes) — `rez`'s auth use cases/`JwtService` and
-  `rez-starter`'s auth routes + `AuthMiddleware`/`AdminMiddleware` are now both complete; nothing
-  left to unblock this except building it in `rez-admin` itself
-- ❌ Users page — same status as above (`GetUser`/`UpdateUser`/`ListUsers`/`AdminUpdateUser`/
-  `AdminCreateUser` use cases and `rez-starter`'s `/api/users/*` + `/api/admin/users` routes are
-  both complete; nothing left to unblock this except building it in `rez-admin` itself)
+- ✅ Auth (`14_auth-login.md`) — `LoginPage` (standalone, no `AppLayout`), a Zustand auth store
+  that's in-memory only (`token`, `user`, `setAuth`, `setUser`, `clearAuth` — never
+  `localStorage`/`sessionStorage`, so a page refresh always requires re-login, by design). `api/
+  client.ts` attaches `Authorization: Bearer <token>` from the store to every request and calls
+  `clearAuth()` uniformly on any `401`. `router/RequireAuth.tsx` wraps every route except
+  `/login`; clearing auth (401 or explicit logout) alone is enough to trigger the redirect on next
+  render, no manual `navigate()` needed outside `LoginPage` itself.
+- ✅ Users page (`15_users-page.md`) — `UsersPage` (list, client-side search/sort — `GET
+  /api/users` has no server-side pagination/search), `AddUserModal` (admin invite via `POST
+  /api/admin/users`, no password field since the backend always force-emails a reset link),
+  `EditUserModal` (admin editing another user — name/email shown read-only, only
+  `role`/`newsletter_opt_in` are actually editable, matching `PATCH /api/users/{id}`'s real
+  contract), `EditProfileModal` (self-edit via `PATCH /api/users/me` — only `name`/
+  `newsletter_opt_in`, role/email untouchable; reads/writes `useAuthStore` directly rather than
+  taking a user prop, and calls `setUser()` on save so the Sidebar reflects the change without a
+  reload). Wired to a click on the Sidebar's user-info block. Users nav entry is always visible
+  (core, never feature-gated). **Known gap, not yet handled**: `POST /api/auth/login` is public
+  for any role, so a `customer` account can log into `rez-admin` and get a valid session, then hit
+  a wall of `403`s on every admin-only page since `client.ts` only clears auth on `401`, not
+  `403` — worth a post-login role check redirecting non-admins to a clear message, not built here.
