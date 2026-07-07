@@ -56,7 +56,8 @@ abstract class MysqlIntegrationTestCase extends TestCase
                 type        VARCHAR(100) NOT NULL,
                 name        VARCHAR(255) NOT NULL,
                 capacity    INT          NOT NULL,
-                attributes  JSON         NOT NULL
+                attributes  JSON         NOT NULL,
+                active      TINYINT(1)   NOT NULL DEFAULT 1
             )
         ');
 
