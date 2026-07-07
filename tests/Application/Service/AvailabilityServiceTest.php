@@ -149,6 +149,27 @@ class AvailabilityServiceTest extends TestCase
         $this->assertFalse($service->isSlotAvailable($this->resourceId, $slot, 1));
     }
 
+    public function testIsSlotAvailableReturnsFalseWhenResourceInactive(): void
+    {
+        $this->availabilityRepository->method('findRulesForResource')->willReturn([$this->mondayRule]);
+        $this->availabilityRepository->method('findOverridesForResource')->willReturn([]);
+        $this->reservationRepository->method('findByTimeSlotAndResource')->willReturn(ReservationCollection::empty());
+
+        $resourceRepository = $this->createMock(ResourceRepositoryInterface::class);
+        $resource           = new Resource($this->resourceId, ResourceType::fromString('table'), 'Table 1', 2, active: false);
+        $resourceRepository->method('findById')->willReturn($resource);
+
+        $service = new AvailabilityService(
+            $resourceRepository,
+            $this->availabilityRepository,
+            $this->reservationRepository,
+        );
+
+        $slot = new TimeSlot(new DateTimeImmutable('2024-01-15 10:00:00'), new DateTimeImmutable('2024-01-15 11:00:00'));
+
+        $this->assertFalse($service->isSlotAvailable($this->resourceId, $slot));
+    }
+
     public function testPartySizeExceedingCapacityAloneIsConflict(): void
     {
         $this->availabilityRepository->method('findRulesForResource')->willReturn([$this->mondayRule]);
@@ -311,6 +332,27 @@ class AvailabilityServiceTest extends TestCase
         $window = $service->getAvailableSlots($this->resourceId, $this->date, 60, 1);
 
         $this->assertSame(2, $window->count());
+    }
+
+    public function testGetAvailableSlotsReturnsEmptyWindowWhenResourceInactive(): void
+    {
+        $this->availabilityRepository->method('findRulesForResource')->willReturn([$this->mondayRule]);
+        $this->availabilityRepository->method('findOverridesForResource')->willReturn([]);
+        $this->reservationRepository->method('findByTimeSlotAndResource')->willReturn(ReservationCollection::empty());
+
+        $resourceRepository = $this->createMock(ResourceRepositoryInterface::class);
+        $resource           = new Resource($this->resourceId, ResourceType::fromString('table'), 'Table 1', 2, active: false);
+        $resourceRepository->method('findById')->willReturn($resource);
+
+        $service = new AvailabilityService(
+            $resourceRepository,
+            $this->availabilityRepository,
+            $this->reservationRepository,
+        );
+
+        $window = $service->getAvailableSlots($this->resourceId, $this->date, 60);
+
+        $this->assertTrue($window->isEmpty());
     }
 
     public function testGetAvailableSlotsReturnsEmptyWhenRuleValidUntilIsInPast(): void
