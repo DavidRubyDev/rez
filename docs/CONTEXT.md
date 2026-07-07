@@ -1751,3 +1751,29 @@ future separate branch, when explicitly requested** — do not build the simpler
 only" variant instead if asked to pick this back up.
 
 Total: 610 unit tests passing (56 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 83. Default admin seed row (`004_users.sql`)
+
+Ad hoc addition, no `docs/instructions/NN_*` file. Every deployment needs at least one Admin to
+log into rez-admin, and there's no use case to bootstrap one (`RegisterUseCase` always creates
+`UserRole::Customer`). Decided this belongs in `database/seeds/schema/`, not
+`database/seeds/data/` — same reasoning as `reservation_settings`/`mailer_settings`: `data/` is
+documented as sample/test content safe to wipe, but a bootstrap Admin is a required default, not
+a fixture.
+
+`database/seeds/schema/004_users.sql` — added one `INSERT IGNORE` row after the existing
+`CREATE TABLE IF NOT EXISTS users` (the `password_reset_tokens` table and its comment are
+unchanged): fixed UUID `00000000-0000-4000-8000-000000000001`, name `Admin`, email
+`admin@example.com`, `role: admin`, `newsletter_opt_in: 0`, `stripe_customer_id: NULL`. Password
+is the bcrypt hash (`PASSWORD_BCRYPT`, matching `HashedPassword::fromPlainText()`) of the
+placeholder `ChangeMe123!` — same "placeholder, must change before going live" convention as
+`mailer_settings`' seeded `noreply@example.com`. `INSERT IGNORE` is safe to re-run; since `email`
+already has a `UNIQUE` constraint, it also silently skips if the row was since recreated under a
+different id, not just on exact PK collision.
+
+No new tests — DDL/seed-data-only change, same as the original `004_users.sql` (no seed rows) and
+`001_reservation_settings.sql`/`002_mailer_settings.sql` before it.
+
+610 unit tests passing (56 skipped — all integration), PHPStan max clean, CS clean.
