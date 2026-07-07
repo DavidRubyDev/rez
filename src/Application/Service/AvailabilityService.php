@@ -43,7 +43,12 @@ final class AvailabilityService implements AvailabilityServiceInterface
             return false;
         }
 
-        $resource     = $this->resourceRepository->findById($resourceId);
+        $resource = $this->resourceRepository->findById($resourceId);
+
+        if (!$resource->active) {
+            return false;
+        }
+
         $reservations = $this->reservationRepository->findByTimeSlotAndResource($slot, $resourceId);
         $occupied     = $this->sumOverlappingPartySize($slot, $reservations);
 
@@ -70,7 +75,12 @@ final class AvailabilityService implements AvailabilityServiceInterface
             return AvailabilityWindow::empty($resourceId, $date);
         }
 
-        $resource     = $this->resourceRepository->findById($resourceId);
+        $resource = $this->resourceRepository->findById($resourceId);
+
+        if (!$resource->active) {
+            return AvailabilityWindow::empty($resourceId, $date);
+        }
+
         $candidates   = $this->generateCandidateSlots($rule, $date, $slotDurationMinutes);
         $fullDaySlot  = new TimeSlot($rule->openTimeForDate($date), $rule->closeTimeForDate($date));
         $reservations = $this->reservationRepository->findByTimeSlotAndResource($fullDaySlot, $resourceId);

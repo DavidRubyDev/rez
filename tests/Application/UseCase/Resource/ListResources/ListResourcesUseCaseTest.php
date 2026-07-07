@@ -38,7 +38,7 @@ class ListResourcesUseCaseTest extends TestCase
         $this->useCase->execute(new ListResourcesRequest());
     }
 
-    public function testReturnsAllResources(): void
+    public function testReturnsResourcesFromRepository(): void
     {
         $collection = ResourceCollection::fromArray([
             new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Table 1', 4),

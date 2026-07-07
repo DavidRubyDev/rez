@@ -16,6 +16,7 @@ final class Resource
         public readonly string $name,
         public readonly int $capacity,
         public readonly array $attributes = [],
+        public readonly bool $active = true,
     ) {
         if ($name === '') {
             throw new \InvalidArgumentException('Resource name must not be empty.');
@@ -29,6 +30,11 @@ final class Resource
     /** @param array<string, mixed> $attributes */
     public function withAttributes(array $attributes): self
     {
-        return new self($this->id, $this->type, $this->name, $this->capacity, array_merge($this->attributes, $attributes));
+        return new self($this->id, $this->type, $this->name, $this->capacity, array_merge($this->attributes, $attributes), $this->active);
+    }
+
+    public function deactivate(): self
+    {
+        return new self($this->id, $this->type, $this->name, $this->capacity, $this->attributes, false);
     }
 }

@@ -16,7 +16,12 @@ interface ResourceRepositoryInterface
      */
     public function findById(ResourceId $id): Resource;
 
-    /** @throws \Rez\Application\Exception\DatabaseException */
+    /**
+     * Returns active resources only. Deactivated resources are still reachable via findById()
+     * (e.g. for historical reservation lookups) — they just never appear in listings.
+     *
+     * @throws \Rez\Application\Exception\DatabaseException
+     */
     public function findAll(): ResourceCollection;
 
     /** @throws \Rez\Application\Exception\DatabaseException */

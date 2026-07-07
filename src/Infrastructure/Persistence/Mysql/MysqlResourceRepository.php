@@ -50,7 +50,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     public function findAll(): ResourceCollection
     {
         try {
-            $stmt = $this->pdo->prepare('SELECT * FROM resources');
+            $stmt = $this->pdo->prepare('SELECT * FROM resources WHERE active = 1');
             $stmt->execute();
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
@@ -66,7 +66,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     public function delete(ResourceId $id): void
     {
         try {
-            $stmt = $this->pdo->prepare('DELETE FROM resources WHERE id = :id');
+            $stmt = $this->pdo->prepare('UPDATE resources SET active = 0 WHERE id = :id');
             $stmt->execute([':id' => $id->toString()]);
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
@@ -78,13 +78,14 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     {
         try {
             $stmt = $this->pdo->prepare('
-                INSERT INTO resources (id, type, name, capacity, attributes)
-                VALUES (:id, :type, :name, :capacity, :attributes)
+                INSERT INTO resources (id, type, name, capacity, attributes, active)
+                VALUES (:id, :type, :name, :capacity, :attributes, :active)
                 ON DUPLICATE KEY UPDATE
                     type       = VALUES(type),
                     name       = VALUES(name),
                     capacity   = VALUES(capacity),
-                    attributes = VALUES(attributes)
+                    attributes = VALUES(attributes),
+                    active     = VALUES(active)
             ');
 
             $stmt->execute([
@@ -93,6 +94,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
                 ':name'       => $resource->name,
                 ':capacity'   => $resource->capacity,
                 ':attributes' => json_encode($resource->attributes),
+                ':active'     => $resource->active ? 1 : 0,
             ]);
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
@@ -112,6 +114,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
             $this->str($row['name']),
             $this->int($row['capacity']),
             $attributes,
+            $this->bool($row['active']),
         );
     }
 }

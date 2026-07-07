@@ -115,7 +115,10 @@ use cases directly. See step 73 in `docs/CONTEXT.md`.
   `sendReservationCancelledEmail` calls is `rez-lifecycle-email-integration`'s job.
 
 #### Resources (COMPLETE)
-- `Resource` — entity. Fields: `id`, `type`, `name`, `capacity`, `attributes`
+- `Resource` — entity. Fields: `id`, `type`, `name`, `capacity`, `attributes`, `active` (bool, default
+  `true`). `deactivate(): self` — immutable updater. Deletion is soft (invariant 13): `resources` rows
+  are never removed, only deactivated, so the `reservation_resources`/`availability_*` `ON DELETE
+  CASCADE` FKs stay harmless and existing reservations never lose their resource references.
 - `ResourceId` — UUID v4 value object
 - `ResourceType` — value object wrapping a lowercase slug string
 - `ResourceCollection` — immutable collection
@@ -240,7 +243,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 | Service | Purpose | Status |
 |---|---|---|
-| `AvailabilityService` | Capacity-aware slot availability logic used by CreateReservation + GetAvailability. Injects `ResourceRepositoryInterface`. `isSlotAvailable(ResourceId, TimeSlot, int $partySize = 1)` sums existing party sizes and checks against `resource->capacity`. `getAvailableSlots()` accepts `int $partySize = 1` and filters candidates by the same capacity rule. | COMPLETE |
+| `AvailabilityService` | Capacity-aware slot availability logic used by CreateReservation + GetAvailability. Injects `ResourceRepositoryInterface`. `isSlotAvailable(ResourceId, TimeSlot, int $partySize = 1)` sums existing party sizes and checks against `resource->capacity`. `getAvailableSlots()` accepts `int $partySize = 1` and filters candidates by the same capacity rule. Both return unavailable (`false` / empty `AvailabilityWindow`) immediately for a deactivated resource (invariant 13) — this is the single place that check lives, so neither `CreateReservationUseCase` nor `GetAvailabilityUseCase` duplicates it. | COMPLETE |
 | `FeatureGuard` | Throws `FeatureDisabledException` if a gated feature is not configured | COMPLETE |
 | `ReservationEmailService` | Settings-gated send/log/swallow for all three reservation-lifecycle emails (`sendCreatedIfEnabled`, `sendConfirmedIfEnabled`, `sendCancelledIfEnabled`). Takes `ReservationSettings` from the caller rather than loading it — avoids a second DB read per request. Single home for invariant 11. No interface, injected as a concrete class (same pattern as `FeatureGuard`) | COMPLETE (`rez-lifecycle-email-integration`) |
 | `JwtService` | JWT generation and validation using `firebase/php-jwt` v7 (HS256). `generate(UserId, UserRole): string`, `validate(string): array` (throws `InvalidTokenException` on bad signature or expiry), `extractUserId()`, `extractRole()`. No interface — injected as a concrete class (same pattern as `FeatureGuard`) | COMPLETE (`rez-users`) |
@@ -266,9 +269,9 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `CreateResourceUseCase` | `CreateResourceRequest` | `CreateResourceResponse` | |
 | `GetResourceUseCase` | `GetResourceRequest` | `GetResourceResponse` | |
 | `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable |
-| `DeleteResourceUseCase` | `DeleteResourceRequest` | `DeleteResourceResponse` | |
-| `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse` | |
-| `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Validates resource exists (throws `ResourceNotFoundException`) then delegates to AvailabilityService. `GetAvailabilityRequest` accepts optional `int $partySize = 1`. |
+| `DeleteResourceUseCase` | `DeleteResourceRequest` | `DeleteResourceResponse` | Soft delete — repository's `delete()` deactivates rather than removes (invariant 13) |
+| `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse` | Thin pass-through — the repository's `findAll()` already excludes deactivated resources (invariant 13); still reachable via `GetResourceUseCase` |
+| `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Validates resource exists (throws `ResourceNotFoundException`) then delegates to AvailabilityService, which returns an empty window for a deactivated resource (invariant 13). `GetAvailabilityRequest` accepts optional `int $partySize = 1`. |
 | `GetAvailabilityRulesUseCase` | `GetAvailabilityRulesRequest` | `GetAvailabilityRulesResponse` | Returns all rules for a resource |
 | `GetAvailabilityOverridesUseCase` | `GetAvailabilityOverridesRequest` | `GetAvailabilityOverridesResponse` | Returns overrides for a resource in a date range |
 | `SaveAvailabilityRuleUseCase` | `SaveAvailabilityRuleRequest` | `SaveAvailabilityRuleResponse` | |
@@ -362,6 +365,20 @@ These are the contracts the library defines. Implementations live in infrastruct
     `InvalidTokenException` (mapped to HTTP 401) on mismatch without touching repository state.
     Token *generation* for the created/confirmed emails was already wired.
 
+13. **Resource deletion is soft — `resources` rows are never removed.** `MysqlResourceRepository::delete()`
+    runs `UPDATE resources SET active = 0`, not `DELETE`. This is load-bearing: `reservation_resources`,
+    `availability_rules`, and `availability_overrides` all have `resource_id` FKs with `ON DELETE CASCADE`.
+    A hard delete on `resources` would cascade-delete those child rows, and for `reservation_resources`
+    specifically that orphans any reservation still referencing the resource — `Reservation`'s
+    `ResourceIdCollection` requires at least one element, so `MysqlReservationRepository::loadResourceIds()`
+    throws on the next hydration of that reservation (e.g. `GET /api/reservations`). Never change
+    `delete()` back to an actual `DELETE`, and never drop the `ON DELETE CASCADE` FKs as a workaround —
+    they're fine precisely because resource rows are permanent. `findById()` intentionally does not
+    filter on `active` (deactivated resources must still resolve for historical reservations and
+    `GetResourceUseCase`); `findAll()` does — `WHERE active = 1` lives in the SQL query itself, not in
+    `ListResourcesUseCase`, since listing is `findAll()`'s only caller. `AvailabilityService` treats a
+    deactivated resource as unbookable (see `isSlotAvailable`/`getAvailableSlots` in §3.4).
+
 ### 3.7 Configuration system
 
 `PlatformConfig` is constructed by the client app and injected via PHP-DI. It is the single root of all feature configuration.
@@ -431,7 +448,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 
 | Table | Purpose |
 |---|---|
-| `resources` | id, type, name, capacity, attributes (JSON) |
+| `resources` | id, type, name, capacity, attributes (JSON), active (TINYINT(1), default 1 — soft-delete flag, invariant 13) |
 | `reservations` | id, status, start_at, end_at, party_name, party_email, party_size, party_phone, party_external_ref, created_at |
 | `reservation_resources` | reservation_id, resource_id (many-to-many join) |
 | `availability_rules` | resource_id, day_of_week, open_time (CHAR 5), close_time (CHAR 5), valid_from (DATE nullable), valid_until (DATE nullable) |
