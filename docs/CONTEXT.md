@@ -1777,3 +1777,52 @@ No new tests — DDL/seed-data-only change, same as the original `004_users.sql`
 `001_reservation_settings.sql`/`002_mailer_settings.sql` before it.
 
 610 unit tests passing (56 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### Resource deletion is now a soft delete (`fix/resource-soft-delete`)
+
+Hard-deleting a resource orphaned any reservation that referenced it: `reservation_resources.resource_id`
+has `ON DELETE CASCADE`, so the join row vanished and `MysqlReservationRepository::loadResourceIds()`
+threw `ResourceIdCollection must contain at least one ResourceId` on next hydration (e.g. `GET
+/api/reservations`). Fixed by never actually removing a `resources` row — `delete()` now deactivates
+instead.
+
+`database/seeds/schema/005_resources_active.sql` — `ALTER TABLE resources ADD COLUMN IF NOT EXISTS
+active TINYINT(1) NOT NULL DEFAULT 1`. `IF NOT EXISTS` on `ADD COLUMN` requires MySQL 8.0.29+; CI's
+`mysql:8.0` service image satisfies this. The `reservation_resources`/`availability_*` FKs keep their
+`ON DELETE CASCADE` unchanged — it's harmless now that resource rows are never removed.
+
+`src/Domain/Resource/Resource.php` — new `public readonly bool $active = true` field (last constructor
+param, backwards-compatible default). `deactivate(): self` — immutable updater, same pattern as
+`withAttributes()`.
+
+`MysqlResourceRepository` — `save()`/hydrate` read/write `active`. `delete()` — interface method name
+unchanged (`ResourceRepositoryInterface::delete()`), but now runs `UPDATE resources SET active = 0
+WHERE id = :id` instead of `DELETE`. `findById()` still returns deactivated resources (no filtering) —
+needed so `GetResourceUseCase` and historical reservation lookups keep working.
+
+`DeleteResourceUseCase` — unchanged; the soft-delete behavior lives entirely in the repository.
+
+`ListResourcesUseCase` — now filters the repository's `ResourceCollection` to `active === true` via
+`ResourceCollection::filter()` before returning it. Deactivated resources still exist for `GetResourceUseCase`
+and historical reservations, they just no longer appear in normal listings.
+
+`UpdateResourceUseCase` — PATCH construction now passes `$existing->active` through explicitly (no PATCH
+field for it — `active` is only ever changed via `delete()`).
+
+`AvailabilityService::isSlotAvailable()`/`getAvailableSlots()` — both already re-fetch the `Resource` for
+capacity checks; each now returns `false`/an empty `AvailabilityWindow` immediately if `!$resource->active`.
+`CreateReservationUseCase` and `GetAvailabilityUseCase` both delegate through this service, so a
+deactivated resource now throws `ConflictException` on booking attempts and returns no availability,
+without duplicating the check in either use case.
+
+`tests/Integration/Persistence/Mysql/MysqlResourceRepositoryTest.php` — `testDeleteRemovesResource`
+replaced with `testDeleteSoftDeletesResourceInsteadOfRemovingIt` (`findById` after `delete()` now
+succeeds and returns `active: false`, doesn't throw `ResourceNotFoundException`), plus
+`testActiveDefaultsToTrueAndRoundtrips` and `testFindAllStillReturnsDeactivatedResources`.
+`MysqlIntegrationTestCase`'s duplicated schema updated with the same `active` column.
+
+15 new/changed unit tests (`ResourceTest`, `ListResourcesUseCaseTest`, `UpdateResourceUseCaseTest`,
+`AvailabilityServiceTest`) + 3 integration tests. 619 unit tests passing (58 skipped — all integration),
+PHPStan max clean, CS clean.
