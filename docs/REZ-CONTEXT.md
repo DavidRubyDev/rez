@@ -270,7 +270,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `GetResourceUseCase` | `GetResourceRequest` | `GetResourceResponse` | |
 | `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable |
 | `DeleteResourceUseCase` | `DeleteResourceRequest` | `DeleteResourceResponse` | Soft delete — repository's `delete()` deactivates rather than removes (invariant 13) |
-| `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse` | Filters to `active === true` only — deactivated resources are excluded from normal listings but still reachable via `GetResourceUseCase` |
+| `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse` | Thin pass-through — the repository's `findAll()` already excludes deactivated resources (invariant 13); still reachable via `GetResourceUseCase` |
 | `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Validates resource exists (throws `ResourceNotFoundException`) then delegates to AvailabilityService, which returns an empty window for a deactivated resource (invariant 13). `GetAvailabilityRequest` accepts optional `int $partySize = 1`. |
 | `GetAvailabilityRulesUseCase` | `GetAvailabilityRulesRequest` | `GetAvailabilityRulesResponse` | Returns all rules for a resource |
 | `GetAvailabilityOverridesUseCase` | `GetAvailabilityOverridesRequest` | `GetAvailabilityOverridesResponse` | Returns overrides for a resource in a date range |
@@ -375,9 +375,9 @@ These are the contracts the library defines. Implementations live in infrastruct
     `delete()` back to an actual `DELETE`, and never drop the `ON DELETE CASCADE` FKs as a workaround —
     they're fine precisely because resource rows are permanent. `findById()` intentionally does not
     filter on `active` (deactivated resources must still resolve for historical reservations and
-    `GetResourceUseCase`); only `ListResourcesUseCase` filters to `active === true`, and
-    `AvailabilityService` treats a deactivated resource as unbookable (see `isSlotAvailable`/
-    `getAvailableSlots` in §3.4).
+    `GetResourceUseCase`); `findAll()` does — `WHERE active = 1` lives in the SQL query itself, not in
+    `ListResourcesUseCase`, since listing is `findAll()`'s only caller. `AvailabilityService` treats a
+    deactivated resource as unbookable (see `isSlotAvailable`/`getAvailableSlots` in §3.4).
 
 ### 3.7 Configuration system
 

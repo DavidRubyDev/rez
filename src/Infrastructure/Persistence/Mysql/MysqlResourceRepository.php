@@ -50,7 +50,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     public function findAll(): ResourceCollection
     {
         try {
-            $stmt = $this->pdo->prepare('SELECT * FROM resources');
+            $stmt = $this->pdo->prepare('SELECT * FROM resources WHERE active = 1');
             $stmt->execute();
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);

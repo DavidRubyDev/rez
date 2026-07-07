@@ -1801,13 +1801,17 @@ param, backwards-compatible default). `deactivate(): self` — immutable updater
 `MysqlResourceRepository` — `save()`/hydrate` read/write `active`. `delete()` — interface method name
 unchanged (`ResourceRepositoryInterface::delete()`), but now runs `UPDATE resources SET active = 0
 WHERE id = :id` instead of `DELETE`. `findById()` still returns deactivated resources (no filtering) —
-needed so `GetResourceUseCase` and historical reservation lookups keep working.
+needed so `GetResourceUseCase` and historical reservation lookups keep working. `findAll()` gained a
+`WHERE active = 1` clause — filtering lives at the repository/SQL layer, not in the use case, since
+`ListResourcesUseCase` is `findAll()`'s only caller and there's no other consumer that needs the
+unfiltered set. `ResourceRepositoryInterface::findAll()`'s docblock now states the active-only contract
+explicitly.
 
 `DeleteResourceUseCase` — unchanged; the soft-delete behavior lives entirely in the repository.
 
-`ListResourcesUseCase` — now filters the repository's `ResourceCollection` to `active === true` via
-`ResourceCollection::filter()` before returning it. Deactivated resources still exist for `GetResourceUseCase`
-and historical reservations, they just no longer appear in normal listings.
+`ListResourcesUseCase` — unchanged, a thin pass-through of `findAll()`'s result. Deactivated resources
+still exist for `GetResourceUseCase` and historical reservations, they just never come back from
+`findAll()`.
 
 `UpdateResourceUseCase` — PATCH construction now passes `$existing->active` through explicitly (no PATCH
 field for it — `active` is only ever changed via `delete()`).
@@ -1821,7 +1825,7 @@ without duplicating the check in either use case.
 `tests/Integration/Persistence/Mysql/MysqlResourceRepositoryTest.php` — `testDeleteRemovesResource`
 replaced with `testDeleteSoftDeletesResourceInsteadOfRemovingIt` (`findById` after `delete()` now
 succeeds and returns `active: false`, doesn't throw `ResourceNotFoundException`), plus
-`testActiveDefaultsToTrueAndRoundtrips` and `testFindAllStillReturnsDeactivatedResources`.
+`testActiveDefaultsToTrueAndRoundtrips` and `testFindAllExcludesDeactivatedResources`.
 `MysqlIntegrationTestCase`'s duplicated schema updated with the same `active` column.
 
 15 new/changed unit tests (`ResourceTest`, `ListResourcesUseCaseTest`, `UpdateResourceUseCaseTest`,

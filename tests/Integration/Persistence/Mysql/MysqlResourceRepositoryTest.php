@@ -85,7 +85,7 @@ class MysqlResourceRepositoryTest extends MysqlIntegrationTestCase
         $this->assertTrue($found->active);
     }
 
-    public function testFindAllStillReturnsDeactivatedResources(): void
+    public function testFindAllExcludesDeactivatedResources(): void
     {
         $resource = $this->makeResource();
         $this->repository->save($resource);
@@ -93,6 +93,6 @@ class MysqlResourceRepositoryTest extends MysqlIntegrationTestCase
 
         $result = $this->repository->findAll();
 
-        $this->assertSame(1, $result->count());
+        $this->assertSame(0, $result->count());
     }
 }
