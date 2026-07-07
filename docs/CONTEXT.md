@@ -1788,10 +1788,11 @@ threw `ResourceIdCollection must contain at least one ResourceId` on next hydrat
 /api/reservations`). Fixed by never actually removing a `resources` row — `delete()` now deactivates
 instead.
 
-`database/seeds/schema/005_resources_active.sql` — `ALTER TABLE resources ADD COLUMN IF NOT EXISTS
-active TINYINT(1) NOT NULL DEFAULT 1`. `IF NOT EXISTS` on `ADD COLUMN` requires MySQL 8.0.29+; CI's
-`mysql:8.0` service image satisfies this. The `reservation_resources`/`availability_*` FKs keep their
-`ON DELETE CASCADE` unchanged — it's harmless now that resource rows are never removed.
+`database/seeds/schema/000_schema.sql` — `resources` gained `active TINYINT(1) NOT NULL DEFAULT 1`,
+added directly to the base schema rather than a numbered migration (project still in local testing,
+no production data to preserve — same precedent as the `valid_from`/`valid_until` columns on
+`availability_rules`). The `reservation_resources`/`availability_*` FKs keep their `ON DELETE CASCADE`
+unchanged — it's harmless now that resource rows are never removed.
 
 `src/Domain/Resource/Resource.php` — new `public readonly bool $active = true` field (last constructor
 param, backwards-compatible default). `deactivate(): self` — immutable updater, same pattern as

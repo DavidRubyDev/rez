@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS resources (
     name       VARCHAR(255) NOT NULL,
     capacity   INT          NOT NULL,
     attributes JSON         NOT NULL,
+    active     TINYINT(1)   NOT NULL DEFAULT 1,
     PRIMARY KEY (id)
 );
 
