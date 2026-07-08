@@ -1831,3 +1831,21 @@ succeeds and returns `active: false`, doesn't throw `ResourceNotFoundException`)
 15 new/changed unit tests (`ResourceTest`, `ListResourcesUseCaseTest`, `UpdateResourceUseCaseTest`,
 `AvailabilityServiceTest`) + 3 integration tests. 619 unit tests passing (58 skipped — all integration),
 PHPStan max clean, CS clean.
+
+---
+
+### 84. Default customer seed row (`004_users.sql`)
+
+Ad hoc addition, same reasoning as step 83's default Admin — a seeded Customer row is useful for
+exercising customer-facing flows (login, `/api/users/me`, booking) out of the box without going
+through `RegisterUseCase` first.
+
+`database/seeds/schema/004_users.sql` — added a second `INSERT IGNORE` row alongside the existing
+Admin row: fixed UUID `00000000-0000-4000-8000-000000000002`, name `Customer`, email
+`customer@example.com`, `role: customer`, `newsletter_opt_in: 0`, `stripe_customer_id: NULL`.
+Password is the same bcrypt hash as the Admin row (same placeholder plaintext `ChangeMe123!`) —
+same "placeholder, must change before going live" convention.
+
+No new tests — DDL/seed-data-only change, same as step 83.
+
+618 unit tests passing (58 skipped — all integration), PHPStan max clean, CS clean.
