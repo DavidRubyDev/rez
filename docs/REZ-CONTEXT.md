@@ -463,7 +463,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `reservation_settings` | id (always 1, single row by convention), auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at | Seeded via `database/seeds/schema/001_reservation_settings.sql` (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`) — a new numbered file rather than appended to `000_schema.sql`, per explicit instruction on this scaffold |
 | `mailer_settings` | id (always 1, single row by convention), from_address, from_name, updated_at | Seeded via `database/seeds/schema/002_mailer_settings.sql`, same pattern as `reservation_settings`. Seeded defaults (`noreply@example.com` / `Rez`) are placeholders — every deployment must update them before going live |
 | `email_templates` | id, subject, html (MEDIUMTEXT), created_at | Seeded via `database/seeds/schema/003_email_templates.sql` — `CREATE TABLE IF NOT EXISTS` only, no seed rows (a real collection, not a singleton settings table) |
-| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Seeded via `database/seeds/schema/004_users.sql` (`rez-users`). Unlike the rest of this table, ships one seed row: a default Admin (`admin@example.com`, placeholder password `ChangeMe123!` — must change before going live, same convention as `mailer_settings`' defaults), `INSERT IGNORE` on a fixed UUID, safe to re-run — every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
+| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Seeded via `database/seeds/schema/004_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live, same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
 | `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites. Same file as `users` (`rez-users`) |
 
 #### Not yet built
@@ -1093,7 +1093,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   `newsletter_opt_in`, role/email untouchable; reads/writes `useAuthStore` directly rather than
   taking a user prop, and calls `setUser()` on save so the Sidebar reflects the change without a
   reload). Wired to a click on the Sidebar's user-info block. Users nav entry is always visible
-  (core, never feature-gated). **Known gap, not yet handled**: `POST /api/auth/login` is public
-  for any role, so a `customer` account can log into `rez-admin` and get a valid session, then hit
-  a wall of `403`s on every admin-only page since `client.ts` only clears auth on `401`, not
-  `403` — worth a post-login role check redirecting non-admins to a clear message, not built here.
+  (core, never feature-gated).
+- ✅ Non-admin login gate (`fix/non-admin-login-gate`) — `POST /api/auth/login` is public for any
+  role, so `LoginPage` checks `user.role` right after a successful login and shows a clear "no
+  admin access" message instead of `setAuth`/`navigate`-ing into a session that would just hit a
+  wall of `403`s on every admin-only page (`client.ts` only clears auth on `401`, not `403`). UX
+  check only — `rez-starter`'s `AdminMiddleware` remains the actual security boundary.
