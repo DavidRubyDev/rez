@@ -1093,7 +1093,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   `newsletter_opt_in`, role/email untouchable; reads/writes `useAuthStore` directly rather than
   taking a user prop, and calls `setUser()` on save so the Sidebar reflects the change without a
   reload). Wired to a click on the Sidebar's user-info block. Users nav entry is always visible
-  (core, never feature-gated). **Known gap, not yet handled**: `POST /api/auth/login` is public
-  for any role, so a `customer` account can log into `rez-admin` and get a valid session, then hit
-  a wall of `403`s on every admin-only page since `client.ts` only clears auth on `401`, not
-  `403` — worth a post-login role check redirecting non-admins to a clear message, not built here.
+  (core, never feature-gated).
+- ✅ Non-admin login gate (`fix/non-admin-login-gate`) — `POST /api/auth/login` is public for any
+  role, so `LoginPage` checks `user.role` right after a successful login and shows a clear "no
+  admin access" message instead of `setAuth`/`navigate`-ing into a session that would just hit a
+  wall of `403`s on every admin-only page (`client.ts` only clears auth on `401`, not `403`). UX
+  check only — `rez-starter`'s `AdminMiddleware` remains the actual security boundary.
