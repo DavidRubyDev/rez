@@ -947,10 +947,11 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   delete is transparent at the HTTP layer. `rez-admin`: `Resource` type gained `active: boolean`,
   omitted from `create`/`update` request bodies (the API rejects/ignores it there); delete confirm
   copy softened since deletion no longer destroys reservation history.
-  `docs/instructions/11_delete-resource-notifications.md` (notify affected parties before
-  deleting) is **still needed** despite this fix — it solves a data-integrity problem, not the
+  `docs/instructions/11_delete-resource-notifications.md` (warn about affected parties before
+  deleting) was **still needed** despite this fix — it solves a data-integrity problem, not the
   separate operational one of a resource having real upcoming reservations at the moment it's
-  deactivated.
+  deactivated. Since built (steps 11-13, `rez-admin` only) — see `docs/CONTEXT.md` for the
+  cancel-based approach actually shipped, which needed no new `rez-starter` endpoint.
 14. `rez-payments` — StripeGatewayInterface, StripeEventRepository, webhook use case
 15. `rez-admin-config` — GetAdminConfigUseCase (pure read from PlatformConfig, no DB; features map excludes users)
 16. `rez-credits` — Wallet, WalletTransaction, wallet use cases
