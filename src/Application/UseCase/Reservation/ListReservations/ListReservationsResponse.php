@@ -10,6 +10,7 @@ final class ListReservationsResponse
 {
     public function __construct(
         public readonly ReservationCollection $reservations,
+        public readonly int $total,
     ) {
     }
 }

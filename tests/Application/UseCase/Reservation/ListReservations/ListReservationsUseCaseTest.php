@@ -15,6 +15,7 @@ use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationCollection;
 use Rez\Domain\Reservation\ReservationId;
+use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
@@ -45,7 +46,7 @@ class ListReservationsUseCaseTest extends TestCase
     public function testRepositoryDatabaseExceptionPropagates(): void
     {
         $this->reservationRepository
-            ->method('findAll')
+            ->method('findPage')
             ->willThrowException(new DatabaseException('pdo error'));
 
         $this->expectException(DatabaseException::class);
@@ -54,34 +55,96 @@ class ListReservationsUseCaseTest extends TestCase
         $this->useCase->execute(new ListReservationsRequest());
     }
 
-    public function testReturnsAllWhenNoFilters(): void
+    public function testReturnsAllAndTotalWhenNoFilters(): void
     {
         $collection = ReservationCollection::fromArray([
             $this->makeReservation($this->resourceId),
             $this->makeReservation(ResourceId::generate()),
         ]);
 
-        $this->reservationRepository->method('findAll')->willReturn($collection);
+        $this->reservationRepository->method('findPage')->willReturn($collection);
+        $this->reservationRepository->method('countPage')->willReturn(2);
 
         $response = $this->useCase->execute(new ListReservationsRequest());
 
         $this->assertSame(2, $response->reservations->count());
+        $this->assertSame(2, $response->total);
     }
 
-    public function testFiltersByResourceIdInMemory(): void
+    public function testPassesFiltersThroughToRepository(): void
     {
-        $otherResourceId = ResourceId::generate();
+        $from   = new DateTimeImmutable('2024-01-01');
+        $to     = new DateTimeImmutable('2024-01-31');
+        $status = ReservationStatus::Confirmed;
 
-        $collection = ReservationCollection::fromArray([
-            $this->makeReservation($this->resourceId),
-            $this->makeReservation($otherResourceId),
-        ]);
+        $this->reservationRepository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with($from, $to, $this->resourceId, $status, 'jane', null, null, null, null)
+            ->willReturn(ReservationCollection::empty());
 
-        $this->reservationRepository->method('findAll')->willReturn($collection);
+        $this->reservationRepository
+            ->expects($this->once())
+            ->method('countPage')
+            ->with($from, $to, $this->resourceId, $status, 'jane')
+            ->willReturn(0);
 
-        $response = $this->useCase->execute(new ListReservationsRequest(resourceId: $this->resourceId));
+        $this->useCase->execute(new ListReservationsRequest(
+            from: $from,
+            to: $to,
+            resourceId: $this->resourceId,
+            status: $status,
+            search: 'jane',
+        ));
+    }
 
-        $this->assertSame(1, $response->reservations->count());
-        $this->assertTrue($response->reservations->toArray()[0]->resourceIds->contains($this->resourceId));
+    public function testPassesPaginationAndSortThroughToRepository(): void
+    {
+        $this->reservationRepository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with(null, null, null, null, null, 10, 20, 'start', 'desc')
+            ->willReturn(ReservationCollection::empty());
+
+        $this->reservationRepository->method('countPage')->willReturn(0);
+
+        $this->useCase->execute(new ListReservationsRequest(
+            offset: 10,
+            limit: 20,
+            sortBy: 'start',
+            sortDir: 'desc',
+        ));
+    }
+
+    public function testInvalidSortByThrowsInvalidArgumentException(): void
+    {
+        $this->reservationRepository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListReservationsRequest(sortBy: 'not_a_column'));
+    }
+
+    public function testInvalidLimitThrowsInvalidArgumentException(): void
+    {
+        $this->reservationRepository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListReservationsRequest(limit: 0));
+    }
+
+    public function testNegativeOffsetThrowsInvalidArgumentException(): void
+    {
+        $this->reservationRepository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListReservationsRequest(offset: -1));
+    }
+
+    public function testInvalidSortDirThrowsInvalidArgumentException(): void
+    {
+        $this->reservationRepository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListReservationsRequest(sortDir: 'sideways'));
     }
 }
