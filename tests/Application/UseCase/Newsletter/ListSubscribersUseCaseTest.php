@@ -25,39 +25,105 @@ class ListSubscribersUseCaseTest extends TestCase
         $this->useCase    = new ListSubscribersUseCase($this->repository);
     }
 
-    public function testReturnsEmptyArrayWhenNoSubscribers(): void
+    public function testReturnsEmptyArrayAndZeroTotalWhenNoSubscribers(): void
     {
-        $this->repository->method('findAll')->willReturn([]);
+        $this->repository->method('findPage')->willReturn([]);
+        $this->repository->method('countPage')->willReturn(0);
 
         $response = $this->useCase->execute(new ListSubscribersRequest());
 
         $this->assertSame([], $response->subscribers);
+        $this->assertSame(0, $response->total);
     }
 
-    public function testReturnsAllSubscribers(): void
+    public function testReturnsSubscribersAndTotal(): void
     {
         $subscribers = [
             $this->makeSubscriber('a@example.com'),
             $this->makeSubscriber('b@example.com'),
         ];
 
-        $this->repository->method('findAll')->willReturn($subscribers);
+        $this->repository->method('findPage')->willReturn($subscribers);
+        $this->repository->method('countPage')->willReturn(2);
 
         $response = $this->useCase->execute(new ListSubscribersRequest());
 
         $this->assertSame($subscribers, $response->subscribers);
+        $this->assertSame(2, $response->total);
     }
 
     public function testRepositoryDatabaseExceptionPropagates(): void
     {
         $this->repository
-            ->method('findAll')
+            ->method('findPage')
             ->willThrowException(new DatabaseException('pdo error'));
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to load newsletter subscribers.');
 
         $this->useCase->execute(new ListSubscribersRequest());
+    }
+
+    public function testPassesFiltersThroughToRepository(): void
+    {
+        $this->repository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with('jane', SubscriberSource::Registered, null, null, null, null)
+            ->willReturn([]);
+
+        $this->repository
+            ->expects($this->once())
+            ->method('countPage')
+            ->with('jane', SubscriberSource::Registered)
+            ->willReturn(0);
+
+        $this->useCase->execute(new ListSubscribersRequest(search: 'jane', source: SubscriberSource::Registered));
+    }
+
+    public function testPassesPaginationAndSortThroughToRepository(): void
+    {
+        $this->repository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with(null, null, 10, 20, 'email', 'desc')
+            ->willReturn([]);
+
+        $this->repository->method('countPage')->willReturn(0);
+
+        $this->useCase->execute(new ListSubscribersRequest(offset: 10, limit: 20, sortBy: 'email', sortDir: 'desc'));
+    }
+
+    public function testInvalidSortByThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListSubscribersRequest(sortBy: 'not_a_column'));
+    }
+
+    public function testInvalidLimitThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListSubscribersRequest(limit: 101));
+    }
+
+    public function testNegativeOffsetThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListSubscribersRequest(offset: -1));
+    }
+
+    public function testInvalidSortDirThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListSubscribersRequest(sortDir: 'sideways'));
     }
 
     private function makeSubscriber(string $email): NewsletterSubscriber

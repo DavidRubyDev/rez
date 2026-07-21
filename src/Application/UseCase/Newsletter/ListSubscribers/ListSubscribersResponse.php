@@ -11,6 +11,7 @@ final class ListSubscribersResponse
     /** @param NewsletterSubscriber[] $subscribers */
     public function __construct(
         public readonly array $subscribers,
+        public readonly int $total,
     ) {
     }
 }
