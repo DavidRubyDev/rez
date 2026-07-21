@@ -83,4 +83,88 @@ class MysqlNewsletterRepositoryTest extends MysqlIntegrationTestCase
         $this->expectException(NewsletterSubscriberNotFoundException::class);
         $this->repository->findByEmail('delete@example.com');
     }
+
+    public function testFindPageWithNoParamsMatchesFindAll(): void
+    {
+        $this->repository->save(NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'a@example.com', null, SubscriberSource::Guest));
+        $this->repository->save(NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'b@example.com', null, SubscriberSource::Guest));
+
+        $page = $this->repository->findPage();
+        $all  = $this->repository->findAll();
+
+        $this->assertSame(
+            array_map(fn ($s) => $s->id->toString(), $all),
+            array_map(fn ($s) => $s->id->toString(), $page),
+        );
+    }
+
+    public function testFindPageFiltersBySearchAgainstEmailOrName(): void
+    {
+        $match   = NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'alice@example.com', 'Alice Wonderland', SubscriberSource::Guest);
+        $noMatch = NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'bob@example.com', 'Bob Builder', SubscriberSource::Guest);
+
+        $this->repository->save($match);
+        $this->repository->save($noMatch);
+
+        $result = $this->repository->findPage(search: 'wonderland');
+
+        $this->assertCount(1, $result);
+        $this->assertTrue($result[0]->id->equals($match->id));
+    }
+
+    public function testFindPageFiltersBySource(): void
+    {
+        $guest      = NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'guest@example.com', null, SubscriberSource::Guest);
+        $registered = NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'reg@example.com', null, SubscriberSource::Registered);
+
+        $this->repository->save($guest);
+        $this->repository->save($registered);
+
+        $result = $this->repository->findPage(source: SubscriberSource::Registered);
+
+        $this->assertCount(1, $result);
+        $this->assertTrue($result[0]->id->equals($registered->id));
+    }
+
+    public function testFindPageDefaultSortIsOptedInAtAscending(): void
+    {
+        $first  = NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'first@example.com', null, SubscriberSource::Guest);
+        $second = NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'second@example.com', null, SubscriberSource::Guest);
+
+        $this->repository->save($first);
+        $this->repository->save($second);
+
+        $page = $this->repository->findPage();
+
+        $this->assertTrue($page[0]->id->equals($first->id));
+        $this->assertTrue($page[1]->id->equals($second->id));
+    }
+
+    public function testFindPageSortsAndPaginates(): void
+    {
+        $this->repository->save(NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'a@example.com', null, SubscriberSource::Guest));
+        $this->repository->save(NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'b@example.com', null, SubscriberSource::Guest));
+        $this->repository->save(NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'c@example.com', null, SubscriberSource::Guest));
+
+        $page = $this->repository->findPage(sortBy: 'email', sortDir: 'desc', offset: 1, limit: 1);
+
+        $this->assertCount(1, $page);
+        $this->assertSame('b@example.com', $page[0]->email);
+    }
+
+    public function testCountPageMatchesFilteredCount(): void
+    {
+        $this->repository->save(NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'guest@example.com', null, SubscriberSource::Guest));
+        $this->repository->save(NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'reg@example.com', null, SubscriberSource::Registered));
+
+        $this->assertSame(1, $this->repository->countPage(source: SubscriberSource::Registered));
+    }
+
+    public function testFindAllIsUnaffectedByFindPageChanges(): void
+    {
+        $this->repository->save(NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'a@example.com', null, SubscriberSource::Guest));
+        $this->repository->save(NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'b@example.com', null, SubscriberSource::Guest));
+
+        $this->assertCount(2, $this->repository->findAll());
+    }
 }
