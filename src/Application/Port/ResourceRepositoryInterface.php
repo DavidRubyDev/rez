@@ -25,6 +25,17 @@ interface ResourceRepositoryInterface
     public function findAll(): ResourceCollection;
 
     /** @throws \Rez\Application\Exception\DatabaseException */
+    public function findPage(
+        ?int $offset = null,
+        ?int $limit = null,
+        ?string $sortBy = null,
+        ?string $sortDir = null,
+    ): ResourceCollection;
+
+    /** @throws \Rez\Application\Exception\DatabaseException */
+    public function countPage(): int;
+
+    /** @throws \Rez\Application\Exception\DatabaseException */
     public function save(Resource $resource): void;
 
     /** @throws \Rez\Application\Exception\DatabaseException */
