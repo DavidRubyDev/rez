@@ -10,6 +10,7 @@ final class ListResourcesResponse
 {
     public function __construct(
         public readonly ResourceCollection $resources,
+        public readonly int $total,
     ) {
     }
 }
