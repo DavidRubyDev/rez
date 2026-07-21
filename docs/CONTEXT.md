@@ -1101,7 +1101,7 @@ Housekeeping pass following a codebase audit. No functional change except where 
 
 **`MysqlDatabaseSeeder` logging (behavior change, approved)** — every other MySQL repository injects `LoggerInterface` and logs `critical()` before rethrowing a `PDOException` as `DatabaseException`; the seeder didn't. Added `LoggerInterface` as a required constructor parameter (same pattern as `MysqlReservationRepository` et al.), logs on `executeFile()`'s `PDOException` catch. `config/container.php` already autowires `MysqlDatabaseSeeder`, so no container change needed — PHP-DI resolves the new param from the existing `LoggerInterface::class => autowire(NullLogger::class)` binding. Updated `tests/Integration/Persistence/Mysql/MysqlDatabaseSeederTest.php` (constructs the seeder directly) to pass a `NullLogger`. Added `tests/Infrastructure/Persistence/Mysql/MysqlDatabaseSeederLoggerTest.php` mirroring the existing `MysqlRepositoryLoggerTest` pattern.
 
-**Handler layer removed entirely** — `src/Handler/**` (14 handler classes + `ReservationSerializer` + `ResourceSerializer`) and `tests/Handler/**` deleted. Confirmed unused: no reference anywhere outside `src/Handler`/`tests/Handler` (`config/container.php` wires use case interfaces directly; no `examples/slim` directory exists in this repo). `phpunit.xml` — removed the now-nonexistent `Handler` testsuite entry. This effectively completes `docs/instructions/18_rez-deprecate-handlers.md` by removal rather than just `@deprecated` annotation (the plan's step 2 phpstan.neon suppression was moot — no `phpstan.neon` file exists; analysis runs via CLI flags in `composer stan`). `Infrastructure/Mapper/**` (`ReservationStatusMapper`, `ResourceTypeMapper`, `DayOfWeekMapper`, `SubscriberSourceMapper`, `CurrencyMapper`) is untouched — still actively used by the MySQL repositories for enum/string persistence, unrelated to the deprecated Handler layer despite living in the same historical delivery step.
+**Handler layer removed entirely** — `src/Handler/**` (14 handler classes + `ReservationSerializer` + `ResourceSerializer`) and `tests/Handler/**` deleted. Confirmed unused: no reference anywhere outside `src/Handler`/`tests/Handler` (`config/container.php` wires use case interfaces directly; no `examples/slim` directory exists in this repo). `phpunit.xml` — removed the now-nonexistent `Handler` testsuite entry. This effectively completes `docs/instructions/19_rez-deprecate-handlers.md` by removal rather than just `@deprecated` annotation (the plan's step 2 phpstan.neon suppression was moot — no `phpstan.neon` file exists; analysis runs via CLI flags in `composer stan`). `Infrastructure/Mapper/**` (`ReservationStatusMapper`, `ResourceTypeMapper`, `DayOfWeekMapper`, `SubscriberSourceMapper`, `CurrencyMapper`) is untouched — still actively used by the MySQL repositories for enum/string persistence, unrelated to the deprecated Handler layer despite living in the same historical delivery step.
 
 Total: 381 unit tests passing (34 skipped — all integration), PHPStan max clean, CS clean.
 
@@ -1146,7 +1146,7 @@ behavior that no longer exists) and the mailer/logger mocks from all other cases
 `sendReservationConfirmation(Reservation, string $cancellationUrl)` design) replaced with
 notes that the port now takes the `CancellationToken` object directly and URL-building is the
 concrete mailer implementation's job; test list and checklist updated to match.
-`17_rez-booking.md` — the two `mailer->sendBookingConfirmation(...)` /
+`18_rez-booking.md` — the two `mailer->sendBookingConfirmation(...)` /
 `mailer->sendBookingCancellation(...)` call-outs (steps 7 and 4 of `CreateBookingUseCase` /
 `CancelBookingUseCase`) updated to the new method names and signatures. `10_rez-config-update.md`
 has no mailer references — unaffected.
@@ -1217,7 +1217,7 @@ this scaffold's instructions asked to verify before merging.
 its container also needs `ReservationSettingsRepositoryInterface` bound to
 `MysqlReservationSettingsRepository`. Flagged in REZ-CONTEXT.md.
 
-**Instruction docs** — `11_rez-guest-cancellation.md` and `17_rez-booking.md` both mentioned
+**Instruction docs** — `11_rez-guest-cancellation.md` and `18_rez-booking.md` both mentioned
 `autoConfirm` in passing (not `ReservationsConfig` directly); both updated with a note that the
 value now comes from `ReservationSettingsRepositoryInterface::get()->autoConfirm`, not
 `PlatformConfig->reservations`.
@@ -1302,7 +1302,7 @@ All six use case interfaces registered in `config/container.php`, plus
 read `MailerConfig->cancellationSecret` instead of the never-built
 `UsersConfig->cancellationSecret`, and to list the `ReservationSettingsRepositoryInterface`/
 `ReservationEmailService` deps it already has; section 6 rewritten from "out of scope" to
-"already done" describing what actually shipped. `17_rez-booking.md` — `CreateBookingUseCase`/
+"already done" describing what actually shipped. `18_rez-booking.md` — `CreateBookingUseCase`/
 `CancelBookingUseCase` no longer need a `MailerInterface` dependency or manual send step, since
 `CreateReservationUseCase`/`CancelReservationUseCase` already send the right email internally
 now; the old plan would have double-sent.
