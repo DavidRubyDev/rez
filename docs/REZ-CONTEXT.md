@@ -257,6 +257,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
 | `LoggerInterface` (PSR-3) | Injected via container. `NullLogger` default. Concrete implementation (Monolog) wired in `rez-starter`. | COMPLETE |
+| `ListParamsValidator` | `Application/Validation/` (not `Application/Service/` — stateless, no dependencies, all-static, so it lives in its own namespace rather than beside the injectable services above). `static validate(?int $offset, ?int $limit, ?string $sortBy, ?string $sortDir, string[] $allowedSortColumns): void`, throws `\InvalidArgumentException`. Shared by the four `List*UseCase` pagination rewrites (`13_rez-pagination.md`) so validation isn't duplicated per module. Not yet called by any use case. | IN PROGRESS (`13_rez-pagination.md` step 1 of 5 — Reservations/Users/Newsletter/Resources `findPage`/`countPage` wiring not yet done) |
 
 ### 3.5 Use cases (Application/UseCase/)
 

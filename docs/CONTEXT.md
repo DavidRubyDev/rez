@@ -1849,3 +1849,28 @@ same "placeholder, must change before going live" convention.
 No new tests — DDL/seed-data-only change, same as step 83.
 
 618 unit tests passing (58 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 85. ListParamsValidator (`13_rez-pagination.md` step 1)
+
+First step of the pagination/filtering/sorting scaffold — a shared stateless validation helper
+used by all four upcoming `List*UseCase` rewrites (Reservations, Users, Newsletter Subscribers,
+Resources), avoiding four near-identical validation blocks.
+
+`src/Application/Validation/ListParamsValidator.php` — `final class`, no interface, no
+constructor (same "concrete class, no state" convention as `FeatureGuard`). `public const
+MAX_LIMIT = 100`. `static function validate(?int $offset, ?int $limit, ?string $sortBy, ?string
+$sortDir, array $allowedSortColumns): void` — throws `\InvalidArgumentException` for: negative
+offset, limit outside `[1, MAX_LIMIT]`, `sortBy` not in the caller-supplied allowlist, `sortDir`
+not `'asc'`/`'desc'`. All four params nullable and independently optional — an all-null call is
+always valid (the "no pagination/sort requested" case each use case's default path exercises).
+
+Not yet wired into any use case — that starts with step 2 (Reservations).
+
+`tests/Application/Validation/ListParamsValidatorTest.php` — 12 cases: all-null passes,
+valid-params passes, negative offset throws, zero offset passes, limit below 1 throws, limit
+above `MAX_LIMIT` throws, limit at `MAX_LIMIT` passes, unknown `sortBy` throws, allowed `sortBy`
+passes, invalid `sortDir` throws, `'asc'`/`'desc'` each pass.
+
+630 unit tests passing (58 skipped — all integration), PHPStan max clean, CS clean.
