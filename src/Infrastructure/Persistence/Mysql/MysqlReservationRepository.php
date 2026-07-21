@@ -23,6 +23,14 @@ use Rez\Infrastructure\Mapper\ReservationStatusMapper;
 
 final class MysqlReservationRepository extends MysqlRepository implements ReservationRepositoryInterface
 {
+    private const SORT_COLUMNS = [
+        'start'      => 'r.start_at',
+        'end'        => 'r.end_at',
+        'status'     => 'r.status',
+        'party_name' => 'r.party_name',
+        'created_at' => 'r.created_at',
+    ];
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly ReservationStatusMapper $statusMapper,
@@ -113,6 +121,117 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         return ReservationCollection::fromArray(array_values(array_map($this->hydrate(...), $rows)));
+    }
+
+    public function findPage(
+        ?DateTimeImmutable $from = null,
+        ?DateTimeImmutable $to = null,
+        ?ResourceId $resourceId = null,
+        ?ReservationStatus $status = null,
+        ?string $search = null,
+        ?int $offset = null,
+        ?int $limit = null,
+        ?string $sortBy = null,
+        ?string $sortDir = null,
+    ): ReservationCollection {
+        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $resourceId, $status, $search);
+
+        $join = $resourceId !== null
+            ? ' INNER JOIN reservation_resources rr ON rr.reservation_id = r.id'
+            : '';
+
+        $sql = 'SELECT DISTINCT r.* FROM reservations r' . $join . $whereSql;
+
+        if ($sortBy !== null) {
+            $column = self::SORT_COLUMNS[$sortBy]
+                ?? throw new \InvalidArgumentException(sprintf('Unknown sort column: "%s".', $sortBy));
+            $sql .= ' ORDER BY ' . $column . ' ' . ($sortDir === 'desc' ? 'DESC' : 'ASC');
+        }
+
+        if ($limit !== null) {
+            $sql .= ' LIMIT :limit OFFSET :offset';
+        }
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            foreach ($params as $key => $value) {
+                $stmt->bindValue($key, $value);
+            }
+            if ($limit !== null) {
+                $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+                $stmt->bindValue(':offset', $offset ?? 0, PDO::PARAM_INT);
+            }
+            $stmt->execute();
+        } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+
+        /** @var array<int, array<string, mixed>> $rows */
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return ReservationCollection::fromArray(array_values(array_map($this->hydrate(...), $rows)));
+    }
+
+    public function countPage(
+        ?DateTimeImmutable $from = null,
+        ?DateTimeImmutable $to = null,
+        ?ResourceId $resourceId = null,
+        ?ReservationStatus $status = null,
+        ?string $search = null,
+    ): int {
+        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $resourceId, $status, $search);
+
+        $join = $resourceId !== null
+            ? ' INNER JOIN reservation_resources rr ON rr.reservation_id = r.id'
+            : '';
+
+        $sql = 'SELECT COUNT(DISTINCT r.id) FROM reservations r' . $join . $whereSql;
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+        } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /** @return array{0: string, 1: array<string, mixed>} */
+    private function buildPageCriteria(
+        ?DateTimeImmutable $from,
+        ?DateTimeImmutable $to,
+        ?ResourceId $resourceId,
+        ?ReservationStatus $status,
+        ?string $search,
+    ): array {
+        $where  = [];
+        $params = [];
+
+        if ($from !== null) {
+            $where[]         = 'r.start_at >= :from';
+            $params[':from'] = $from->format('Y-m-d H:i:s');
+        }
+        if ($to !== null) {
+            $where[]       = 'r.end_at <= :to';
+            $params[':to'] = $to->format('Y-m-d H:i:s');
+        }
+        if ($status !== null) {
+            $where[]           = 'r.status = :status';
+            $params[':status'] = $this->statusMapper->toString($status);
+        }
+        if ($search !== null) {
+            $where[]           = '(r.party_name LIKE :search OR r.party_email LIKE :search OR r.party_phone LIKE :search)';
+            $params[':search'] = '%' . $search . '%';
+        }
+        if ($resourceId !== null) {
+            $where[]                = 'rr.resource_id = :resource_id';
+            $params[':resource_id'] = $resourceId->toString();
+        }
+
+        return [$where !== [] ? ' WHERE ' . implode(' AND ', $where) : '', $params];
     }
 
     public function save(Reservation $reservation): void

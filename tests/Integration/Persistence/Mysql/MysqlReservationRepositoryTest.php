@@ -11,6 +11,7 @@ use Rez\Domain\Exception\ReservationNotFoundException;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationId;
+use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
@@ -202,5 +203,142 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
 
         $this->assertSame('UTC', $found->slot->start->getTimezone()->getName());
         $this->assertSame('UTC', $found->slot->end->getTimezone()->getName());
+    }
+
+    public function testFindPageWithNoParamsMatchesFindAll(): void
+    {
+        $this->repository->save($this->makeReservation());
+        $this->repository->save($this->makeReservation());
+
+        $page = $this->repository->findPage();
+        $all  = $this->repository->findAll();
+
+        $this->assertSame($all->count(), $page->count());
+        $this->assertSame(
+            array_map(fn ($r) => $r->id->toString(), $all->toArray()),
+            array_map(fn ($r) => $r->id->toString(), $page->toArray()),
+        );
+    }
+
+    public function testFindPageFiltersByResourceIdWithoutDuplicatesWhenReservationHasMultipleResources(): void
+    {
+        $otherResourceId = ResourceId::generate();
+
+        $multiResource = Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId, $otherResourceId]),
+            new TimeSlot(
+                new DateTimeImmutable('2024-01-15 10:00:00'),
+                new DateTimeImmutable('2024-01-15 11:00:00'),
+            ),
+            $this->party,
+        );
+        $unrelated = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-16 10:00:00'),
+            new DateTimeImmutable('2024-01-16 11:00:00'),
+        ));
+
+        $this->repository->save($multiResource);
+        $this->repository->save($unrelated);
+
+        $page  = $this->repository->findPage(resourceId: $this->resourceId);
+        $count = $this->repository->countPage(resourceId: $this->resourceId);
+
+        $this->assertSame(2, $page->count());
+        $this->assertSame(2, $count);
+    }
+
+    public function testFindPageFiltersByStatus(): void
+    {
+        $pending = $this->makeReservation();
+        $confirmed = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-16 10:00:00'),
+            new DateTimeImmutable('2024-01-16 11:00:00'),
+        ))->confirm();
+
+        $this->repository->save($pending);
+        $this->repository->save($confirmed);
+
+        $result = $this->repository->findPage(status: ReservationStatus::Confirmed);
+
+        $this->assertSame(1, $result->count());
+        $this->assertTrue($result->toArray()[0]->id->equals($confirmed->id));
+    }
+
+    public function testFindPageFiltersBySearchAgainstPartyFields(): void
+    {
+        $match = Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            new TimeSlot(
+                new DateTimeImmutable('2024-01-15 10:00:00'),
+                new DateTimeImmutable('2024-01-15 11:00:00'),
+            ),
+            new Party('Alice Wonderland', 'alice@example.com', 1, null),
+        );
+        $noMatch = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-16 10:00:00'),
+            new DateTimeImmutable('2024-01-16 11:00:00'),
+        ));
+
+        $this->repository->save($match);
+        $this->repository->save($noMatch);
+
+        $result = $this->repository->findPage(search: 'wonderland');
+
+        $this->assertSame(1, $result->count());
+        $this->assertTrue($result->toArray()[0]->id->equals($match->id));
+    }
+
+    public function testFindPageSortsAndPaginates(): void
+    {
+        $first = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-10 10:00:00'),
+            new DateTimeImmutable('2024-01-10 11:00:00'),
+        ));
+        $second = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+        ));
+        $third = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-20 10:00:00'),
+            new DateTimeImmutable('2024-01-20 11:00:00'),
+        ));
+
+        $this->repository->save($first);
+        $this->repository->save($second);
+        $this->repository->save($third);
+
+        $page = $this->repository->findPage(sortBy: 'start', sortDir: 'desc', offset: 1, limit: 1);
+
+        $this->assertSame(1, $page->count());
+        $this->assertTrue($page->toArray()[0]->id->equals($second->id));
+    }
+
+    public function testCountPageMatchesTrueDistinctCount(): void
+    {
+        $otherResourceId = ResourceId::generate();
+
+        $multiResource = Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId, $otherResourceId]),
+            new TimeSlot(
+                new DateTimeImmutable('2024-01-15 10:00:00'),
+                new DateTimeImmutable('2024-01-15 11:00:00'),
+            ),
+            $this->party,
+        );
+
+        $this->repository->save($multiResource);
+
+        $this->assertSame(1, $this->repository->countPage(resourceId: $this->resourceId));
+    }
+
+    public function testFindAllIsUnaffectedByFindPageChanges(): void
+    {
+        $this->repository->save($this->makeReservation());
+        $this->repository->save($this->makeReservation());
+
+        $this->assertSame(2, $this->repository->findAll()->count());
     }
 }
