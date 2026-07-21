@@ -1849,3 +1849,169 @@ same "placeholder, must change before going live" convention.
 No new tests — DDL/seed-data-only change, same as step 83.
 
 618 unit tests passing (58 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 85. ListParamsValidator (`13_rez-pagination.md` step 1)
+
+First step of the pagination/filtering/sorting scaffold — a shared stateless validation helper
+used by all four upcoming `List*UseCase` rewrites (Reservations, Users, Newsletter Subscribers,
+Resources), avoiding four near-identical validation blocks.
+
+`src/Application/Validation/ListParamsValidator.php` — `final class`, no interface, no
+constructor (same "concrete class, no state" convention as `FeatureGuard`). `public const
+MAX_LIMIT = 100`. `static function validate(?int $offset, ?int $limit, ?string $sortBy, ?string
+$sortDir, array $allowedSortColumns): void` — throws `\InvalidArgumentException` for: negative
+offset, limit outside `[1, MAX_LIMIT]`, `sortBy` not in the caller-supplied allowlist, `sortDir`
+not `'asc'`/`'desc'`. All four params nullable and independently optional — an all-null call is
+always valid (the "no pagination/sort requested" case each use case's default path exercises).
+
+Not yet wired into any use case — that starts with step 2 (Reservations).
+
+`tests/Application/Validation/ListParamsValidatorTest.php` — 12 cases: all-null passes,
+valid-params passes, negative offset throws, zero offset passes, limit below 1 throws, limit
+above `MAX_LIMIT` throws, limit at `MAX_LIMIT` passes, unknown `sortBy` throws, allowed `sortBy`
+passes, invalid `sortDir` throws, `'asc'`/`'desc'` each pass.
+
+630 unit tests passing (58 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 86. Reservations pagination/filtering/sorting (`13_rez-pagination.md` step 2)
+
+`ReservationRepositoryInterface` — added `findPage(from?, to?, resourceId?, status?, search?,
+offset?, limit?, sortBy?, sortDir?): ReservationCollection` and `countPage(from?, to?,
+resourceId?, status?, search?): int`, both fully optional. `findAll()` left byte-for-byte
+unchanged.
+
+`MysqlReservationRepository` — `findPage()`/`countPage()` share a private `buildPageCriteria()`
+helper (filter → `WHERE`, no `ORDER BY`/`LIMIT` for the count query). `search` matches a substring
+against `party_name`/`party_email`/`party_phone` (not resource name). The `resourceId` filter
+joins `reservation_resources rr` and uses `SELECT DISTINCT r.*` / `COUNT(DISTINCT r.id)` — this is
+the fix for the old in-memory `resourceId` filter, which would have silently truncated pages when
+combined with SQL `LIMIT`/`OFFSET`. `:limit`/`:offset` bound explicitly with `PDO::PARAM_INT`
+(MySQL rejects string-typed `LIMIT` under emulated prepares). `SORT_COLUMNS` allowlist: `start`,
+`end`, `status`, `party_name`, `created_at` (mapped to `r.start_at` etc.) — an unmapped `sortBy`
+throws `\InvalidArgumentException` (belt-and-suspenders on top of `ListParamsValidator`'s
+allowlist check in the use case). No `ORDER BY` at all when `sortBy` is null, matching `findAll()`.
+
+`ListReservationsRequest` — gained `status` (`?ReservationStatus`), `search`, `offset`, `limit`,
+`sortBy`, `sortDir`, all nullable, alongside the existing `from`/`to`/`resourceId`.
+`ListReservationsResponse` — gained `int $total`.
+
+`ListReservationsUseCase` — calls `ListParamsValidator::validate()` first (`SORTABLE = ['start',
+'end', 'status', 'party_name', 'created_at']`), then `findPage()` + `countPage()` with the same
+filter args. The old `->filter(fn (Reservation $r) => ...)` in-memory `resourceId` filter is gone
+entirely — the SQL join now does this.
+
+`tests/Integration/Persistence/Mysql/MysqlReservationRepositoryTest.php` — 8 new integration
+tests: `findPage()` with no params matches `findAll()`; `resourceId` filter with a
+multiple-resource reservation returns no duplicates and `countPage()` matches the true distinct
+count; status filter; search filter; sort+paginate combined; `findAll()` itself unaffected.
+
+`tests/Application/UseCase/Reservation/ListReservations/ListReservationsUseCaseTest.php` —
+rewritten: default params, filters passed through, pagination/sort passed through, and one test
+per `ListParamsValidator` rule (invalid `sortBy`, out-of-range `limit`, negative `offset`, invalid
+`sortDir`) all throw `\InvalidArgumentException` before the repository is ever called.
+
+642 unit tests passing (65 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 87. Users pagination/filtering/sorting (`13_rez-pagination.md` step 3)
+
+Same pattern as step 86, simpler — no join needed.
+
+`UserRepositoryInterface` — added `findPage(search?, role?, offset?, limit?, sortBy?, sortDir?):
+UserCollection` and `countPage(search?, role?): int`. `findAll()` unchanged.
+
+`MysqlUserRepository` — `buildPageCriteria()`: `search` against `(name LIKE :search OR email LIKE
+:search)`, `role` via `UserRoleMapper::toString()`. `SORT_COLUMNS`: `name`, `email`, `role`,
+`created_at`. **Default sort stays `created_at ASC`** when `sortBy` is null — matches today's
+hardcoded `ORDER BY created_at ASC` on `findAll()` exactly (`$column = $sortBy !== null ? (...) :
+'created_at'`, unlike Reservations/Resources which have no default sort at all).
+
+`ListUsersRequest` — was an empty class, now the first `Request` in the codebase to go from empty
+to populated: `search`, `role` (`?UserRole`), `offset`, `limit`, `sortBy`, `sortDir`.
+`ListUsersResponse` — gained `int $total`.
+
+`ListUsersUseCase` — `SORTABLE = ['name', 'email', 'role', 'created_at']`, validates then calls
+`findPage()`/`countPage()`.
+
+`tests/Integration/Persistence/Mysql/MysqlUserRepositoryTest.php` — 7 new integration tests
+(`findPage()` matches `findAll()` with no params, search filter, role filter, sort+paginate,
+default sort is `created_at ASC`, `countPage()` matches filtered count, `findAll()` unaffected).
+`makeUser()` test helper gained optional `$name`/`$role` params.
+
+`tests/Application/UseCase/User/ListUsersUseCaseTest.php` — rewritten with the same shape as
+step 86's reservation test: filters/pagination/sort passed through, four `ListParamsValidator`
+rejection cases.
+
+655 unit tests passing (72 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 88. Newsletter Subscribers pagination/filtering/sorting (`13_rez-pagination.md` step 4)
+
+Same pattern as step 87. This module has no `Collection` type — `findAll()` already returns a
+plain array, so `findPage()` follows suit (no `NewsletterSubscriberCollection` introduced).
+
+`NewsletterRepositoryInterface` — added `findPage(search?, source?, offset?, limit?, sortBy?,
+sortDir?): NewsletterSubscriber[]` and `countPage(search?, source?): int`. `findAll()` unchanged
+— still `BroadcastUseCase`'s only caller, confirmed by grep before starting this scaffold.
+
+`MysqlNewsletterRepository` — `buildPageCriteria()`: `search` against `(email LIKE :search OR
+name LIKE :search)`, `source` via `SubscriberSourceMapper::toString()`. `SORT_COLUMNS`: `email`,
+`name`, `source`, `opted_in_at`. **Default sort stays `opted_in_at ASC`** when `sortBy` is null,
+same pattern as step 87's `created_at` default.
+
+`ListSubscribersRequest` — empty → populated: `search`, `source` (`?SubscriberSource`), `offset`,
+`limit`, `sortBy`, `sortDir`. `ListSubscribersResponse` — gained `int $total` alongside the
+existing `array $subscribers`.
+
+`ListSubscribersUseCase` — `SORTABLE = ['email', 'name', 'source', 'opted_in_at']`.
+
+`tests/Integration/Persistence/Mysql/MysqlNewsletterRepositoryTest.php` — 8 new integration
+tests, same coverage shape as step 87 (no-params match, search filter, source filter, default
+sort, sort+paginate, `countPage()`, `findAll()` unaffected).
+
+`tests/Application/UseCase/Newsletter/ListSubscribersUseCaseTest.php` — rewritten with the same
+shape as steps 86/87.
+
+668 unit tests passing (79 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 89. Resources pagination/sorting (`13_rez-pagination.md` step 5 — scaffold complete)
+
+Simplest of the four — no filters (nothing to filter on today, no search/status UI exists for
+this list), only sort + paginate, and must preserve the existing hardcoded `active = 1` filter
+(invariant 13).
+
+`ResourceRepositoryInterface` — added `findPage(offset?, limit?, sortBy?, sortDir?):
+ResourceCollection` and `countPage(): int`. `findAll()` unchanged — still `GetResourceUseCase`'s
+sibling entry point for historical/deactivated resource lookups.
+
+`MysqlResourceRepository` — `SORT_COLUMNS`: `type`, `name`, `capacity`. **No default sort** when
+`sortBy` is null (no `ORDER BY` clause at all), matching `findAll()` exactly — the only one of the
+four modules with no implicit ordering.
+
+`ListResourcesRequest` — empty → populated with only the 4 pagination/sort fields (no filters):
+`offset`, `limit`, `sortBy`, `sortDir`. `ListResourcesResponse` — gained `int $total`.
+
+`ListResourcesUseCase` — `SORTABLE = ['type', 'name', 'capacity']`.
+
+`tests/Integration/Persistence/Mysql/MysqlResourceRepositoryTest.php` — 6 new integration tests:
+no-params match, deactivated resources excluded from `findPage()` (same as `findAll()`),
+sort+paginate, `countPage()` counts only active resources, `findAll()` unaffected. `makeResource()`
+test helper gained optional `$name`/`$type`/`$capacity` params.
+
+`tests/Application/UseCase/Resource/ListResources/ListResourcesUseCaseTest.php` — rewritten with
+the same shape as the other three modules.
+
+**Scaffold complete.** All five `13_rez-pagination.md` checklist items done in one branch
+(`feature/pagination-filtering-sorting`) per explicit instruction, rather than the usual one
+branch/PR per step. HTTP query-param wiring in `rez-starter` is out of scope for this repo and not
+done here — see the note added to `docs/REZ-CONTEXT.md` §4's API surface.
+
+678 unit tests passing (84 skipped — all integration), PHPStan max clean, CS clean.

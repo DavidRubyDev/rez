@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationCollection;
 use Rez\Domain\Reservation\ReservationId;
+use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 
@@ -24,6 +25,28 @@ interface ReservationRepositoryInterface
 
     /** @throws \Rez\Application\Exception\DatabaseException */
     public function findAll(?DateTimeImmutable $from = null, ?DateTimeImmutable $to = null): ReservationCollection;
+
+    /** @throws \Rez\Application\Exception\DatabaseException */
+    public function findPage(
+        ?DateTimeImmutable $from = null,
+        ?DateTimeImmutable $to = null,
+        ?ResourceId $resourceId = null,
+        ?ReservationStatus $status = null,
+        ?string $search = null,
+        ?int $offset = null,
+        ?int $limit = null,
+        ?string $sortBy = null,
+        ?string $sortDir = null,
+    ): ReservationCollection;
+
+    /** @throws \Rez\Application\Exception\DatabaseException */
+    public function countPage(
+        ?DateTimeImmutable $from = null,
+        ?DateTimeImmutable $to = null,
+        ?ResourceId $resourceId = null,
+        ?ReservationStatus $status = null,
+        ?string $search = null,
+    ): int;
 
     /** @throws \Rez\Application\Exception\DatabaseException */
     public function save(Reservation $reservation): void;

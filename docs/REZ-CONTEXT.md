@@ -31,8 +31,12 @@
 > themselves can only change `name`/`newsletter_opt_in`, never `role`/`email`). Resource deletion
 > is now a soft delete (`Resource.active`, invariant 13) rather than a hard delete, after a bug
 > where a resource's `ON DELETE CASCADE` join rows could orphan a reservation's resource
-> references and throw on later hydration. Platform extensions (payments, credits, subscriptions)
-> not yet built.
+> references and throw on later hydration. `13_rez-pagination.md` added offset/limit pagination,
+> per-resource filtering, and sorting to all four listing use cases (Reservations, Users,
+> Newsletter Subscribers, Resources) — `findPage()`/`countPage()` on each repository, filter →
+> sort → paginate in one SQL query, `findAll()` left untouched for its other callers (e.g.
+> `BroadcastUseCase`). HTTP query-param wiring in `rez-starter` is not yet done. Platform
+> extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -257,6 +261,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
 | `LoggerInterface` (PSR-3) | Injected via container. `NullLogger` default. Concrete implementation (Monolog) wired in `rez-starter`. | COMPLETE |
+| `ListParamsValidator` | `Application/Validation/` (not `Application/Service/` — stateless, no dependencies, all-static, so it lives in its own namespace rather than beside the injectable services above). `static validate(?int $offset, ?int $limit, ?string $sortBy, ?string $sortDir, string[] $allowedSortColumns): void`, throws `\InvalidArgumentException`. Called as the first line of all four `List*UseCase`s below (`13_rez-pagination.md`) so validation isn't duplicated per module. | COMPLETE (`13_rez-pagination.md`) |
 
 ### 3.5 Use cases (Application/UseCase/)
 
@@ -272,12 +277,12 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `SendReservationCancelledEmailUseCase` | `SendReservationCancelledEmailRequest(ReservationId)` | `SendReservationCancelledEmailResponse` | Same pattern as above, for the cancelled email — no token needed |
 | `MarkNoShowUseCase` | `MarkNoShowRequest` | `MarkNoShowResponse` | |
 | `GetReservationUseCase` | `GetReservationRequest` | `GetReservationResponse` | |
-| `ListReservationsUseCase` | `ListReservationsRequest` | `ListReservationsResponse` | Optional from/to/resourceId filters |
+| `ListReservationsUseCase` | `ListReservationsRequest` | `ListReservationsResponse(reservations, total)` | `13_rez-pagination.md`: filters (`from`, `to`, `resourceId`, `status`, `search` against party name/email/phone) + `offset`/`limit`/`sortBy`/`sortDir` (`start`\|`end`\|`status`\|`party_name`\|`created_at`), validated via `ListParamsValidator`, executed in one SQL query via `ReservationRepositoryInterface::findPage()`/`countPage()` — the old in-memory `resourceId` filter after `findAll()` is gone. `findAll()` itself is untouched, still used nowhere else in this repo |
 | `CreateResourceUseCase` | `CreateResourceRequest` | `CreateResourceResponse` | |
 | `GetResourceUseCase` | `GetResourceRequest` | `GetResourceResponse` | |
 | `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable. No `active` field — carries the existing resource's `active` forward unchanged; there's no reactivate path anywhere in the API yet |
 | `DeleteResourceUseCase` | `DeleteResourceRequest` | `DeleteResourceResponse` | Soft delete — repository's `delete()` deactivates rather than removes (invariant 13) |
-| `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse` | Thin pass-through — the repository's `findAll()` already excludes deactivated resources (invariant 13); still reachable via `GetResourceUseCase` |
+| `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse(resources, total)` | `13_rez-pagination.md`: no filters (nothing to filter on yet), `offset`/`limit`/`sortBy`/`sortDir` (`type`\|`name`\|`capacity`) via `ResourceRepositoryInterface::findPage()`/`countPage()`, both preserving the `active = 1` filter (invariant 13). `findAll()` untouched — still reachable via `GetResourceUseCase` for historical lookups |
 | `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Validates resource exists (throws `ResourceNotFoundException`) then delegates to AvailabilityService, which returns an empty window for a deactivated resource (invariant 13). `GetAvailabilityRequest` accepts optional `int $partySize = 1`. |
 | `GetAvailabilityRulesUseCase` | `GetAvailabilityRulesRequest` | `GetAvailabilityRulesResponse` | Returns all rules for a resource |
 | `GetAvailabilityOverridesUseCase` | `GetAvailabilityOverridesRequest` | `GetAvailabilityOverridesResponse` | Returns overrides for a resource in a date range |
@@ -297,14 +302,14 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
 | `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
 | `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). |
-| `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse` | Returns all newsletter subscribers |
+| `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse(subscribers, total)` | `13_rez-pagination.md`: filters (`search` against email/name, `source`) + `offset`/`limit`/`sortBy`/`sortDir` (`email`\|`name`\|`source`\|`opted_in_at`, default sort `opted_in_at ASC` preserved) via `NewsletterRepositoryInterface::findPage()`/`countPage()`. `findAll()` untouched — still `BroadcastUseCase`'s only caller |
 | `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, string $token)` | No `FeatureGuard` — users are never gated. `findByEmail()` first (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; generates a JWT via `JwtService` (`rez-users`) |
 | `LoginUseCase` | `LoginRequest` | `LoginResponse(User, string $token)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6). Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed (`rez-users`) |
 | `RequestPasswordResetUseCase` | `RequestPasswordResetRequest(email, resetBaseUrl)` | `RequestPasswordResetResponse(bool $sent)` | Unknown email → `sent: true` silently, no token generated, no email sent (never reveals existence). Known email: generates a raw token via `TokenGeneratorInterface`, stores only `SHA-256(rawToken)` via `PasswordResetRepositoryInterface` (invariant 5), emails the raw token in a URL via `MailerInterface::sendPasswordReset()` (`rez-users`) |
 | `ResetPasswordUseCase` | `ResetPasswordRequest(token, newPassword)` | `ResetPasswordResponse(bool $success)` | Hashes the incoming token and looks it up (never by raw token — invariant 5); `InvalidTokenException` if not found or expired; on success, re-hashes the new password, saves the user, and deletes the reset token row (`rez-users`) |
 | `GetUserUseCase` | `GetUserRequest(UserId)` | `GetUserResponse(User)` | (`rez-users`) |
 | `UpdateUserUseCase` | `UpdateUserRequest(UserId, ?name, ?newsletterOptIn)` | `UpdateUserResponse(User)` | PATCH semantics via `User`'s `with*()` methods — self-service profile update, no role field (`rez-users`) |
-| `ListUsersUseCase` | `ListUsersRequest` (empty) | `ListUsersResponse(UserCollection)` | Admin-only by convention — auth enforcement is the HTTP layer's job, not this use case's (`rez-users`) |
+| `ListUsersUseCase` | `ListUsersRequest` | `ListUsersResponse(users, total)` | Admin-only by convention — auth enforcement is the HTTP layer's job, not this use case's (`rez-users`). `13_rez-pagination.md`: `ListUsersRequest` gained filters (`search` against name/email, `role`) + `offset`/`limit`/`sortBy`/`sortDir` (`name`\|`email`\|`role`\|`created_at`, default sort `created_at ASC` preserved) via `UserRepositoryInterface::findPage()`/`countPage()` — first `Request` in the codebase to go from empty to populated. `findAll()` untouched |
 | `AdminUpdateUserUseCase` | `AdminUpdateUserRequest(UserId, ?UserRole, ?newsletterOptIn)` | `AdminUpdateUserResponse(User)` | Role/newsletter override, PATCH semantics. Admin-only by convention — same auth-enforcement note as `ListUsersUseCase` (`rez-users`) |
 | `AdminCreateUserUseCase` | `AdminCreateUserRequest(name, email, resetBaseUrl, UserRole = Customer, newsletterOptIn = false)` | `AdminCreateUserResponse(User)` | No password field — generates and hashes a random one nobody is ever told, saves the user, then delegates to `RequestPasswordResetUseCaseInterface` (reused, not duplicated) to email a real reset link. No JWT in the response — the admin isn't logging in as the new user. `newsletterOptIn: true` subscribes via `SubscriberSource::Admin`, not `Registered` |
 
@@ -538,7 +543,7 @@ All routes prefixed `/api/`.
 #### Always available — public (no auth)
 
 ```
-GET    /api/resources
+GET    /api/resources                                          ← query params not yet wired, see 13_rez-pagination.md note below
 GET    /api/resources/{id}
 GET    /api/resources/{id}/availability/rules
 GET    /api/resources/{id}/availability/overrides
@@ -595,7 +600,7 @@ DELETE /api/resources/{id}/availability/rules/{day_of_week}
 PUT    /api/resources/{id}/availability/overrides/{date}
 DELETE /api/resources/{id}/availability/overrides/{date}
 POST   /api/reservations                                      ← create; today only exercised by rez-admin's manual booking modal
-GET    /api/reservations
+GET    /api/reservations                                       ← query params not yet wired, see 13_rez-pagination.md note below
 GET    /api/reservations/{id}
 POST   /api/reservations/{id}/confirm
 POST   /api/reservations/{id}/no-show
@@ -603,7 +608,7 @@ POST   /api/reservations/{id}/cancel                          ← admin cancella
 POST   /api/reservations/{id}/send-created-email              ← manual resend; bypasses ReservationSettings, unswallowed mailer failures
 POST   /api/reservations/{id}/send-confirmed-email             ← same
 POST   /api/reservations/{id}/send-cancelled-email             ← same
-GET    /api/newsletter/subscribers
+GET    /api/newsletter/subscribers                            ← query params not yet wired, see 13_rez-pagination.md note below
 POST   /api/admin/newsletter/subscribers                     ← admin-add subscriber (sets Admin source)
 POST   /api/newsletter/broadcast                             ← body: { resource_name, resource_date }
 GET    /api/admin/reservation-settings
@@ -617,11 +622,19 @@ GET    /api/admin/email-templates/{id}
 PATCH  /api/admin/email-templates/{id}
 DELETE /api/admin/email-templates/{id}
 POST   /api/admin/email-templates/{id}/send
-GET    /api/users                                             ← no pagination/search
+GET    /api/users                                             ← query params not yet wired, see 13_rez-pagination.md note below
 PATCH  /api/users/{id}                                        ← role + newsletter_opt_in only, never name/email
 POST   /api/admin/users                                      ← AdminCreateUserUseCase; no password field, forces a reset link via RequestPasswordResetUseCase
 GET    /api/admin/config                                     ❌ still not wired — blocked on GetAdminConfigUseCase (rez-admin-config)
 ```
+
+`13_rez-pagination.md` added `offset`/`limit`/`sortBy`/`sortDir` (+ per-module filters — see the
+`ListReservationsUseCase`/`ListUsersUseCase`/`ListSubscribersUseCase`/`ListResourcesUseCase` rows
+in §3.5) to all four list use cases and their repositories entirely within this repo. None of the
+four list routes above (`GET /api/reservations`, `/api/resources`, `/api/users`,
+`/api/newsletter/subscribers`) parse these as query params yet — that HTTP-layer wiring is
+`rez-starter`'s job, not done here, same "library builds the capability, client app exposes it"
+split as every other feature in this repo.
 
 #### Profile 2+ (payments)
 ```

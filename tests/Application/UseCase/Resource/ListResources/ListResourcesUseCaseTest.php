@@ -29,7 +29,7 @@ class ListResourcesUseCaseTest extends TestCase
     public function testRepositoryDatabaseExceptionPropagates(): void
     {
         $this->repository
-            ->method('findAll')
+            ->method('findPage')
             ->willThrowException(new DatabaseException('pdo error'));
 
         $this->expectException(DatabaseException::class);
@@ -38,17 +38,64 @@ class ListResourcesUseCaseTest extends TestCase
         $this->useCase->execute(new ListResourcesRequest());
     }
 
-    public function testReturnsResourcesFromRepository(): void
+    public function testReturnsResourcesAndTotalFromRepository(): void
     {
         $collection = ResourceCollection::fromArray([
             new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Table 1', 4),
             new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Table 2', 2),
         ]);
 
-        $this->repository->method('findAll')->willReturn($collection);
+        $this->repository->method('findPage')->willReturn($collection);
+        $this->repository->method('countPage')->willReturn(2);
 
         $response = $this->useCase->execute(new ListResourcesRequest());
 
         $this->assertSame($collection, $response->resources);
+        $this->assertSame(2, $response->total);
+    }
+
+    public function testPassesPaginationAndSortThroughToRepository(): void
+    {
+        $this->repository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with(10, 20, 'name', 'desc')
+            ->willReturn(ResourceCollection::empty());
+
+        $this->repository->method('countPage')->willReturn(0);
+
+        $this->useCase->execute(new ListResourcesRequest(offset: 10, limit: 20, sortBy: 'name', sortDir: 'desc'));
+    }
+
+    public function testInvalidSortByThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListResourcesRequest(sortBy: 'not_a_column'));
+    }
+
+    public function testInvalidLimitThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListResourcesRequest(limit: 101));
+    }
+
+    public function testNegativeOffsetThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListResourcesRequest(offset: -1));
+    }
+
+    public function testInvalidSortDirThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListResourcesRequest(sortDir: 'sideways'));
     }
 }

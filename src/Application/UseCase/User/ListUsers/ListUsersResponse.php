@@ -10,6 +10,7 @@ final class ListUsersResponse
 {
     public function __construct(
         public readonly UserCollection $users,
+        public readonly int $total,
     ) {
     }
 }

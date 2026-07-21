@@ -14,6 +14,7 @@ use Rez\Domain\User\HashedPassword;
 use Rez\Domain\User\User;
 use Rez\Domain\User\UserCollection;
 use Rez\Domain\User\UserId;
+use Rez\Domain\User\UserRole;
 
 class ListUsersUseCaseTest extends TestCase
 {
@@ -28,7 +29,7 @@ class ListUsersUseCaseTest extends TestCase
 
     public function testRepositoryDatabaseExceptionPropagates(): void
     {
-        $this->repository->method('findAll')->willThrowException(new DatabaseException('pdo error'));
+        $this->repository->method('findPage')->willThrowException(new DatabaseException('pdo error'));
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to list users.');
@@ -36,15 +37,79 @@ class ListUsersUseCaseTest extends TestCase
         $this->useCase->execute(new ListUsersRequest());
     }
 
-    public function testReturnsAllUsersFromRepository(): void
+    public function testReturnsUsersAndTotalFromRepository(): void
     {
         $user       = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('x'));
         $collection = UserCollection::fromArray([$user]);
 
-        $this->repository->method('findAll')->willReturn($collection);
+        $this->repository->method('findPage')->willReturn($collection);
+        $this->repository->method('countPage')->willReturn(1);
 
         $response = $this->useCase->execute(new ListUsersRequest());
 
         $this->assertSame($collection, $response->users);
+        $this->assertSame(1, $response->total);
+    }
+
+    public function testPassesFiltersThroughToRepository(): void
+    {
+        $this->repository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with('jane', UserRole::Admin, null, null, null, null)
+            ->willReturn(UserCollection::empty());
+
+        $this->repository
+            ->expects($this->once())
+            ->method('countPage')
+            ->with('jane', UserRole::Admin)
+            ->willReturn(0);
+
+        $this->useCase->execute(new ListUsersRequest(search: 'jane', role: UserRole::Admin));
+    }
+
+    public function testPassesPaginationAndSortThroughToRepository(): void
+    {
+        $this->repository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with(null, null, 10, 20, 'name', 'desc')
+            ->willReturn(UserCollection::empty());
+
+        $this->repository->method('countPage')->willReturn(0);
+
+        $this->useCase->execute(new ListUsersRequest(offset: 10, limit: 20, sortBy: 'name', sortDir: 'desc'));
+    }
+
+    public function testInvalidSortByThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListUsersRequest(sortBy: 'not_a_column'));
+    }
+
+    public function testInvalidLimitThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListUsersRequest(limit: 101));
+    }
+
+    public function testNegativeOffsetThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListUsersRequest(offset: -1));
+    }
+
+    public function testInvalidSortDirThrowsInvalidArgumentException(): void
+    {
+        $this->repository->expects($this->never())->method('findPage');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->useCase->execute(new ListUsersRequest(sortDir: 'sideways'));
     }
 }

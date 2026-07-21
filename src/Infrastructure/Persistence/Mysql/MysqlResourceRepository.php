@@ -16,6 +16,12 @@ use Rez\Infrastructure\Mapper\ResourceTypeMapper;
 
 final class MysqlResourceRepository extends MysqlRepository implements ResourceRepositoryInterface
 {
+    private const SORT_COLUMNS = [
+        'type'     => 'type',
+        'name'     => 'name',
+        'capacity' => 'capacity',
+    ];
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly ResourceTypeMapper $typeMapper,
@@ -61,6 +67,55 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         return ResourceCollection::fromArray(array_map($this->hydrate(...), $rows));
+    }
+
+    public function findPage(
+        ?int $offset = null,
+        ?int $limit = null,
+        ?string $sortBy = null,
+        ?string $sortDir = null,
+    ): ResourceCollection {
+        $sql = 'SELECT * FROM resources WHERE active = 1';
+
+        if ($sortBy !== null) {
+            $column = self::SORT_COLUMNS[$sortBy]
+                ?? throw new \InvalidArgumentException(sprintf('Unknown sort column: "%s".', $sortBy));
+            $sql .= ' ORDER BY ' . $column . ' ' . ($sortDir === 'desc' ? 'DESC' : 'ASC');
+        }
+
+        if ($limit !== null) {
+            $sql .= ' LIMIT :limit OFFSET :offset';
+        }
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            if ($limit !== null) {
+                $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+                $stmt->bindValue(':offset', $offset ?? 0, PDO::PARAM_INT);
+            }
+            $stmt->execute();
+        } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+
+        /** @var array<int, array<string, mixed>> $rows */
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return ResourceCollection::fromArray(array_map($this->hydrate(...), $rows));
+    }
+
+    public function countPage(): int
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM resources WHERE active = 1');
+            $stmt->execute();
+        } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+
+        return (int) $stmt->fetchColumn();
     }
 
     public function delete(ResourceId $id): void
