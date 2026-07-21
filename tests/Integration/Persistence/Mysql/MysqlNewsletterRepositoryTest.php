@@ -128,11 +128,27 @@ class MysqlNewsletterRepositoryTest extends MysqlIntegrationTestCase
 
     public function testFindPageDefaultSortIsOptedInAtAscending(): void
     {
-        $first  = NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'first@example.com', null, SubscriberSource::Guest);
-        $second = NewsletterSubscriber::create(NewsletterSubscriberId::generate(), 'second@example.com', null, SubscriberSource::Guest);
+        // opted_in_at is a DATETIME (second precision) — explicit, distinct timestamps avoid a
+        // tie that MySQL would break arbitrarily (UUID primary keys give no insertion-order guarantee).
+        $utc = new \DateTimeZone('UTC');
 
-        $this->repository->save($first);
+        $first = NewsletterSubscriber::reconstruct(
+            NewsletterSubscriberId::generate(),
+            'first@example.com',
+            null,
+            SubscriberSource::Guest,
+            new \DateTimeImmutable('2024-01-01 10:00:00', $utc),
+        );
+        $second = NewsletterSubscriber::reconstruct(
+            NewsletterSubscriberId::generate(),
+            'second@example.com',
+            null,
+            SubscriberSource::Guest,
+            new \DateTimeImmutable('2024-01-01 10:00:01', $utc),
+        );
+
         $this->repository->save($second);
+        $this->repository->save($first);
 
         $page = $this->repository->findPage();
 

@@ -164,11 +164,33 @@ class MysqlUserRepositoryTest extends MysqlIntegrationTestCase
 
     public function testFindPageDefaultSortIsCreatedAtAscending(): void
     {
-        $first  = $this->makeUser('first@example.com');
-        $second = $this->makeUser('second@example.com');
+        // created_at is a DATETIME (second precision) — explicit, distinct timestamps avoid a
+        // tie that MySQL would break arbitrarily (UUID primary keys give no insertion-order guarantee).
+        $utc = new \DateTimeZone('UTC');
 
-        $this->repository->save($first);
+        $first = User::reconstruct(
+            UserId::generate(),
+            'First',
+            'first@example.com',
+            HashedPassword::fromPlainText('correct-horse-battery-staple'),
+            UserRole::Admin,
+            false,
+            null,
+            new \DateTimeImmutable('2024-01-01 10:00:00', $utc),
+        );
+        $second = User::reconstruct(
+            UserId::generate(),
+            'Second',
+            'second@example.com',
+            HashedPassword::fromPlainText('correct-horse-battery-staple'),
+            UserRole::Admin,
+            false,
+            null,
+            new \DateTimeImmutable('2024-01-01 10:00:01', $utc),
+        );
+
         $this->repository->save($second);
+        $this->repository->save($first);
 
         $page = $this->repository->findPage();
 
