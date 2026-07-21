@@ -14,10 +14,18 @@ use Rez\Domain\User\HashedPassword;
 use Rez\Domain\User\User;
 use Rez\Domain\User\UserCollection;
 use Rez\Domain\User\UserId;
+use Rez\Domain\User\UserRole;
 use Rez\Infrastructure\Mapper\UserRoleMapper;
 
 final class MysqlUserRepository extends MysqlRepository implements UserRepositoryInterface
 {
+    private const SORT_COLUMNS = [
+        'name'       => 'name',
+        'email'      => 'email',
+        'role'       => 'role',
+        'created_at' => 'created_at',
+    ];
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly UserRoleMapper $roleMapper,
@@ -87,6 +95,81 @@ final class MysqlUserRepository extends MysqlRepository implements UserRepositor
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         return UserCollection::fromArray(array_map($this->hydrate(...), $rows));
+    }
+
+    public function findPage(
+        ?string $search = null,
+        ?UserRole $role = null,
+        ?int $offset = null,
+        ?int $limit = null,
+        ?string $sortBy = null,
+        ?string $sortDir = null,
+    ): UserCollection {
+        [$whereSql, $params] = $this->buildPageCriteria($search, $role);
+
+        $column = $sortBy !== null
+            ? (self::SORT_COLUMNS[$sortBy] ?? throw new \InvalidArgumentException(sprintf('Unknown sort column: "%s".', $sortBy)))
+            : 'created_at';
+        $dir = $sortDir === 'desc' ? 'DESC' : 'ASC';
+
+        $sql = 'SELECT * FROM users' . $whereSql . ' ORDER BY ' . $column . ' ' . $dir;
+
+        if ($limit !== null) {
+            $sql .= ' LIMIT :limit OFFSET :offset';
+        }
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            foreach ($params as $key => $value) {
+                $stmt->bindValue($key, $value);
+            }
+            if ($limit !== null) {
+                $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+                $stmt->bindValue(':offset', $offset ?? 0, PDO::PARAM_INT);
+            }
+            $stmt->execute();
+        } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+
+        /** @var array<int, array<string, mixed>> $rows */
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return UserCollection::fromArray(array_map($this->hydrate(...), $rows));
+    }
+
+    public function countPage(?string $search = null, ?UserRole $role = null): int
+    {
+        [$whereSql, $params] = $this->buildPageCriteria($search, $role);
+
+        try {
+            $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM users' . $whereSql);
+            $stmt->execute($params);
+        } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /** @return array{0: string, 1: array<string, mixed>} */
+    private function buildPageCriteria(?string $search, ?UserRole $role): array
+    {
+        $where  = [];
+        $params = [];
+
+        if ($search !== null) {
+            $where[]           = '(name LIKE :search OR email LIKE :search)';
+            $params[':search'] = '%' . $search . '%';
+        }
+        if ($role !== null) {
+            $where[]         = 'role = :role';
+            $params[':role'] = $this->roleMapper->toString($role);
+        }
+
+        return [$where !== [] ? ' WHERE ' . implode(' AND ', $where) : '', $params];
     }
 
     public function save(User $user): void

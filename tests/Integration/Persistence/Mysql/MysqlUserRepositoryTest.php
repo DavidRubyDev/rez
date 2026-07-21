@@ -24,14 +24,14 @@ class MysqlUserRepositoryTest extends MysqlIntegrationTestCase
         $this->repository = new MysqlUserRepository($this->pdo(), new UserRoleMapper(), new NullLogger());
     }
 
-    private function makeUser(string $email = 'john@example.com'): User
+    private function makeUser(string $email = 'john@example.com', string $name = 'John Doe', UserRole $role = UserRole::Admin): User
     {
         return User::create(
             UserId::generate(),
-            'John Doe',
+            $name,
             $email,
             HashedPassword::fromPlainText('correct-horse-battery-staple'),
-            UserRole::Admin,
+            $role,
             true,
             'cus_123',
         );
@@ -105,5 +105,90 @@ class MysqlUserRepositoryTest extends MysqlIntegrationTestCase
 
         $this->expectException(UserNotFoundException::class);
         $this->repository->findById($user->id);
+    }
+
+    public function testFindPageWithNoParamsMatchesFindAll(): void
+    {
+        $this->repository->save($this->makeUser('a@example.com'));
+        $this->repository->save($this->makeUser('b@example.com'));
+
+        $page = $this->repository->findPage();
+        $all  = $this->repository->findAll();
+
+        $this->assertSame($all->count(), $page->count());
+        $this->assertSame(
+            array_map(fn ($u) => $u->id->toString(), $all->toArray()),
+            array_map(fn ($u) => $u->id->toString(), $page->toArray()),
+        );
+    }
+
+    public function testFindPageFiltersBySearchAgainstNameOrEmail(): void
+    {
+        $match   = $this->makeUser('alice@example.com', 'Alice Wonderland');
+        $noMatch = $this->makeUser('bob@example.com', 'Bob Builder');
+
+        $this->repository->save($match);
+        $this->repository->save($noMatch);
+
+        $result = $this->repository->findPage(search: 'wonderland');
+
+        $this->assertSame(1, $result->count());
+        $this->assertTrue($result->toArray()[0]->id->equals($match->id));
+    }
+
+    public function testFindPageFiltersByRole(): void
+    {
+        $admin    = $this->makeUser('admin@example.com', role: UserRole::Admin);
+        $customer = $this->makeUser('customer@example.com', role: UserRole::Customer);
+
+        $this->repository->save($admin);
+        $this->repository->save($customer);
+
+        $result = $this->repository->findPage(role: UserRole::Customer);
+
+        $this->assertSame(1, $result->count());
+        $this->assertTrue($result->toArray()[0]->id->equals($customer->id));
+    }
+
+    public function testFindPageSortsAndPaginates(): void
+    {
+        $this->repository->save($this->makeUser('a@example.com', 'Alice'));
+        $this->repository->save($this->makeUser('b@example.com', 'Bob'));
+        $this->repository->save($this->makeUser('c@example.com', 'Carol'));
+
+        $page = $this->repository->findPage(sortBy: 'name', sortDir: 'desc', offset: 1, limit: 1);
+
+        $this->assertSame(1, $page->count());
+        $this->assertSame('Bob', $page->toArray()[0]->name);
+    }
+
+    public function testFindPageDefaultSortIsCreatedAtAscending(): void
+    {
+        $first  = $this->makeUser('first@example.com');
+        $second = $this->makeUser('second@example.com');
+
+        $this->repository->save($first);
+        $this->repository->save($second);
+
+        $page = $this->repository->findPage();
+
+        $this->assertTrue($page->toArray()[0]->id->equals($first->id));
+        $this->assertTrue($page->toArray()[1]->id->equals($second->id));
+    }
+
+    public function testCountPageMatchesFilteredCount(): void
+    {
+        $this->repository->save($this->makeUser('admin@example.com', role: UserRole::Admin));
+        $this->repository->save($this->makeUser('customer@example.com', role: UserRole::Customer));
+
+        $this->assertSame(1, $this->repository->countPage(role: UserRole::Customer));
+    }
+
+    public function testFindAllIsUnaffectedByFindPageChanges(): void
+    {
+        $this->repository->save($this->makeUser('a@example.com'));
+        $this->repository->save($this->makeUser('b@example.com'));
+
+        $this->assertSame(2, $this->repository->findAll()->count());
     }
 }
