@@ -35,8 +35,16 @@
 > per-resource filtering, and sorting to all four listing use cases (Reservations, Users,
 > Newsletter Subscribers, Resources) — `findPage()`/`countPage()` on each repository, filter →
 > sort → paginate in one SQL query, `findAll()` left untouched for its other callers (e.g.
-> `BroadcastUseCase`). HTTP query-param wiring in `rez-starter` is not yet done. Platform
-> extensions (payments, credits, subscriptions) not yet built.
+> `BroadcastUseCase`). `rez-starter`'s HTTP query-param wiring for this
+> (`rez-starter-04_pagination_DONE.md`) is done too: all four list routes (`GET /api/reservations`,
+> `/api/users`, `/api/newsletter/subscribers`, `/api/resources`) parse `offset`/`limit`/`sort`/`dir`
+> + their per-resource filter and return `{"items": [...], "total": N}` instead of a bare array.
+> `rez-admin` (`14_pagination-filtering-sorting.md`) consumes this end-to-end too: Reservations,
+> Users, Subscribers, and Resources pages moved from fetch-everything-then-filter/sort
+> client-side to server-driven pagination/filtering/sorting, via a `Page<T>` API type,
+> `usePagination`/`useDebouncedValue` hooks, and a shared `Pagination` component (rendered above
+> the list, with a "Per page" size selector) — closing out the pagination feature across all
+> three repos. Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -543,7 +551,7 @@ All routes prefixed `/api/`.
 #### Always available — public (no auth)
 
 ```
-GET    /api/resources                                          ← query params not yet wired, see 13_rez-pagination.md note below
+GET    /api/resources                                         ← offset/limit/sort/dir, see note below
 GET    /api/resources/{id}
 GET    /api/resources/{id}/availability/rules
 GET    /api/resources/{id}/availability/overrides
@@ -600,7 +608,7 @@ DELETE /api/resources/{id}/availability/rules/{day_of_week}
 PUT    /api/resources/{id}/availability/overrides/{date}
 DELETE /api/resources/{id}/availability/overrides/{date}
 POST   /api/reservations                                      ← create; today only exercised by rez-admin's manual booking modal
-GET    /api/reservations                                       ← query params not yet wired, see 13_rez-pagination.md note below
+GET    /api/reservations                                      ← offset/limit/sort/dir + from/to/resource_id/status/search, see note below
 GET    /api/reservations/{id}
 POST   /api/reservations/{id}/confirm
 POST   /api/reservations/{id}/no-show
@@ -608,7 +616,7 @@ POST   /api/reservations/{id}/cancel                          ← admin cancella
 POST   /api/reservations/{id}/send-created-email              ← manual resend; bypasses ReservationSettings, unswallowed mailer failures
 POST   /api/reservations/{id}/send-confirmed-email             ← same
 POST   /api/reservations/{id}/send-cancelled-email             ← same
-GET    /api/newsletter/subscribers                            ← query params not yet wired, see 13_rez-pagination.md note below
+GET    /api/newsletter/subscribers                           ← offset/limit/sort/dir + search/source, see note below
 POST   /api/admin/newsletter/subscribers                     ← admin-add subscriber (sets Admin source)
 POST   /api/newsletter/broadcast                             ← body: { resource_name, resource_date }
 GET    /api/admin/reservation-settings
@@ -622,19 +630,21 @@ GET    /api/admin/email-templates/{id}
 PATCH  /api/admin/email-templates/{id}
 DELETE /api/admin/email-templates/{id}
 POST   /api/admin/email-templates/{id}/send
-GET    /api/users                                             ← query params not yet wired, see 13_rez-pagination.md note below
+GET    /api/users                                             ← offset/limit/sort/dir + search/role, see note below
 PATCH  /api/users/{id}                                        ← role + newsletter_opt_in only, never name/email
 POST   /api/admin/users                                      ← AdminCreateUserUseCase; no password field, forces a reset link via RequestPasswordResetUseCase
 GET    /api/admin/config                                     ❌ still not wired — blocked on GetAdminConfigUseCase (rez-admin-config)
 ```
 
-`13_rez-pagination.md` added `offset`/`limit`/`sortBy`/`sortDir` (+ per-module filters — see the
-`ListReservationsUseCase`/`ListUsersUseCase`/`ListSubscribersUseCase`/`ListResourcesUseCase` rows
-in §3.5) to all four list use cases and their repositories entirely within this repo. None of the
-four list routes above (`GET /api/reservations`, `/api/resources`, `/api/users`,
-`/api/newsletter/subscribers`) parse these as query params yet — that HTTP-layer wiring is
-`rez-starter`'s job, not done here, same "library builds the capability, client app exposes it"
-split as every other feature in this repo.
+`rez-starter-04_pagination_DONE.md` wired `13_rez-pagination.md`'s library-side capability (see §3.5) onto
+all four list routes above (`GET /api/reservations`, `/api/resources`, `/api/users`,
+`/api/newsletter/subscribers`): each now has a `RequestFactory` parsing `offset`/`limit`/`sort`/`dir`
+plus its per-resource filter (`status`/`search` on reservations, `role`/`search` on users,
+`source`/`search` on subscribers, no filters on resources beyond pagination/sort) and each now
+returns `{"items": [...], "total": N}` instead of a bare array — a breaking response-shape change
+for any existing caller. Range/allowlist validation stays entirely in `rez`'s `ListParamsValidator`;
+`rez-starter` only does type coercion (`App\Http\Scalar`) and maps the resulting
+`\InvalidArgumentException` to 422 like every other domain exception.
 
 #### Profile 2+ (payments)
 ```
@@ -1054,7 +1064,10 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   Users is always shown (core, never gated); a future Payments/Subscriptions entry is what would
   need the real feature-gating once `/api/admin/config` exists
 - ✅ Resources page — list, create, edit, delete; availability rules panel + rule modal; overrides panel + override modal; sorting (type/name/capacity/attributes)
-- ✅ Reservations page — list with date-range filter, resource name lookup, search + per-field filters (resource, status, name, email), sorting (date/status/name/email); detail modal with confirm/no-show/cancel actions; manual booking modal
+- ✅ Reservations page — list with date-range filter, resource name lookup, server-side search
+  (party name/email/phone) + resource/status filters, server-side sorting (date/status/party
+  name/created — resource is display-only, not sortable server-side), server-driven pagination;
+  detail modal with confirm/no-show/cancel actions; manual booking modal
 - ✅ Newsletter page — tabbed layout: broadcast panel (resource selector, date/time, send, result); subscribers panel (list with search + sort by email/name/source/opted-in, inline add with `Admin` source, delete with ConfirmDialog); **custom emails tab** (see below)
 - ✅ Custom emails tab — `EmailTemplateEditorModal` (subject + `RichTextEditor`, a TipTap
   editor: bold/italic/strikethrough/underline, headings, alignment, font family/size, color,
@@ -1086,8 +1099,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   24-hour display no longer works in current Chrome, which ignores it and follows the OS
   locale unconditionally — the custom control sidesteps the problem entirely, no locale
   dependency at all
-- ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, ExportModal, Modal, PageHeader, StatusBadge, SlotPicker, EditableListPanel (now also takes an optional `renderRowExtra` slot for per-row actions beyond edit/delete), Button, TextInput, TimeInput, Select, FormField, FormActions, RowActions, SearchInput, EmptyTableRow, Toggle, RichTextEditor
-- ✅ Shared hooks: useAsyncData, useConfig, useSortable, useConfirmDelete, useSyncedList
+- ✅ Shared UI: SortHeader, ConfirmDialog, DateRangeFilter, ErrorBanner, ExportModal, Modal, PageHeader, Pagination, StatusBadge, SlotPicker, EditableListPanel (now also takes an optional `renderRowExtra` slot for per-row actions beyond edit/delete), Button, TextInput, TimeInput, Select, FormField, FormActions, RowActions, SearchInput, EmptyTableRow, Toggle, RichTextEditor
+- ✅ Shared hooks: useAsyncData, useConfig, useSortable, useConfirmDelete, useSyncedList, useDebouncedValue, usePagination
 - ✅ Component/hook dedup pass — merged the near-duplicate AvailabilityRulesPanel/AvailabilityOverridesPanel into EditableListPanel, consolidated day-of-week data into lib/days.ts, removed duplicated UTC time-formatting and empty-state table markup
 - ✅ API client modules: resources, reservations, availability, newsletter, config, reservationSettings, mailerSettings, emailTemplates, auth, users
 - ✅ Reservation detail modal — resend-lifecycle-email buttons (`send-{created,confirmed,cancelled}-email`), one shown at a time keyed off status
@@ -1098,8 +1111,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   `clearAuth()` uniformly on any `401`. `router/RequireAuth.tsx` wraps every route except
   `/login`; clearing auth (401 or explicit logout) alone is enough to trigger the redirect on next
   render, no manual `navigate()` needed outside `LoginPage` itself.
-- ✅ Users page (`15_users-page.md`) — `UsersPage` (list, client-side search/sort — `GET
-  /api/users` has no server-side pagination/search), `AddUserModal` (admin invite via `POST
+- ✅ Users page (`15_users-page.md`) — `UsersPage` (list, server-side search/sort/pagination —
+  see `14_pagination-filtering-sorting.md` below), `AddUserModal` (admin invite via `POST
   /api/admin/users`, no password field since the backend always force-emails a reset link),
   `EditUserModal` (admin editing another user — name/email shown read-only, only
   `role`/`newsletter_opt_in` are actually editable, matching `PATCH /api/users/{id}`'s real
@@ -1113,3 +1126,18 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   admin access" message instead of `setAuth`/`navigate`-ing into a session that would just hit a
   wall of `403`s on every admin-only page (`client.ts` only clears auth on `401`, not `403`). UX
   check only — `rez-starter`'s `AdminMiddleware` remains the actual security boundary.
+- ✅ Server-driven pagination, filtering, sorting (`14_pagination-filtering-sorting.md`) —
+  Reservations, Users, Subscribers, and Resources pages moved from fetch-everything-then-filter/
+  sort client-side to server-driven `offset`/`limit`/`sort`/`dir` (+ per-resource filters), via a
+  new `Page<T>` API type, a `usePagination`/`useDebouncedValue` hook pair, and a shared
+  `Pagination` component. Mutating actions on these four pages now call `reload()` instead of
+  patching a local array, so a row correctly drops off the current page when it no longer matches
+  the active filter. Reservations folded its separate name/email filters into one server-side
+  `search` box and dropped resource-name sorting (not in the API's sortable set); Users gained a
+  new role filter. `AffectedReservationsGate`/`AvailabilityRuleModal`/`AvailabilityOverrideModal`/
+  `BroadcastPanel`/`ManualBookingModal`/`SendEmailTemplateModal` and the Users/Subscribers
+  `ExportModal` callbacks still fetch the full collection (no `offset`/`limit`), relying on "no
+  limit param → everything" as the documented backward-compatible default. Verified end-to-end
+  against `rez-starter-04_pagination_DONE.md`. Follow-up UX tweak: `Pagination` moved above the
+  table/list on all four pages (was below), and gained a "Per page" size selector (10/20/50/100)
+  wired to `usePagination`'s `setLimit` + `reset()`.
