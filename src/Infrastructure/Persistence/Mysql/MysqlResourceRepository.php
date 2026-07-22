@@ -133,23 +133,25 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     {
         try {
             $stmt = $this->pdo->prepare('
-                INSERT INTO resources (id, type, name, capacity, attributes, active)
-                VALUES (:id, :type, :name, :capacity, :attributes, :active)
+                INSERT INTO resources (id, type, name, capacity, attributes, active, default_duration_minutes)
+                VALUES (:id, :type, :name, :capacity, :attributes, :active, :default_duration_minutes)
                 ON DUPLICATE KEY UPDATE
-                    type       = VALUES(type),
-                    name       = VALUES(name),
-                    capacity   = VALUES(capacity),
-                    attributes = VALUES(attributes),
-                    active     = VALUES(active)
+                    type                      = VALUES(type),
+                    name                      = VALUES(name),
+                    capacity                  = VALUES(capacity),
+                    attributes                = VALUES(attributes),
+                    active                    = VALUES(active),
+                    default_duration_minutes  = VALUES(default_duration_minutes)
             ');
 
             $stmt->execute([
-                ':id'         => $resource->id->toString(),
-                ':type'       => $this->typeMapper->toString($resource->type),
-                ':name'       => $resource->name,
-                ':capacity'   => $resource->capacity,
-                ':attributes' => json_encode($resource->attributes),
-                ':active'     => $resource->active ? 1 : 0,
+                ':id'                        => $resource->id->toString(),
+                ':type'                      => $this->typeMapper->toString($resource->type),
+                ':name'                      => $resource->name,
+                ':capacity'                  => $resource->capacity,
+                ':attributes'                => json_encode($resource->attributes),
+                ':active'                    => $resource->active ? 1 : 0,
+                ':default_duration_minutes'  => $resource->defaultDurationMinutes,
             ]);
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
@@ -170,6 +172,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
             $this->int($row['capacity']),
             $attributes,
             $this->bool($row['active']),
+            $this->nullInt($row['default_duration_minutes']),
         );
     }
 }

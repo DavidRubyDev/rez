@@ -52,12 +52,13 @@ abstract class MysqlIntegrationTestCase extends TestCase
     {
         $pdo->exec('
             CREATE TABLE IF NOT EXISTS resources (
-                id          CHAR(36)     NOT NULL PRIMARY KEY,
-                type        VARCHAR(100) NOT NULL,
-                name        VARCHAR(255) NOT NULL,
-                capacity    INT          NOT NULL,
-                attributes  JSON         NOT NULL,
-                active      TINYINT(1)   NOT NULL DEFAULT 1
+                id                        CHAR(36)     NOT NULL PRIMARY KEY,
+                type                      VARCHAR(100) NOT NULL,
+                name                      VARCHAR(255) NOT NULL,
+                capacity                  INT          NOT NULL,
+                attributes                JSON         NOT NULL,
+                active                    TINYINT(1)   NOT NULL DEFAULT 1,
+                default_duration_minutes  INT          NULL
             )
         ');
 
