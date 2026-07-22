@@ -29,6 +29,7 @@ final class CreateResourceUseCase implements CreateResourceUseCaseInterface
             $request->name,
             $request->capacity,
             $request->attributes,
+            defaultDurationMinutes: $request->defaultDurationMinutes,
         );
 
         try {

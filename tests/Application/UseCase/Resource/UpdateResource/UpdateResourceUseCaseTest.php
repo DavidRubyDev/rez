@@ -160,4 +160,36 @@ class UpdateResourceUseCaseTest extends TestCase
 
         $this->assertFalse($response->resource->active);
     }
+
+    public function testPreservesDefaultDurationMinutesWhenNotProvided(): void
+    {
+        $classResource = new Resource(
+            $this->resourceId,
+            ResourceType::fromString('class'),
+            'Pilates',
+            20,
+            defaultDurationMinutes: 45,
+        );
+        $this->repository->method('findById')->willReturn($classResource);
+
+        $response = $this->useCase->execute(new UpdateResourceRequest($this->resourceId, 'Pilates Advanced', null, null));
+
+        $this->assertSame(45, $response->resource->defaultDurationMinutes);
+    }
+
+    public function testUpdatesDefaultDurationMinutesWhenProvided(): void
+    {
+        $classResource = new Resource(
+            $this->resourceId,
+            ResourceType::fromString('class'),
+            'Pilates',
+            20,
+            defaultDurationMinutes: 45,
+        );
+        $this->repository->method('findById')->willReturn($classResource);
+
+        $response = $this->useCase->execute(new UpdateResourceRequest($this->resourceId, null, null, null, defaultDurationMinutes: 30));
+
+        $this->assertSame(30, $response->resource->defaultDurationMinutes);
+    }
 }
