@@ -2087,4 +2087,17 @@ per this scaffold's explicit instruction).
 management UI, and `rez-components`' class-booking flow are out of scope for this repo — see the
 matching `21_rez-sessions.md` instruction docs in those repos.
 
-754 unit tests passing (94 skipped — all integration), PHPStan max clean, CS clean.
+**Follow-up fix (same branch):** `Resource.defaultDurationMinutes` was added to the domain and
+`MysqlResourceRepository` in this scaffold, but was never wired into the two use cases that
+actually construct a `Resource` — `CreateResourceRequest`/`CreateResourceUseCase` had no field to
+set it at all (every resource created via the use case got `null`, permanently), and
+`UpdateResourceUseCase` silently wiped any existing value back to `null` on every update, since it
+never carried `$existing->defaultDurationMinutes` forward into the reconstructed `Resource` — the
+same class of bug `testPreservesActiveFlagAcrossUpdate` already guards against for `active`. Fixed
+both: `CreateResourceRequest` gained `?int $defaultDurationMinutes = null`, passed straight
+through; `UpdateResourceRequest` gained the same field with PATCH semantics
+(`$request->defaultDurationMinutes ?? $existing->defaultDurationMinutes`, same pattern as
+`capacity`/`name` — null means "not provided", the field can be set but not yet explicitly cleared
+back to null through this use case).
+
+758 unit tests passing (94 skipped — all integration), PHPStan max clean, CS clean.
