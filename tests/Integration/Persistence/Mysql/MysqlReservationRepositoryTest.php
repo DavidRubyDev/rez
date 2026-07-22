@@ -15,6 +15,7 @@ use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Session\SessionId;
 use Rez\Infrastructure\Mapper\ReservationStatusMapper;
 use Rez\Infrastructure\Persistence\Mysql\MysqlReservationRepository;
 
@@ -340,5 +341,63 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $this->repository->save($this->makeReservation());
 
         $this->assertSame(2, $this->repository->findAll()->count());
+    }
+
+    public function testSessionIdIsPersistedAndHydrated(): void
+    {
+        $sessionId   = SessionId::generate();
+        $reservation = Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            new TimeSlot(
+                new DateTimeImmutable('2024-01-15 10:00:00'),
+                new DateTimeImmutable('2024-01-15 11:00:00'),
+            ),
+            $this->party,
+            $sessionId,
+        );
+
+        $this->repository->save($reservation);
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertNotNull($found->sessionId);
+        $this->assertTrue($sessionId->equals($found->sessionId));
+    }
+
+    public function testNullSessionIdRoundtrips(): void
+    {
+        $reservation = $this->makeReservation();
+        $this->repository->save($reservation);
+
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertNull($found->sessionId);
+    }
+
+    public function testFindBySessionIdReturnsOnlyMatchingReservations(): void
+    {
+        $sessionId = SessionId::generate();
+        $matching  = Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            new TimeSlot(
+                new DateTimeImmutable('2024-01-15 10:00:00'),
+                new DateTimeImmutable('2024-01-15 11:00:00'),
+            ),
+            $this->party,
+            $sessionId,
+        );
+        $unrelated = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-16 10:00:00'),
+            new DateTimeImmutable('2024-01-16 11:00:00'),
+        ));
+
+        $this->repository->save($matching);
+        $this->repository->save($unrelated);
+
+        $result = $this->repository->findBySessionId($sessionId);
+
+        $this->assertSame(1, $result->count());
+        $this->assertTrue($result->toArray()[0]->id->equals($matching->id));
     }
 }

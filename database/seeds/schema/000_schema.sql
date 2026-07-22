@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS reservations (
     party_phone  VARCHAR(50)  NULL,
     external_ref VARCHAR(255) NULL,
     created_at   DATETIME     NOT NULL,
+    -- No FK on purpose — same reasoning as wallet_transactions.reservation_id: don't couple
+    -- deletion behavior across tables that don't need it.
+    session_id   CHAR(36)     NULL,
     PRIMARY KEY (id)
 );
 

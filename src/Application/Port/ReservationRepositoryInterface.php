@@ -11,6 +11,7 @@ use Rez\Domain\Reservation\ReservationId;
 use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
+use Rez\Domain\Session\SessionId;
 
 interface ReservationRepositoryInterface
 {
@@ -22,6 +23,9 @@ interface ReservationRepositoryInterface
 
     /** @throws \Rez\Application\Exception\DatabaseException */
     public function findByTimeSlotAndResource(TimeSlot $slot, ResourceId $resourceId): ReservationCollection;
+
+    /** @throws \Rez\Application\Exception\DatabaseException */
+    public function findBySessionId(SessionId $sessionId): ReservationCollection;
 
     /** @throws \Rez\Application\Exception\DatabaseException */
     public function findAll(?DateTimeImmutable $from = null, ?DateTimeImmutable $to = null): ReservationCollection;

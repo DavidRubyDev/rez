@@ -7,6 +7,7 @@ namespace Rez\Domain\Reservation;
 use DateTimeImmutable;
 use Rez\Domain\Exception\InvalidReservationStateException;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Session\SessionId;
 use Rez\Domain\Shared\Utc;
 
 final class Reservation
@@ -18,6 +19,7 @@ final class Reservation
         public readonly Party $party,
         public readonly ReservationStatus $status,
         public readonly DateTimeImmutable $createdAt,
+        public readonly ?SessionId $sessionId = null,
     ) {
     }
 
@@ -29,12 +31,13 @@ final class Reservation
         ResourceIdCollection $resourceIds,
         TimeSlot $slot,
         Party $party,
+        ?SessionId $sessionId = null,
     ): self {
         if ($resourceIds->isEmpty()) {
             throw new \InvalidArgumentException('A reservation must have at least one resource.');
         }
 
-        return new self($id, $resourceIds, $slot, $party, ReservationStatus::Pending, Utc::now());
+        return new self($id, $resourceIds, $slot, $party, ReservationStatus::Pending, Utc::now(), $sessionId);
     }
 
     public static function reconstruct(
@@ -44,8 +47,9 @@ final class Reservation
         Party $party,
         ReservationStatus $status,
         DateTimeImmutable $createdAt,
+        ?SessionId $sessionId = null,
     ): self {
-        return new self($id, $resourceIds, $slot, $party, $status, $createdAt);
+        return new self($id, $resourceIds, $slot, $party, $status, $createdAt, $sessionId);
     }
 
     /**
@@ -57,7 +61,7 @@ final class Reservation
             throw new InvalidReservationStateException('Reservation is already cancelled.');
         }
 
-        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Cancelled, $this->createdAt);
+        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Cancelled, $this->createdAt, $this->sessionId);
     }
 
     /**
@@ -69,7 +73,7 @@ final class Reservation
             throw new InvalidReservationStateException('Only a pending reservation can be confirmed.');
         }
 
-        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Confirmed, $this->createdAt);
+        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Confirmed, $this->createdAt, $this->sessionId);
     }
 
     /**
@@ -81,6 +85,6 @@ final class Reservation
             throw new InvalidReservationStateException('Only a confirmed reservation can be marked as no-show.');
         }
 
-        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::NoShow, $this->createdAt);
+        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::NoShow, $this->createdAt, $this->sessionId);
     }
 }
