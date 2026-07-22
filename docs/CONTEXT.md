@@ -2015,3 +2015,76 @@ branch/PR per step. HTTP query-param wiring in `rez-starter` is out of scope for
 done here — see the note added to `docs/REZ-CONTEXT.md` §4's API surface.
 
 678 unit tests passing (84 skipped — all integration), PHPStan max clean, CS clean.
+
+---
+
+### 90. `Session` domain — fixed-length class occurrences (`14_rez-sessions.md` — scaffold complete)
+
+Adds `Session`, a discrete admin-created occurrence with a fixed start time and duration, as the
+unit customers book against for class-type resources (Pilates, cycling, massage). Closes a real
+gap: `AvailabilityService::isSlotAvailable()` only checked that a rule/override allowed the date
+and nothing conflicted — it never verified the submitted `TimeSlot` matched anything specific, so
+a client could submit an arbitrary slot to `POST /api/reservations` for a class resource.
+Continuous resources (tables) are entirely unaffected — `AvailabilityRule`/`Override` keep doing
+their job; `Session` is a parallel model, not a replacement.
+
+`src/Domain/Session/Session.php` — immutable entity, static factory only (matches
+`Reservation`/`NewsletterSubscriber`). `create()` sets `status = SessionStatus::Scheduled`, throws
+`\InvalidArgumentException` for `durationMinutes <= 0` or `capacity <= 0`. `cancel()` throws
+`InvalidSessionStateException` if already `Cancelled` (mirrors `Reservation::cancel()`).
+`toTimeSlot()` — `new TimeSlot($startTime, $startTime->modify("+{$durationMinutes} minutes"))` —
+the one place session duration becomes a `TimeSlot`. `SessionId` (`UuidV4Id` trait),
+`SessionStatus` (pure enum: `Scheduled`, `Cancelled`, mapped by `SessionStatusMapper`),
+`SessionCollection` (same shape as `ResourceCollection`). `SessionNotFoundException` and
+`InvalidSessionStateException` added under `src/Domain/Exception/`.
+
+`Resource` gained `?int $defaultDurationMinutes = null` (nullable — table-type resources never set
+it). `Reservation` gained `?SessionId $sessionId = null` on `create()`/`reconstruct()` and every
+state-transition method — same boundary `Party::externalRef` uses, the library stores the ID but
+never interprets it. `ReservationRepositoryInterface::findBySessionId(SessionId):
+ReservationCollection` added, needed by `CancelSessionUseCase`'s cascade-cancel.
+
+`src/Application/Port/SessionRepositoryInterface.php` — `findById()` (throws
+`SessionNotFoundException`), `findForResource(resourceId, from?, to?)`, `save()`.
+`MysqlSessionRepository` — same `PDOException` → `DatabaseException` + `logger->critical()`
+wrapping as every other MySQL repository. `database/seeds/schema/005_sessions.sql` — new `sessions`
+table, FK to `resources` with **no** `ON DELETE CASCADE` (resources are soft-deleted, invariant 13,
+so it never fires — kept explicit rather than silent about why). `resources.default_duration_minutes`
+and `reservations.session_id` (no FK, same reasoning as `wallet_transactions.reservation_id`) added
+directly to `000_schema.sql`, matching how `active` and `external_ref` were added in earlier steps.
+`MysqlRepository` gained a `nullInt()` type-narrowing helper alongside `str()`/`int()`/`nullStr()`/`bool()`.
+
+Four new use cases under `src/Application/UseCase/Session/`: **CreateSessionUseCase** (parses
+`startTime` as `Y-m-d H:i`, same round-trip validation `SaveAvailabilityRuleUseCase` uses for its
+date bounds; defaults `durationMinutes` from `Resource::defaultDurationMinutes` and `capacity` from
+`Resource::capacity` when the request omits them, throws `\InvalidArgumentException` if duration is
+missing from both places). **CancelSessionUseCase** (cancels the session, then calls
+`findBySessionId()` and reuses `BulkCancelReservationsUseCase` to bulk-cancel every reservation on
+it — deliberately not reimplementing its skip-on-invalid-state loop). **GetSessionUseCase** /
+**ListSessionsUseCase** — trivial, matching `GetResourceUseCase` and `GetAvailabilityUseCase`'s
+"validate resource exists, then delegate entirely" shape respectively.
+
+**`CreateReservationUseCase`** — `CreateReservationRequest` gained `?string $sessionId = null`.
+When present, `resolveSessionSlot()` takes over entirely: loads the `Session`
+(`SessionNotFoundException` propagates), rejects non-`Scheduled` sessions
+(`InvalidSessionStateException`), derives `TimeSlot` via `Session::toTimeSlot()` and `resourceId`
+from the session — **any resourceId/timeslot the request body also carries is ignored**, the
+session is the sole source of truth. Capacity check sums `Party::size` across
+`findBySessionId()`'s non-cancelled results and throws `ConflictException` if adding the incoming
+party would exceed `session.capacity` — same arithmetic as the existing date+resource capacity
+check, just keyed by session. The `AvailabilityService` call is skipped entirely on this path —
+rules/overrides don't apply to session bookings, the session's existence and status *are* the
+availability check. Regression-tested explicitly: a session-path request carrying a different
+body-supplied `resourceId`/timeslot must still book against the session's own resource and slot.
+
+`config/container.php` — `SessionRepositoryInterface` → `MysqlSessionRepository` and all four new
+use case interfaces registered directly (unlike `Resource`/`Reservation`/`Availability`'s
+repository interfaces, which are left for the client app to bind — this one's binding is in-library
+per this scaffold's explicit instruction).
+
+**Scaffold complete.** All `14_rez-sessions.md` checklist items done in one branch
+(`feature/rez-sessions`) per explicit instruction. `rez-starter` routes, `rez-admin` session
+management UI, and `rez-components`' class-booking flow are out of scope for this repo — see the
+matching `21_rez-sessions.md` instruction docs in those repos.
+
+754 unit tests passing (94 skipped — all integration), PHPStan max clean, CS clean.
