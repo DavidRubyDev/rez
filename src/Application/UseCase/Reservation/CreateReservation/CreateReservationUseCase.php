@@ -9,14 +9,21 @@ use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ReservationSettingsRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
+use Rez\Application\Port\SessionRepositoryInterface;
 use Rez\Application\Service\AvailabilityServiceInterface;
 use Rez\Application\Service\ReservationEmailService;
 use Rez\Domain\Exception\ConflictException;
+use Rez\Domain\Exception\InvalidSessionStateException;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationId;
+use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\Resource;
+use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Session\Session;
+use Rez\Domain\Session\SessionId;
+use Rez\Domain\Session\SessionStatus;
 use Rez\Domain\Shared\CancellationToken;
 
 final class CreateReservationUseCase implements CreateReservationUseCaseInterface
@@ -28,38 +35,49 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
         private readonly ReservationSettingsRepositoryInterface $reservationSettingsRepository,
         private readonly ReservationEmailService $emailService,
         private readonly UsersConfig $usersConfig,
+        private readonly SessionRepositoryInterface $sessionRepository,
     ) {
     }
 
     /**
      * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     * @throws \Rez\Domain\Exception\SessionNotFoundException
      * @throws \Rez\Domain\Exception\InvalidTimeSlotException
+     * @throws InvalidSessionStateException
      * @throws ConflictException
      * @throws DatabaseException
      */
     public function execute(CreateReservationRequest $request): CreateReservationResponse
     {
-        $resources = [];
+        if ($request->sessionId !== null) {
+            [$slot, $resourceIds, $sessionId] = $this->resolveSessionSlot($request);
+        } else {
+            $resources = [];
 
-        foreach ($request->resourceIds as $resourceId) {
-            try {
-                $resources[] = $this->resourceRepository->findById($resourceId);
-            } catch (DatabaseException $e) {
-                throw new DatabaseException('Failed to load resource.', 0, $e);
+            foreach ($request->resourceIds as $resourceId) {
+                try {
+                    $resources[] = $this->resourceRepository->findById($resourceId);
+                } catch (DatabaseException $e) {
+                    throw new DatabaseException('Failed to load resource.', 0, $e);
+                }
             }
-        }
 
-        $slot = new TimeSlot($request->start, $request->end);
+            $slot = new TimeSlot($request->start, $request->end);
 
-        foreach ($resources as $resource) {
-            $this->assertAvailable($slot, $resource, $request->party->size);
+            foreach ($resources as $resource) {
+                $this->assertAvailable($slot, $resource, $request->party->size);
+            }
+
+            $resourceIds = $request->resourceIds;
+            $sessionId   = null;
         }
 
         $reservation = Reservation::create(
             ReservationId::generate(),
-            ResourceIdCollection::fromArray($request->resourceIds),
+            ResourceIdCollection::fromArray($resourceIds),
             $slot,
             $request->party,
+            $sessionId,
         );
 
         try {
@@ -87,6 +105,63 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
         }
 
         return new CreateReservationResponse($reservation);
+    }
+
+    /**
+     * @return array{0: TimeSlot, 1: ResourceId[], 2: SessionId}
+     * @throws \Rez\Domain\Exception\SessionNotFoundException
+     * @throws \Rez\Domain\Exception\ResourceNotFoundException
+     * @throws InvalidSessionStateException
+     * @throws ConflictException
+     * @throws DatabaseException
+     */
+    private function resolveSessionSlot(CreateReservationRequest $request): array
+    {
+        /** @var string $sessionIdValue */
+        $sessionIdValue = $request->sessionId;
+
+        try {
+            $session = $this->sessionRepository->findById(SessionId::fromString($sessionIdValue));
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load session.', 0, $e);
+        }
+
+        if ($session->status !== SessionStatus::Scheduled) {
+            throw new InvalidSessionStateException('Only a scheduled session can accept new reservations.');
+        }
+
+        try {
+            $resource = $this->resourceRepository->findById($session->resourceId);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load resource.', 0, $e);
+        }
+
+        $slot = $session->toTimeSlot();
+
+        $this->assertSessionHasCapacity($session, $slot, $resource, $request->party->size);
+
+        return [$slot, [$session->resourceId], $session->id];
+    }
+
+    /** @throws ConflictException */
+    private function assertSessionHasCapacity(Session $session, TimeSlot $slot, Resource $resource, int $incomingPartySize): void
+    {
+        try {
+            $existingReservations = $this->reservationRepository->findBySessionId($session->id);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to load reservations.', 0, $e);
+        }
+
+        $bookedSize = 0;
+        foreach ($existingReservations->toArray() as $reservation) {
+            if ($reservation->status !== ReservationStatus::Cancelled) {
+                $bookedSize += $reservation->party->size;
+            }
+        }
+
+        if ($bookedSize + $incomingPartySize > $session->capacity) {
+            throw new ConflictException($slot, $resource);
+        }
     }
 
     private function assertAvailable(TimeSlot $slot, Resource $resource, int $partySize): void

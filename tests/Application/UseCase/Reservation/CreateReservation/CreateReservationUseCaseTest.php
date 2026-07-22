@@ -14,20 +14,28 @@ use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\ReservationRepositoryInterface;
 use Rez\Application\Port\ReservationSettingsRepositoryInterface;
 use Rez\Application\Port\ResourceRepositoryInterface;
+use Rez\Application\Port\SessionRepositoryInterface;
 use Rez\Application\Service\AvailabilityServiceInterface;
 use Rez\Application\Service\ReservationEmailService;
 use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationRequest;
 use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationUseCase;
 use Rez\Domain\Exception\ConflictException;
+use Rez\Domain\Exception\InvalidSessionStateException;
 use Rez\Domain\Exception\ResourceNotFoundException;
+use Rez\Domain\Exception\SessionNotFoundException;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
+use Rez\Domain\Reservation\ReservationCollection;
+use Rez\Domain\Reservation\ReservationId;
 use Rez\Domain\Reservation\ReservationSettings;
 use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
+use Rez\Domain\Resource\ResourceIdCollection;
 use Rez\Domain\Resource\ResourceType;
+use Rez\Domain\Session\Session;
+use Rez\Domain\Session\SessionId;
 use Rez\Domain\Shared\CancellationToken;
 
 class CreateReservationUseCaseTest extends TestCase
@@ -36,6 +44,7 @@ class CreateReservationUseCaseTest extends TestCase
     private ResourceRepositoryInterface&MockObject $resourceRepository;
     private AvailabilityServiceInterface&MockObject $availabilityService;
     private ReservationSettingsRepositoryInterface&MockObject $reservationSettingsRepository;
+    private SessionRepositoryInterface&MockObject $sessionRepository;
     private MailerInterface&MockObject $mailer;
     private ReservationEmailService $emailService;
     private UsersConfig $usersConfig;
@@ -53,6 +62,7 @@ class CreateReservationUseCaseTest extends TestCase
         $this->reservationSettingsRepository
             ->method('get')
             ->willReturn(new ReservationSettings(false, true, true, true));
+        $this->sessionRepository = $this->createMock(SessionRepositoryInterface::class);
         $this->mailer       = $this->createMock(MailerInterface::class);
         $this->emailService = new ReservationEmailService($this->mailer, new NullLogger());
         $this->usersConfig = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
@@ -73,6 +83,7 @@ class CreateReservationUseCaseTest extends TestCase
             $reservationSettingsRepository,
             $this->emailService,
             $this->usersConfig,
+            $this->sessionRepository,
         );
     }
 
@@ -333,5 +344,120 @@ class CreateReservationUseCaseTest extends TestCase
 
         $this->assertInstanceOf(CancellationToken::class, $capturedToken);
         $this->assertTrue($capturedToken->verify($response->reservation->id, $this->usersConfig->cancellationSecret));
+    }
+
+    // --- session path ---
+
+    private function makeSession(int $capacity = 4): Session
+    {
+        return Session::create(
+            SessionId::generate(),
+            $this->resourceId,
+            new DateTimeImmutable('2024-06-03 09:00:00'),
+            60,
+            $capacity,
+        );
+    }
+
+    private function sessionRequest(SessionId $sessionId, ?ResourceId $bodyResourceId = null): CreateReservationRequest
+    {
+        return new CreateReservationRequest(
+            [$bodyResourceId ?? ResourceId::generate()],
+            new DateTimeImmutable('1999-01-01 00:00:00'),
+            new DateTimeImmutable('1999-01-01 01:00:00'),
+            $this->party,
+            $sessionId->toString(),
+        );
+    }
+
+    public function testSessionPathIgnoresBodySuppliedResourceIdAndTimeSlot(): void
+    {
+        $session = $this->makeSession();
+        $this->sessionRepository->method('findById')->willReturn($session);
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->reservationRepository->method('findBySessionId')->willReturn(ReservationCollection::empty());
+
+        $bodyResourceId = ResourceId::generate();
+
+        $response = $this->useCase->execute($this->sessionRequest($session->id, $bodyResourceId));
+
+        $this->assertTrue($response->reservation->resourceIds->contains($this->resourceId));
+        $this->assertFalse($response->reservation->resourceIds->contains($bodyResourceId));
+        $this->assertTrue($session->toTimeSlot()->equals($response->reservation->slot));
+    }
+
+    public function testSessionPathHappyCaseSavesReservationWithSessionId(): void
+    {
+        $session = $this->makeSession();
+        $this->sessionRepository->method('findById')->willReturn($session);
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->reservationRepository->method('findBySessionId')->willReturn(ReservationCollection::empty());
+
+        $this->reservationRepository->expects($this->once())->method('save');
+
+        $response = $this->useCase->execute($this->sessionRequest($session->id));
+
+        $this->assertNotNull($response->reservation->sessionId);
+        $this->assertTrue($session->id->equals($response->reservation->sessionId));
+    }
+
+    public function testSessionNotFoundPropagates(): void
+    {
+        $this->sessionRepository->method('findById')->willThrowException(new SessionNotFoundException());
+
+        $this->expectException(SessionNotFoundException::class);
+
+        $this->useCase->execute($this->sessionRequest(SessionId::generate()));
+    }
+
+    public function testCancelledSessionThrowsInvalidSessionStateException(): void
+    {
+        $session = $this->makeSession()->cancel();
+        $this->sessionRepository->method('findById')->willReturn($session);
+
+        $this->expectException(InvalidSessionStateException::class);
+
+        $this->useCase->execute($this->sessionRequest($session->id));
+    }
+
+    public function testSessionCapacityExceededThrowsConflictException(): void
+    {
+        $session = $this->makeSession(capacity: 2);
+        $this->sessionRepository->method('findById')->willReturn($session);
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+
+        $existing = Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            $session->toTimeSlot(),
+            new Party('Existing Guest', 'existing@example.com', 1, null),
+            $session->id,
+        );
+        $this->reservationRepository->method('findBySessionId')->willReturn(ReservationCollection::fromArray([$existing]));
+
+        $this->expectException(ConflictException::class);
+
+        // 1 existing + 2 incoming > capacity of 2
+        $this->useCase->execute($this->sessionRequest($session->id));
+    }
+
+    public function testSessionCapacityIgnoresCancelledReservations(): void
+    {
+        $session = $this->makeSession(capacity: 2);
+        $this->sessionRepository->method('findById')->willReturn($session);
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+
+        $cancelled = Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            $session->toTimeSlot(),
+            new Party('Existing Guest', 'existing@example.com', 2, null),
+            $session->id,
+        )->cancel();
+        $this->reservationRepository->method('findBySessionId')->willReturn(ReservationCollection::fromArray([$cancelled]));
+
+        $response = $this->useCase->execute($this->sessionRequest($session->id));
+
+        $this->assertSame(ReservationStatus::Pending, $response->reservation->status);
     }
 }
