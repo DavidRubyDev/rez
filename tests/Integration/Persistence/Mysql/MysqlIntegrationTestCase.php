@@ -166,6 +166,17 @@ abstract class MysqlIntegrationTestCase extends TestCase
                 expires_at DATETIME     NOT NULL
             )
         ');
+
+        $pdo->exec('
+            CREATE TABLE IF NOT EXISTS sessions (
+                id                CHAR(36)    NOT NULL PRIMARY KEY,
+                resource_id       CHAR(36)    NOT NULL,
+                start_time        DATETIME    NOT NULL,
+                duration_minutes  INT         NOT NULL,
+                capacity          INT         NOT NULL,
+                status            VARCHAR(20) NOT NULL
+            )
+        ');
     }
 
     private function truncateTables(PDO $pdo): void
@@ -182,6 +193,7 @@ abstract class MysqlIntegrationTestCase extends TestCase
         $pdo->exec('TRUNCATE TABLE email_templates');
         $pdo->exec('TRUNCATE TABLE users');
         $pdo->exec('TRUNCATE TABLE password_reset_tokens');
+        $pdo->exec('TRUNCATE TABLE sessions');
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
 
         // reservation_settings and mailer_settings are required singleton rows (id = 1) —
