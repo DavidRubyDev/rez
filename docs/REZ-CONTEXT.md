@@ -60,8 +60,10 @@
 > cancel-with-affected-reservations reusing the same `AffectedReservationsModal` the resource/
 > rule/override delete flows use — verified live against a running Docker stack, not just
 > component tests. `rez-components`' class-booking flow (a session picker in `<rez-calendar>`) is
-> the only piece of this scaffold still not built. Platform extensions (payments, credits,
-> subscriptions) not yet built.
+> the only piece of this scaffold still not built. `feature/delete-user` added the ability to
+> delete a user end-to-end across all three repos — hard delete (no FK anywhere references
+> `users.id`), guarded against deleting yourself or the last remaining admin. Platform extensions
+> (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -373,6 +375,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `ListUsersUseCase` | `ListUsersRequest` | `ListUsersResponse(users, total)` | Admin-only by convention — auth enforcement is the HTTP layer's job, not this use case's (`rez-users`). `13_rez-pagination.md`: `ListUsersRequest` gained filters (`search` against name/email, `role`) + `offset`/`limit`/`sortBy`/`sortDir` (`name`\|`email`\|`role`\|`created_at`, default sort `created_at ASC` preserved) via `UserRepositoryInterface::findPage()`/`countPage()` — first `Request` in the codebase to go from empty to populated. `findAll()` untouched |
 | `AdminUpdateUserUseCase` | `AdminUpdateUserRequest(UserId, ?UserRole, ?newsletterOptIn)` | `AdminUpdateUserResponse(User)` | Role/newsletter override, PATCH semantics. Admin-only by convention — same auth-enforcement note as `ListUsersUseCase` (`rez-users`) |
 | `AdminCreateUserUseCase` | `AdminCreateUserRequest(name, email, resetBaseUrl, UserRole = Customer, newsletterOptIn = false)` | `AdminCreateUserResponse(User)` | No password field — generates and hashes a random one nobody is ever told, saves the user, then delegates to `RequestPasswordResetUseCaseInterface` (reused, not duplicated) to email a real reset link. No JWT in the response — the admin isn't logging in as the new user. `newsletterOptIn: true` subscribes via `SubscriberSource::Admin`, not `Registered` |
+| `DeleteUserUseCase` | `DeleteUserRequest(actingUserId, targetUserId)` | `DeleteUserResponse` | `feature/delete-user`: hard delete via `UserRepositoryInterface::delete()` (already existed, just never had a use case). Two guards: self-delete (`actingUserId->equals(targetUserId)` → `CannotDeleteSelfException`) and last-admin (target `isAdmin()` and `countPage(role: Admin) <= 1` → `CannotDeleteLastAdminException`); customer deletions skip the admin-count query entirely. No FK anywhere references `users.id`, so unlike `resources` (invariant 13) a hard delete needed no soft-delete flag |
 | `CreateSessionUseCase` | `CreateSessionRequest(resourceId, startTime, ?durationMinutes, ?capacity)` | `CreateSessionResponse(Session)` | (`rez-sessions`) `startTime` parsed as `Y-m-d H:i` with the same round-trip validation `SaveAvailabilityRuleUseCase` uses for its date bounds. Defaults `durationMinutes` from `Resource::defaultDurationMinutes` and `capacity` from `Resource::capacity` when the request omits them; throws `\InvalidArgumentException` if duration is missing from both — a class resource with no duration anywhere is a configuration error, not a silent 0 |
 | `CancelSessionUseCase` | `CancelSessionRequest(SessionId)` | `CancelSessionResponse(Session, BulkCancelReservationsResponse)` | (`rez-sessions`) Cancels the session, saves, then calls `findBySessionId()` and reuses `BulkCancelReservationsUseCase` to bulk-cancel every reservation on it — deliberately not reimplementing its skip-on-invalid-state loop |
 | `GetSessionUseCase` | `GetSessionRequest(SessionId)` | `GetSessionResponse(Session)` | (`rez-sessions`) Trivial, matches `GetResourceUseCase` |

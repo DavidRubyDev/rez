@@ -104,6 +104,8 @@ use Rez\Application\UseCase\Auth\RequestPasswordReset\RequestPasswordResetUseCas
 use Rez\Application\UseCase\Auth\RequestPasswordReset\RequestPasswordResetUseCaseInterface;
 use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordUseCase;
 use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordUseCaseInterface;
+use Rez\Application\UseCase\User\DeleteUser\DeleteUserUseCase;
+use Rez\Application\UseCase\User\DeleteUser\DeleteUserUseCaseInterface;
 use Rez\Application\UseCase\User\GetUser\GetUserUseCase;
 use Rez\Application\UseCase\User\GetUser\GetUserUseCaseInterface;
 use Rez\Application\UseCase\User\UpdateUser\UpdateUserUseCase;
@@ -200,6 +202,7 @@ return [
     RequestPasswordResetUseCaseInterface::class => autowire(RequestPasswordResetUseCase::class),
     ResetPasswordUseCaseInterface::class      => autowire(ResetPasswordUseCase::class),
     GetUserUseCaseInterface::class            => autowire(GetUserUseCase::class),
+    DeleteUserUseCaseInterface::class         => autowire(DeleteUserUseCase::class),
     UpdateUserUseCaseInterface::class         => autowire(UpdateUserUseCase::class),
     ListUsersUseCaseInterface::class          => autowire(ListUsersUseCase::class),
     AdminUpdateUserUseCaseInterface::class    => autowire(AdminUpdateUserUseCase::class),
