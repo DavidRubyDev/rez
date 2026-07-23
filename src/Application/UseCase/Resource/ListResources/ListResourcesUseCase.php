@@ -26,8 +26,8 @@ final class ListResourcesUseCase implements ListResourcesUseCaseInterface
         ListParamsValidator::validate($request->offset, $request->limit, $request->sortBy, $request->sortDir, self::SORTABLE);
 
         try {
-            $resources = $this->resourceRepository->findPage($request->offset, $request->limit, $request->sortBy, $request->sortDir);
-            $total     = $this->resourceRepository->countPage();
+            $resources = $this->resourceRepository->findPage($request->offset, $request->limit, $request->sortBy, $request->sortDir, $request->includeUnpublished);
+            $total     = $this->resourceRepository->countPage($request->includeUnpublished);
         } catch (DatabaseException $e) {
             throw new DatabaseException('Failed to list resources.', 0, $e);
         }

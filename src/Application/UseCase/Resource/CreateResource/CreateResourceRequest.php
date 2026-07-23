@@ -13,6 +13,7 @@ final class CreateResourceRequest
         public readonly int $capacity,
         public readonly array $attributes = [],
         public readonly ?int $defaultDurationMinutes = null,
+        public readonly bool $published = true,
     ) {
     }
 }

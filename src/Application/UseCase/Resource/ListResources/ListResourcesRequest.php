@@ -11,6 +11,7 @@ final class ListResourcesRequest
         public readonly ?int $limit = null,
         public readonly ?string $sortBy = null,
         public readonly ?string $sortDir = null,
+        public readonly bool $includeUnpublished = false,
     ) {
     }
 }
