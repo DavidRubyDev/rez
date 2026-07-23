@@ -62,8 +62,11 @@
 > component tests. `rez-components`' class-booking flow (a session picker in `<rez-calendar>`) is
 > the only piece of this scaffold still not built. `feature/delete-user` added the ability to
 > delete a user end-to-end across all three repos — hard delete (no FK anywhere references
-> `users.id`), guarded against deleting yourself or the last remaining admin. Platform extensions
-> (payments, credits, subscriptions) not yet built.
+> `users.id`), guarded against deleting yourself or the last remaining admin.
+> `feature/resource-published-flag` added a `Resource.published` bool, orthogonal to the existing
+> `active` soft-delete flag — public listings (`GET /api/resources` with no admin token) exclude
+> unpublished resources, an authenticated admin sees everything, and admins can set it either way
+> on create/update. Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -159,14 +162,19 @@ use cases directly. See step 73 in `docs/CONTEXT.md`.
 
 #### Resources (COMPLETE)
 - `Resource` — entity. Fields: `id`, `type`, `name`, `capacity`, `attributes`, `active` (bool, default
-  `true`), `defaultDurationMinutes` (nullable int, `rez-sessions`). Deletion is soft (invariant 13): `resources` rows
+  `true`), `defaultDurationMinutes` (nullable int, `rez-sessions`), `published` (bool, default
+  `true`, `feature/resource-published-flag`). Deletion is soft (invariant 13): `resources` rows
   are never removed, only deactivated, so the `reservation_resources`/`availability_*` `ON DELETE
   CASCADE` FKs stay harmless and existing reservations never lose their resource references.
   `defaultDurationMinutes` is a fallback session length for class-type resources — table-type
   resources leave it null; `CreateSessionUseCase` uses it when a session-creation request doesn't
   override the duration itself. No invariant enforced on it here — validation that a class-type
   resource *should* have one is an application-layer/admin-UI concern, per the existing pattern of
-  `attributes` being an untyped bag the domain doesn't interpret.
+  `attributes` being an untyped bag the domain doesn't interpret. `published` is orthogonal to
+  `active` — a resource can be active-and-unpublished (bookable/editable by admins, hidden from the
+  public listing) independently of being deactivated. `withPublished(bool): self` is the immutable
+  updater, same shape as `withAttributes()`. Unlike `active`, `published` is fully bidirectional —
+  an admin can flip it back and forth via create/update, there is no one-way "can't undo" rule.
 - `ResourceId` — UUID v4 value object
 - `ResourceType` — value object wrapping a lowercase slug string
 - `ResourceCollection` — immutable collection
@@ -341,11 +349,11 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `MarkNoShowUseCase` | `MarkNoShowRequest` | `MarkNoShowResponse` | |
 | `GetReservationUseCase` | `GetReservationRequest` | `GetReservationResponse` | |
 | `ListReservationsUseCase` | `ListReservationsRequest` | `ListReservationsResponse(reservations, total)` | `13_rez-pagination.md`: filters (`from`, `to`, `resourceId`, `status`, `search` against party name/email/phone) + `offset`/`limit`/`sortBy`/`sortDir` (`start`\|`end`\|`status`\|`party_name`\|`created_at`), validated via `ListParamsValidator`, executed in one SQL query via `ReservationRepositoryInterface::findPage()`/`countPage()` — the old in-memory `resourceId` filter after `findAll()` is gone. `findAll()` itself is untouched, still used nowhere else in this repo. **`createdFrom`/`createdTo`** (reservations-created-date-filter): a second, independent date range filtering `r.created_at`, distinct from `from`/`to` which filter `start_at`/`end_at` — lets an admin filter "reservations made in the last week" independent of what date they're booked for |
-| `CreateResourceUseCase` | `CreateResourceRequest` | `CreateResourceResponse` | `CreateResourceRequest` includes `?int $defaultDurationMinutes = null` (`rez-sessions` follow-up fix), passed straight through to `Resource` |
+| `CreateResourceUseCase` | `CreateResourceRequest` | `CreateResourceResponse` | `CreateResourceRequest` includes `?int $defaultDurationMinutes = null` (`rez-sessions` follow-up fix) and `bool $published = true` (`feature/resource-published-flag`), both passed straight through to `Resource` |
 | `GetResourceUseCase` | `GetResourceRequest` | `GetResourceResponse` | |
-| `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable. No `active` field — carries the existing resource's `active` forward unchanged; there's no reactivate path anywhere in the API yet. `defaultDurationMinutes` (`rez-sessions` follow-up fix) follows the same nullable-fallback pattern as `capacity`/`name` (`$request->x ?? $existing->x`) — null means "not provided" and preserves the existing value, same as `active`; there is no way to explicitly clear it back to null through this use case yet |
+| `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable. No `active` field — carries the existing resource's `active` forward unchanged; there's no reactivate path anywhere in the API yet. `defaultDurationMinutes` (`rez-sessions` follow-up fix) follows the same nullable-fallback pattern as `capacity`/`name` (`$request->x ?? $existing->x`) — null means "not provided" and preserves the existing value, same as `active`; there is no way to explicitly clear it back to null through this use case yet. `?bool $published = null` (`feature/resource-published-flag`) follows the identical nullable-fallback pattern — unlike `active`, this one genuinely is settable both ways through the API, `null` just means "leave as-is on this particular PATCH" |
 | `DeleteResourceUseCase` | `DeleteResourceRequest` | `DeleteResourceResponse` | Soft delete — repository's `delete()` deactivates rather than removes (invariant 13) |
-| `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse(resources, total)` | `13_rez-pagination.md`: no filters (nothing to filter on yet), `offset`/`limit`/`sortBy`/`sortDir` (`type`\|`name`\|`capacity`) via `ResourceRepositoryInterface::findPage()`/`countPage()`, both preserving the `active = 1` filter (invariant 13). `findAll()` untouched — still reachable via `GetResourceUseCase` for historical lookups |
+| `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse(resources, total)` | `13_rez-pagination.md`: `offset`/`limit`/`sortBy`/`sortDir` (`type`\|`name`\|`capacity`) via `ResourceRepositoryInterface::findPage()`/`countPage()`, both preserving the `active = 1` filter (invariant 13). **`includeUnpublished`** (`feature/resource-published-flag`): `bool`, default `false`, passed straight through to `findPage()`/`countPage()` — this use case has no opinion on *who* gets `true`, that's entirely the HTTP layer's call (same "auth is the HTTP layer's job" convention as `ListUsersUseCase`). `findAll()` untouched — has zero callers today |
 | `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Validates resource exists (throws `ResourceNotFoundException`) then delegates to AvailabilityService, which returns an empty window for a deactivated resource (invariant 13). `GetAvailabilityRequest` accepts optional `int $partySize = 1`. |
 | `GetAvailabilityRulesUseCase` | `GetAvailabilityRulesRequest` | `GetAvailabilityRulesResponse` | Returns all rules for a resource |
 | `GetAvailabilityOverridesUseCase` | `GetAvailabilityOverridesRequest` | `GetAvailabilityOverridesResponse` | Returns overrides for a resource in a date range |
@@ -528,7 +536,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 
 | Table | Purpose |
 |---|---|
-| `resources` | id, type, name, capacity, attributes (JSON), active (TINYINT(1), default 1 — soft-delete flag, invariant 13), default_duration_minutes (INT nullable, `rez-sessions`) |
+| `resources` | id, type, name, capacity, attributes (JSON), active (TINYINT(1), default 1 — soft-delete flag, invariant 13), default_duration_minutes (INT nullable, `rez-sessions`), published (TINYINT(1), default 1 — public-visibility flag, orthogonal to `active`, `feature/resource-published-flag`) |
 | `reservations` | id, status, start_at, end_at, party_name, party_email, party_size, party_phone, party_external_ref, created_at, session_id (CHAR(36) nullable, no FK, `rez-sessions`) |
 | `reservation_resources` | reservation_id, resource_id (many-to-many join) |
 | `availability_rules` | resource_id, day_of_week, open_time (CHAR 5), close_time (CHAR 5), valid_from (DATE nullable), valid_until (DATE nullable) |

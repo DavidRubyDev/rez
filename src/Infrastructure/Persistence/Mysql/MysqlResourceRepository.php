@@ -74,8 +74,12 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
         ?int $limit = null,
         ?string $sortBy = null,
         ?string $sortDir = null,
+        bool $includeUnpublished = false,
     ): ResourceCollection {
         $sql = 'SELECT * FROM resources WHERE active = 1';
+        if (!$includeUnpublished) {
+            $sql .= ' AND published = 1';
+        }
 
         if ($sortBy !== null) {
             $column = self::SORT_COLUMNS[$sortBy]
@@ -105,10 +109,15 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
         return ResourceCollection::fromArray(array_map($this->hydrate(...), $rows));
     }
 
-    public function countPage(): int
+    public function countPage(bool $includeUnpublished = false): int
     {
+        $sql = 'SELECT COUNT(*) FROM resources WHERE active = 1';
+        if (!$includeUnpublished) {
+            $sql .= ' AND published = 1';
+        }
+
         try {
-            $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM resources WHERE active = 1');
+            $stmt = $this->pdo->prepare($sql);
             $stmt->execute();
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
@@ -133,15 +142,16 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     {
         try {
             $stmt = $this->pdo->prepare('
-                INSERT INTO resources (id, type, name, capacity, attributes, active, default_duration_minutes)
-                VALUES (:id, :type, :name, :capacity, :attributes, :active, :default_duration_minutes)
+                INSERT INTO resources (id, type, name, capacity, attributes, active, default_duration_minutes, published)
+                VALUES (:id, :type, :name, :capacity, :attributes, :active, :default_duration_minutes, :published)
                 ON DUPLICATE KEY UPDATE
                     type                      = VALUES(type),
                     name                      = VALUES(name),
                     capacity                  = VALUES(capacity),
                     attributes                = VALUES(attributes),
                     active                    = VALUES(active),
-                    default_duration_minutes  = VALUES(default_duration_minutes)
+                    default_duration_minutes  = VALUES(default_duration_minutes),
+                    published                 = VALUES(published)
             ');
 
             $stmt->execute([
@@ -152,6 +162,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
                 ':attributes'                => json_encode($resource->attributes),
                 ':active'                    => $resource->active ? 1 : 0,
                 ':default_duration_minutes'  => $resource->defaultDurationMinutes,
+                ':published'                 => $resource->published ? 1 : 0,
             ]);
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
@@ -173,6 +184,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
             $attributes,
             $this->bool($row['active']),
             $this->nullInt($row['default_duration_minutes']),
+            $this->bool($row['published']),
         );
     }
 }

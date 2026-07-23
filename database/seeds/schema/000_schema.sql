@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS resources (
     attributes               JSON         NOT NULL,
     active                   TINYINT(1)   NOT NULL DEFAULT 1,
     default_duration_minutes INT          NULL,
+    published                TINYINT(1)   NOT NULL DEFAULT 1,
     PRIMARY KEY (id)
 );
 

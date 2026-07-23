@@ -2157,3 +2157,57 @@ matching work in those two repos. The two new exceptions need a new match arm in
 `bootstrap/app.php` (409, grouped with `ConflictException`/`EmailAlreadyRegisteredException` — a
 business-rule conflict with current state, not a validation error) — not done here since that file
 lives in rez-starter.
+
+### 93. `Resource.published` flag (`feature/resource-published-flag`)
+
+Adds a `published` bool to `Resource`, independent of the existing `active` soft-delete flag — a
+resource can be active-and-unpublished (still bookable/editable by admins, just hidden from public
+listings) as a distinct state from deactivated. Public need: hide draft/seasonal/not-yet-ready
+resources from the booking flow without deleting them; admin need: see and toggle every resource
+regardless of its published state.
+
+`Resource` gained `published: bool = true` (defaults true — a resource with no opinion on this is
+visible, same least-surprise default as `active`) and `withPublished(bool): self`, same immutable-
+updater shape as `withAttributes()`. `CreateResourceRequest`/`CreateResourceUseCase` gained
+`published: bool = true`, passed straight to the constructor. `UpdateResourceRequest`/
+`UpdateResourceUseCase` gained `?bool $published = null` with PATCH semantics
+(`$request->published ?? $existing->published`), same pattern as `defaultDurationMinutes`.
+
+**The asymmetry lives in `findPage()`/`countPage()`, not `findById()`/`findAll()`.**
+`ResourceRepositoryInterface::findPage()`/`countPage()` gained `bool $includeUnpublished = false` —
+default `false` means "public view" (`AND published = 1` in the SQL, alongside the existing
+`active = 1`), `true` means "admin view" (no published filter, but `active = 1` still applies —
+unpublished and deactivated are orthogonal, not the same override). **Which value the HTTP layer
+passes is entirely rez-starter's call** — this use case has no concept of "who's asking," same
+"auth enforcement is the HTTP layer's job" convention as `ListUsersUseCase`. `findById()` never
+filters on `published`, same reasoning as it never filtering on `active` — an admin editing an
+unpublished resource, or any internal lookup by id, must always resolve it. `findAll()` also does
+**not** filter on `published` (unlike `findPage()`) — it has zero callers today, so there was no
+call to invent an `includeUnpublished` parameter for it; if a future caller needs a published-only
+`findAll()`, add the parameter then rather than guessing its shape now.
+
+`database/seeds/schema/000_schema.sql` — `published TINYINT(1) NOT NULL DEFAULT 1` added directly
+to the `resources` table definition, same pattern as `active`/`default_duration_minutes` before it.
+
+`rez-starter`'s optional-auth wiring on `GET /api/resources` (so an authenticated admin gets
+`includeUnpublished: true` while everyone else gets the public-safe default) and `rez-admin`'s
+published toggle in the resource form are out of scope for this repo — see the matching work in
+those two repos.
+
+**Follow-up fix (same branch):** `tests/Integration/Persistence/Mysql/MysqlIntegrationTestCase.php`
+has its **own** hardcoded `resources` table DDL in `createSchema()`, entirely separate from
+`database/seeds/schema/000_schema.sql` — this is what `composer test-integration` (and CI) actually
+runs against, not the seed files. Missed on the first pass since integration tests skip locally
+with no `DB_HOST`/`DB_NAME`/etc. env vars set (the default in this sandbox), so the gap only
+surfaced in CI: `Unknown column 'published' in 'field list'` on every `MysqlResourceRepositoryTest`
+case that touched `save()`/`findPage()`/`countPage()`. Added `published TINYINT(1) NOT NULL DEFAULT
+1` to that inline DDL too. Verified for real this time — not just "should work" — against a fresh
+database created inside the `rez-starter` Docker stack (`rez-starter-db-1`, reachable from the
+`rez-starter-app-1` container which already has both `pdo_mysql` and this repo's own `vendor/`
+live-mounted at `/var/rez`): `DB_HOST=db DB_NAME=rez_integration_verify … vendor/bin/phpunit
+--testsuite Integration` — all 102 tests green, only the one pre-existing unrelated warning
+(`MysqlDatabaseSeederTest`'s deliberate missing-file case). **Lesson**: this repo has two schema
+definitions that must be kept in sync by hand — the seed files (what real deployments run) and
+this test-only inline DDL (what `composer test-integration`/CI runs) — any future column addition
+needs both updated, and skip-by-default-with-no-env-vars means a local run proves nothing about
+whether that second copy was actually touched.

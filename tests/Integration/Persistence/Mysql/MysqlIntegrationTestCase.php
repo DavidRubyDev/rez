@@ -58,7 +58,8 @@ abstract class MysqlIntegrationTestCase extends TestCase
                 capacity                  INT          NOT NULL,
                 attributes                JSON         NOT NULL,
                 active                    TINYINT(1)   NOT NULL DEFAULT 1,
-                default_duration_minutes  INT          NULL
+                default_duration_minutes  INT          NULL,
+                published                 TINYINT(1)   NOT NULL DEFAULT 1
             )
         ');
 

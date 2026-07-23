@@ -59,12 +59,38 @@ class ListResourcesUseCaseTest extends TestCase
         $this->repository
             ->expects($this->once())
             ->method('findPage')
-            ->with(10, 20, 'name', 'desc')
+            ->with(10, 20, 'name', 'desc', false)
             ->willReturn(ResourceCollection::empty());
 
         $this->repository->method('countPage')->willReturn(0);
 
         $this->useCase->execute(new ListResourcesRequest(offset: 10, limit: 20, sortBy: 'name', sortDir: 'desc'));
+    }
+
+    public function testIncludeUnpublishedDefaultsToFalse(): void
+    {
+        $this->repository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with(null, null, null, null, false)
+            ->willReturn(ResourceCollection::empty());
+
+        $this->repository->expects($this->once())->method('countPage')->with(false)->willReturn(0);
+
+        $this->useCase->execute(new ListResourcesRequest());
+    }
+
+    public function testIncludeUnpublishedTruePassesThroughToRepository(): void
+    {
+        $this->repository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with(null, null, null, null, true)
+            ->willReturn(ResourceCollection::empty());
+
+        $this->repository->expects($this->once())->method('countPage')->with(true)->willReturn(0);
+
+        $this->useCase->execute(new ListResourcesRequest(includeUnpublished: true));
     }
 
     public function testInvalidSortByThrowsInvalidArgumentException(): void

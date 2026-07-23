@@ -171,4 +171,93 @@ class MysqlResourceRepositoryTest extends MysqlIntegrationTestCase
 
         $this->assertNull($found->defaultDurationMinutes);
     }
+
+    public function testPublishedDefaultsToTrueAndRoundtrips(): void
+    {
+        $resource = $this->makeResource();
+        $this->repository->save($resource);
+
+        $found = $this->repository->findById($resource->id);
+
+        $this->assertTrue($found->published);
+    }
+
+    public function testUnpublishedRoundtrips(): void
+    {
+        $resource = new Resource(
+            ResourceId::generate(),
+            ResourceType::fromString('table'),
+            'Table 1',
+            4,
+            published: false,
+        );
+        $this->repository->save($resource);
+
+        $found = $this->repository->findById($resource->id);
+
+        $this->assertFalse($found->published);
+    }
+
+    public function testFindByIdResolvesUnpublishedResource(): void
+    {
+        $resource = new Resource(
+            ResourceId::generate(),
+            ResourceType::fromString('table'),
+            'Table 1',
+            4,
+            published: false,
+        );
+        $this->repository->save($resource);
+
+        $found = $this->repository->findById($resource->id);
+
+        $this->assertFalse($found->published);
+    }
+
+    public function testFindPageExcludesUnpublishedResourcesByDefault(): void
+    {
+        $published   = $this->makeResource('Published Room');
+        $unpublished = new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Unpublished Room', 4, published: false);
+
+        $this->repository->save($published);
+        $this->repository->save($unpublished);
+
+        $result = $this->repository->findPage();
+
+        $this->assertSame(1, $result->count());
+        $this->assertSame('Published Room', $result->toArray()[0]->name);
+    }
+
+    public function testFindPageIncludesUnpublishedResourcesWhenRequested(): void
+    {
+        $published   = $this->makeResource('Published Room');
+        $unpublished = new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Unpublished Room', 4, published: false);
+
+        $this->repository->save($published);
+        $this->repository->save($unpublished);
+
+        $result = $this->repository->findPage(includeUnpublished: true);
+
+        $this->assertSame(2, $result->count());
+    }
+
+    public function testCountPageExcludesUnpublishedResourcesByDefault(): void
+    {
+        $published   = $this->makeResource('Published Room');
+        $unpublished = new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Unpublished Room', 4, published: false);
+
+        $this->repository->save($published);
+        $this->repository->save($unpublished);
+
+        $this->assertSame(1, $this->repository->countPage());
+        $this->assertSame(2, $this->repository->countPage(includeUnpublished: true));
+    }
+
+    public function testFindAllStillExcludesOnlyDeactivatedNotUnpublished(): void
+    {
+        $unpublished = new Resource(ResourceId::generate(), ResourceType::fromString('table'), 'Unpublished Room', 4, published: false);
+        $this->repository->save($unpublished);
+
+        $this->assertSame(1, $this->repository->findAll()->count());
+    }
 }

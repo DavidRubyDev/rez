@@ -74,4 +74,18 @@ class CreateResourceUseCaseTest extends TestCase
 
         $this->assertSame(45, $response->resource->defaultDurationMinutes);
     }
+
+    public function testPublishedDefaultsToTrue(): void
+    {
+        $response = $this->useCase->execute(new CreateResourceRequest('table', 'Table 1', 4));
+
+        $this->assertTrue($response->resource->published);
+    }
+
+    public function testPublishedFalseIsPassedToResource(): void
+    {
+        $response = $this->useCase->execute(new CreateResourceRequest('table', 'Table 1', 4, published: false));
+
+        $this->assertFalse($response->resource->published);
+    }
 }
