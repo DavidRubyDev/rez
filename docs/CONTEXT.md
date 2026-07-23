@@ -2126,3 +2126,34 @@ one inside and one outside the queried range, and asserts only the inside one is
 
 `rez-starter`'s `ListReservationsRequestFactory` and `rez-admin`'s reservations filter UI are out
 of scope for this repo — see the matching work in those two repos.
+
+### 92. Delete a user (`feature/delete-user`)
+
+Adds the ability to actually delete a user. `UserRepositoryInterface::delete()`/
+`MysqlUserRepository::delete()` already existed (hard `DELETE FROM users`, integration-tested) but
+had no use case calling it — this closes that gap. A hard delete is safe here: unlike `resources`
+(invariant 13), nothing has an FK to `users.id` — `password_reset_tokens` keys by `email`,
+`wallet_transactions`/`subscriptions` don't exist in SQL form yet, and `Reservation.party.externalRef`
+is a plain opaque string column, never a FK.
+
+`DeleteUserUseCase` (`src/Application/UseCase/User/DeleteUser/`) — `DeleteUserRequest(actingUserId,
+targetUserId)`. Two guards, both explicit product decisions (not forced by any DB constraint):
+- **Self-delete blocked** — `actingUserId->equals(targetUserId)` throws `CannotDeleteSelfException`,
+  checked before the admin-count query so it short-circuits regardless of the target's role.
+- **Last-admin blocked** — if the target `isAdmin()`, calls `UserRepositoryInterface::countPage(role:
+  Admin)` (already existed for `13_rez-pagination.md`, no new repository method needed) and throws
+  `CannotDeleteLastAdminException` if the count is `<= 1`. Customer deletions skip this query
+  entirely — `countPage` is asserted `never()` called in that test.
+
+Both new exceptions (`src/Domain/Exception/CannotDeleteSelfException.php`,
+`CannotDeleteLastAdminException.php`) extend `DomainException` directly, same as
+`UserNotFoundException` — no extra fields, just a fixed message. `config/container.php`:
+`DeleteUserUseCaseInterface::class => autowire(DeleteUserUseCase::class)`, same pattern as every
+other use case interface in this file (repository interfaces are the client app's job to bind;
+use-case interfaces are bound here).
+
+`rez-starter`'s route/handler and `rez-admin`'s delete UI are out of scope for this repo — see the
+matching work in those two repos. The two new exceptions need a new match arm in rez-starter's
+`bootstrap/app.php` (409, grouped with `ConflictException`/`EmailAlreadyRegisteredException` — a
+business-rule conflict with current state, not a validation error) — not done here since that file
+lives in rez-starter.
