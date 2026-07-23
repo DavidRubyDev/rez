@@ -192,4 +192,29 @@ class UpdateResourceUseCaseTest extends TestCase
 
         $this->assertSame(30, $response->resource->defaultDurationMinutes);
     }
+
+    public function testPreservesPublishedFlagWhenNotProvided(): void
+    {
+        $unpublished = new Resource(
+            $this->resourceId,
+            ResourceType::fromString('table'),
+            'Table 1',
+            4,
+            published: false,
+        );
+        $this->repository->method('findById')->willReturn($unpublished);
+
+        $response = $this->useCase->execute(new UpdateResourceRequest($this->resourceId, 'Renamed', null, null));
+
+        $this->assertFalse($response->resource->published);
+    }
+
+    public function testUpdatesPublishedFlagWhenProvided(): void
+    {
+        $this->repository->method('findById')->willReturn($this->existing);
+
+        $response = $this->useCase->execute(new UpdateResourceRequest($this->resourceId, null, null, null, published: false));
+
+        $this->assertFalse($response->resource->published);
+    }
 }

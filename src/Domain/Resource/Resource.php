@@ -18,6 +18,7 @@ final class Resource
         public readonly array $attributes = [],
         public readonly bool $active = true,
         public readonly ?int $defaultDurationMinutes = null,
+        public readonly bool $published = true,
     ) {
         if ($name === '') {
             throw new \InvalidArgumentException('Resource name must not be empty.');
@@ -31,11 +32,16 @@ final class Resource
     /** @param array<string, mixed> $attributes */
     public function withAttributes(array $attributes): self
     {
-        return new self($this->id, $this->type, $this->name, $this->capacity, array_merge($this->attributes, $attributes), $this->active, $this->defaultDurationMinutes);
+        return new self($this->id, $this->type, $this->name, $this->capacity, array_merge($this->attributes, $attributes), $this->active, $this->defaultDurationMinutes, $this->published);
     }
 
     public function deactivate(): self
     {
-        return new self($this->id, $this->type, $this->name, $this->capacity, $this->attributes, false, $this->defaultDurationMinutes);
+        return new self($this->id, $this->type, $this->name, $this->capacity, $this->attributes, false, $this->defaultDurationMinutes, $this->published);
+    }
+
+    public function withPublished(bool $published): self
+    {
+        return new self($this->id, $this->type, $this->name, $this->capacity, $this->attributes, $this->active, $this->defaultDurationMinutes, $published);
     }
 }
