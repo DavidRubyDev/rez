@@ -51,9 +51,17 @@
 > `Reservation.sessionId` were added alongside it, and `CreateReservationUseCase` gained a
 > session-booking path (session is the sole source of truth for resourceId/TimeSlot on that
 > path, body-supplied values are ignored) and `CancelSessionUseCase` cascade-cancels every
-> reservation on a cancelled session via `BulkCancelReservationsUseCase`. `rez-starter` routes,
-> `rez-admin` session management UI, and `rez-components`' class-booking flow are not yet built.
-> Platform extensions (payments, credits, subscriptions) not yet built.
+> reservation on a cancelled session via `BulkCancelReservationsUseCase`. `rez-starter`
+> (`rez-starter-05_sessions.md`) wired the five HTTP routes end-to-end (`GET /api/sessions`,
+> `POST /api/sessions/{id}/reservations` public; `POST /api/admin/sessions`, `GET .../{id}`,
+> `POST .../{id}/cancel` admin) and `default_duration_minutes` through the resource endpoints.
+> `rez-admin` (`15_sessions.md`) built the full admin UI end-to-end too: Sessions list/detail
+> pages, a quick-add modal, an "+ Add reservation" flow booking directly into a session, and
+> cancel-with-affected-reservations reusing the same `AffectedReservationsModal` the resource/
+> rule/override delete flows use — verified live against a running Docker stack, not just
+> component tests. `rez-components`' class-booking flow (a session picker in `<rez-calendar>`) is
+> the only piece of this scaffold still not built. Platform extensions (payments, credits,
+> subscriptions) not yet built.
 
 ---
 
@@ -606,6 +614,8 @@ GET    /api/resources/{id}
 GET    /api/resources/{id}/availability/rules
 GET    /api/resources/{id}/availability/overrides
 GET    /api/availability
+GET    /api/sessions?resource_id=&from=&to=                   ← resource_id required, bare array (no pagination envelope)
+POST   /api/sessions/{id}/reservations                        ← body: party fields only, see note below
 POST   /api/newsletter/subscribe
 DELETE /api/newsletter/unsubscribe
 DELETE /api/reservations/{id}?token={hmac}                    ← guest self-cancellation
@@ -633,6 +643,15 @@ a `Booking` entity.
 The four auth routes above are genuinely public and unauthenticated (`RegisterUseCase`/
 `LoginUseCase`/`RequestPasswordResetUseCase`/`ResetPasswordUseCase`) — that's the point, they're
 how a caller obtains a JWT or resets a forgotten password in the first place.
+
+`POST /api/sessions/{id}/reservations` is deliberately narrow: the body carries only `party`
+fields, never `resource_id` or a timeslot — the session id in the URL is the sole source of truth
+for what's being booked (see `CreateReservationUseCase`'s session-booking path in §3.5). A client
+sending `resource_id`/timeslot alongside it has those values silently ignored, not merged or
+validated against — re-adding either field to this route's request parsing would reopen the exact
+hole this scaffold closed. `GET /api/sessions` requires `resource_id` (no "all resources" query)
+and returns a bare array, not the `{items, total}` envelope the four paginated list routes above
+use — it was never wired into `13_rez-pagination.md`'s pagination work.
 
 #### Always available — any authenticated user (JWT required, any role)
 
@@ -684,6 +703,9 @@ GET    /api/users                                             ← offset/limit/s
 PATCH  /api/users/{id}                                        ← role + newsletter_opt_in only, never name/email
 POST   /api/admin/users                                      ← AdminCreateUserUseCase; no password field, forces a reset link via RequestPasswordResetUseCase
 GET    /api/admin/config                                     ❌ still not wired — blocked on GetAdminConfigUseCase (rez-admin-config)
+POST   /api/admin/sessions                                   ← body: {resource_id, start_time, duration_minutes?, capacity?}
+GET    /api/admin/sessions/{id}                              ← session + its reservations (GetSessionUseCase + ReservationRepositoryInterface::findBySessionId(), joined in the Serializer — not a new rez use case)
+POST   /api/admin/sessions/{id}/cancel                       ← cascades to BulkCancelReservationsUseCase
 ```
 
 `rez-starter-04_pagination_DONE.md` wired `13_rez-pagination.md`'s library-side capability (see §3.5) onto
@@ -808,7 +830,7 @@ for optional features (payments, credits, subscriptions).
 
 | Slice | Pages |
 |---|---|
-| Core | Login, Resources (add/edit), Reservations list, Manual booking, Users list, Edit user, Newsletter broadcast |
+| Core | Login, Resources (add/edit), Sessions (list/detail/quick-add/book-reservation), Reservations list, Manual booking, Users list, Edit user, Newsletter broadcast |
 | Payments | Payment history, Stripe event log |
 | Credits | User credit balances, Manual credit adjustment |
 | Subscriptions | Subscription management, Override subscription status |
@@ -884,6 +906,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Config / FeatureGuard | ✅ | — | — | ✅ (`UsersConfig` required + `Feature`/`FeatureGuard` `Users` removed — `rez-config-update`; `ReservationsConfig` removed — see ReservationSettings row above; `MailerConfig` now an empty placeholder — `cancellationSecret` moved to `UsersConfig`, `fromAddress`/`fromName` moved to MailerSettings row above) |
 | Mailer port | ⚠️ restructured, breaking (`rez-email-restructure`) | — | — | ✅ shape tests |
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
+| Sessions | ✅ (`14_rez-sessions.md`) — fixed-time class occurrence; `Resource.defaultDurationMinutes`, `Reservation.sessionId` | ✅ Create/Get/List/Cancel + session-booking path on `CreateReservationUseCase` (cascade-cancel via `BulkCancelReservationsUseCase`) | ✅ | ✅ |
 | CancellationToken | ✅ value object + generation wired into 5 use cases | — | — | ✅ |
 | Users (core) | ✅ | ✅ (9 use cases + JwtService) | ✅ | ✅ (`rez-users`) |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
@@ -1091,6 +1114,12 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Resource soft delete (`rez-resource-soft-delete`, see the `davidrubydev/rez` list above) —
   `ResourceSerializer` includes `active`; `DELETE /api/resources/{id}` keeps its existing `204`
   no-body contract, soft delete is transparent at the HTTP layer
+- ✅ Session routes (`rez-starter-05_sessions.md`) — `GET /api/sessions` +
+  `POST /api/sessions/{id}/reservations` (public), `POST /api/admin/sessions` +
+  `GET`/`POST .../{id}` + `.../{id}/cancel` (admin); `ResourceSerializer` gained
+  `default_duration_minutes` and the resource create/update request factories accept it;
+  `SessionNotFoundException` → 404, `InvalidSessionStateException` → 422 (via the existing
+  `DomainException` mapping)
 - ❌ `StripeGateway` implementation
 - ❌ Booking routes, feature-gated routes (payments/credits/subscriptions) — booking's
   orchestrator use cases (`CreateBookingUseCase`/`CancelBookingUseCase`) don't exist in `rez`
@@ -1191,3 +1220,16 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   against `rez-starter-04_pagination_DONE.md`. Follow-up UX tweak: `Pagination` moved above the
   table/list on all four pages (was below), and gained a "Per page" size selector (10/20/50/100)
   wired to `usePagination`'s `setLimit` + `reset()`.
+- ✅ Sessions (`15_sessions.md`) — `SessionsPage` (required resource select — the list route has
+  no "all resources" query — + `DateRangeFilter`, no pagination/sort, the API has neither),
+  `SessionFormModal` (quick-add: resource + date + time only, server defaults duration/capacity),
+  `SessionDetailModal` (metadata, embedded reservations reusing `ReservationRow`/
+  `ReservationDetailModal`, a "+ Add reservation" button opening `SessionReservationModal` to book
+  directly into the session via `POST /api/sessions/{id}/reservations`). Cancelling a session with
+  active reservations reuses `AffectedReservationsModal` (the same component the resource/rule/
+  override delete flows use) rather than a bespoke confirm — matches those flows per explicit
+  design intent; falls back to a plain `ConfirmDialog` only when nothing is active.
+  `ResourceFormModal` gained a `defaultDurationMinutes` field (always shown, optional — blank means
+  a continuous resource, no sessions created against it). Section 3 of the instructions doc (a
+  session-aware alternative flow inside `ManualBookingModal`) was skipped — explicitly marked
+  optional there.
