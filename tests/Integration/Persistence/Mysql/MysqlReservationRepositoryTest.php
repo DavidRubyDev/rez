@@ -249,6 +249,48 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $this->assertSame(2, $count);
     }
 
+    public function testFindPageFiltersByCreatedDateRange(): void
+    {
+        $inside = Reservation::reconstruct(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            new TimeSlot(
+                new DateTimeImmutable('2024-01-15 10:00:00'),
+                new DateTimeImmutable('2024-01-15 11:00:00'),
+            ),
+            $this->party,
+            ReservationStatus::Pending,
+            new DateTimeImmutable('2024-02-15 00:00:00'),
+        );
+        $outside = Reservation::reconstruct(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            new TimeSlot(
+                new DateTimeImmutable('2024-01-16 10:00:00'),
+                new DateTimeImmutable('2024-01-16 11:00:00'),
+            ),
+            $this->party,
+            ReservationStatus::Pending,
+            new DateTimeImmutable('2024-03-15 00:00:00'),
+        );
+
+        $this->repository->save($inside);
+        $this->repository->save($outside);
+
+        $result = $this->repository->findPage(
+            createdFrom: new DateTimeImmutable('2024-02-01'),
+            createdTo: new DateTimeImmutable('2024-02-29'),
+        );
+        $count = $this->repository->countPage(
+            createdFrom: new DateTimeImmutable('2024-02-01'),
+            createdTo: new DateTimeImmutable('2024-02-29'),
+        );
+
+        $this->assertSame(1, $result->count());
+        $this->assertTrue($result->toArray()[0]->id->equals($inside->id));
+        $this->assertSame(1, $count);
+    }
+
     public function testFindPageFiltersByStatus(): void
     {
         $pending = $this->makeReservation();

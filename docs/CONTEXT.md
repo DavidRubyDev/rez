@@ -2101,3 +2101,28 @@ through; `UpdateResourceRequest` gained the same field with PATCH semantics
 back to null through this use case).
 
 758 unit tests passing (94 skipped — all integration), PHPStan max clean, CS clean.
+
+### 91. Reservations "created date" filter, separate from the existing start/end `from`/`to`
+
+`from`/`to` on `ListReservationsRequest` filter `start_at`/`end_at` — the reservation's own time
+window — not when the row was created. Added a second, independent date range,
+`createdFrom`/`createdTo`, so an admin can filter "reservations made in the last week" regardless
+of what date/time they're booked for.
+
+`ListReservationsRequest` — two new fields, `?DateTimeImmutable $createdFrom = null` /
+`$createdTo`, placed right after `to` (both pairs of date-range fields grouped together, resource/
+status/search filters follow). `ReservationRepositoryInterface::findPage()`/`countPage()` gained
+the same two params, same position. `MysqlReservationRepository::buildPageCriteria()` adds
+`r.created_at >= :created_from` / `r.created_at <= :created_to` — same shape as the existing
+`start_at`/`end_at` clauses, just against a different column and with no capacity/overlap
+semantics to worry about. `ListReservationsUseCase` passes both straight through to `findPage()`/
+`countPage()`, no new validation beyond what `ListParamsValidator` already does for
+offset/limit/sort.
+
+Test-only: `Reservation::reconstruct()` already accepts an arbitrary `createdAt`, so the
+integration test (`testFindPageFiltersByCreatedDateRange`) builds two reservations with fixed
+`createdAt` values via `reconstruct()` rather than `create()` (which always stamps `Utc::now()`),
+one inside and one outside the queried range, and asserts only the inside one is returned/counted.
+
+`rez-starter`'s `ListReservationsRequestFactory` and `rez-admin`'s reservations filter UI are out
+of scope for this repo — see the matching work in those two repos.

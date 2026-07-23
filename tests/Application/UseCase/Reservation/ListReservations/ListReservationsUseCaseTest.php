@@ -80,13 +80,13 @@ class ListReservationsUseCaseTest extends TestCase
         $this->reservationRepository
             ->expects($this->once())
             ->method('findPage')
-            ->with($from, $to, $this->resourceId, $status, 'jane', null, null, null, null)
+            ->with($from, $to, null, null, $this->resourceId, $status, 'jane', null, null, null, null)
             ->willReturn(ReservationCollection::empty());
 
         $this->reservationRepository
             ->expects($this->once())
             ->method('countPage')
-            ->with($from, $to, $this->resourceId, $status, 'jane')
+            ->with($from, $to, null, null, $this->resourceId, $status, 'jane')
             ->willReturn(0);
 
         $this->useCase->execute(new ListReservationsRequest(
@@ -98,12 +98,35 @@ class ListReservationsUseCaseTest extends TestCase
         ));
     }
 
+    public function testPassesCreatedDateFiltersThroughToRepository(): void
+    {
+        $createdFrom = new DateTimeImmutable('2024-02-01');
+        $createdTo   = new DateTimeImmutable('2024-02-29');
+
+        $this->reservationRepository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with(null, null, $createdFrom, $createdTo, null, null, null, null, null, null, null)
+            ->willReturn(ReservationCollection::empty());
+
+        $this->reservationRepository
+            ->expects($this->once())
+            ->method('countPage')
+            ->with(null, null, $createdFrom, $createdTo, null, null, null)
+            ->willReturn(0);
+
+        $this->useCase->execute(new ListReservationsRequest(
+            createdFrom: $createdFrom,
+            createdTo: $createdTo,
+        ));
+    }
+
     public function testPassesPaginationAndSortThroughToRepository(): void
     {
         $this->reservationRepository
             ->expects($this->once())
             ->method('findPage')
-            ->with(null, null, null, null, null, 10, 20, 'start', 'desc')
+            ->with(null, null, null, null, null, null, null, 10, 20, 'start', 'desc')
             ->willReturn(ReservationCollection::empty());
 
         $this->reservationRepository->method('countPage')->willReturn(0);

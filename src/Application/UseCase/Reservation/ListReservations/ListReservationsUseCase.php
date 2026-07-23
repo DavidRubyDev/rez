@@ -29,6 +29,8 @@ final class ListReservationsUseCase implements ListReservationsUseCaseInterface
             $reservations = $this->reservationRepository->findPage(
                 from: $request->from,
                 to: $request->to,
+                createdFrom: $request->createdFrom,
+                createdTo: $request->createdTo,
                 resourceId: $request->resourceId,
                 status: $request->status,
                 search: $request->search,
@@ -40,6 +42,8 @@ final class ListReservationsUseCase implements ListReservationsUseCaseInterface
             $total = $this->reservationRepository->countPage(
                 from: $request->from,
                 to: $request->to,
+                createdFrom: $request->createdFrom,
+                createdTo: $request->createdTo,
                 resourceId: $request->resourceId,
                 status: $request->status,
                 search: $request->search,

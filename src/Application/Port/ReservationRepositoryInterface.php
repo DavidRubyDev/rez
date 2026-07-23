@@ -34,6 +34,8 @@ interface ReservationRepositoryInterface
     public function findPage(
         ?DateTimeImmutable $from = null,
         ?DateTimeImmutable $to = null,
+        ?DateTimeImmutable $createdFrom = null,
+        ?DateTimeImmutable $createdTo = null,
         ?ResourceId $resourceId = null,
         ?ReservationStatus $status = null,
         ?string $search = null,
@@ -47,6 +49,8 @@ interface ReservationRepositoryInterface
     public function countPage(
         ?DateTimeImmutable $from = null,
         ?DateTimeImmutable $to = null,
+        ?DateTimeImmutable $createdFrom = null,
+        ?DateTimeImmutable $createdTo = null,
         ?ResourceId $resourceId = null,
         ?ReservationStatus $status = null,
         ?string $search = null,

@@ -13,6 +13,8 @@ final class ListReservationsRequest
     public function __construct(
         public readonly ?DateTimeImmutable $from = null,
         public readonly ?DateTimeImmutable $to = null,
+        public readonly ?DateTimeImmutable $createdFrom = null,
+        public readonly ?DateTimeImmutable $createdTo = null,
         public readonly ?ResourceId $resourceId = null,
         public readonly ?ReservationStatus $status = null,
         public readonly ?string $search = null,

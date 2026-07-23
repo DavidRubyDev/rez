@@ -143,6 +143,8 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     public function findPage(
         ?DateTimeImmutable $from = null,
         ?DateTimeImmutable $to = null,
+        ?DateTimeImmutable $createdFrom = null,
+        ?DateTimeImmutable $createdTo = null,
         ?ResourceId $resourceId = null,
         ?ReservationStatus $status = null,
         ?string $search = null,
@@ -151,7 +153,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         ?string $sortBy = null,
         ?string $sortDir = null,
     ): ReservationCollection {
-        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $resourceId, $status, $search);
+        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $createdFrom, $createdTo, $resourceId, $status, $search);
 
         $join = $resourceId !== null
             ? ' INNER JOIN reservation_resources rr ON rr.reservation_id = r.id'
@@ -193,11 +195,13 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     public function countPage(
         ?DateTimeImmutable $from = null,
         ?DateTimeImmutable $to = null,
+        ?DateTimeImmutable $createdFrom = null,
+        ?DateTimeImmutable $createdTo = null,
         ?ResourceId $resourceId = null,
         ?ReservationStatus $status = null,
         ?string $search = null,
     ): int {
-        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $resourceId, $status, $search);
+        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $createdFrom, $createdTo, $resourceId, $status, $search);
 
         $join = $resourceId !== null
             ? ' INNER JOIN reservation_resources rr ON rr.reservation_id = r.id'
@@ -220,6 +224,8 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     private function buildPageCriteria(
         ?DateTimeImmutable $from,
         ?DateTimeImmutable $to,
+        ?DateTimeImmutable $createdFrom,
+        ?DateTimeImmutable $createdTo,
         ?ResourceId $resourceId,
         ?ReservationStatus $status,
         ?string $search,
@@ -234,6 +240,14 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         if ($to !== null) {
             $where[]       = 'r.end_at <= :to';
             $params[':to'] = $to->format('Y-m-d H:i:s');
+        }
+        if ($createdFrom !== null) {
+            $where[]                = 'r.created_at >= :created_from';
+            $params[':created_from'] = $createdFrom->format('Y-m-d H:i:s');
+        }
+        if ($createdTo !== null) {
+            $where[]              = 'r.created_at <= :created_to';
+            $params[':created_to'] = $createdTo->format('Y-m-d H:i:s');
         }
         if ($status !== null) {
             $where[]           = 'r.status = :status';
