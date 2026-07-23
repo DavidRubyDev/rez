@@ -2193,3 +2193,21 @@ to the `resources` table definition, same pattern as `active`/`default_duration_
 `includeUnpublished: true` while everyone else gets the public-safe default) and `rez-admin`'s
 published toggle in the resource form are out of scope for this repo — see the matching work in
 those two repos.
+
+**Follow-up fix (same branch):** `tests/Integration/Persistence/Mysql/MysqlIntegrationTestCase.php`
+has its **own** hardcoded `resources` table DDL in `createSchema()`, entirely separate from
+`database/seeds/schema/000_schema.sql` — this is what `composer test-integration` (and CI) actually
+runs against, not the seed files. Missed on the first pass since integration tests skip locally
+with no `DB_HOST`/`DB_NAME`/etc. env vars set (the default in this sandbox), so the gap only
+surfaced in CI: `Unknown column 'published' in 'field list'` on every `MysqlResourceRepositoryTest`
+case that touched `save()`/`findPage()`/`countPage()`. Added `published TINYINT(1) NOT NULL DEFAULT
+1` to that inline DDL too. Verified for real this time — not just "should work" — against a fresh
+database created inside the `rez-starter` Docker stack (`rez-starter-db-1`, reachable from the
+`rez-starter-app-1` container which already has both `pdo_mysql` and this repo's own `vendor/`
+live-mounted at `/var/rez`): `DB_HOST=db DB_NAME=rez_integration_verify … vendor/bin/phpunit
+--testsuite Integration` — all 102 tests green, only the one pre-existing unrelated warning
+(`MysqlDatabaseSeederTest`'s deliberate missing-file case). **Lesson**: this repo has two schema
+definitions that must be kept in sync by hand — the seed files (what real deployments run) and
+this test-only inline DDL (what `composer test-integration`/CI runs) — any future column addition
+needs both updated, and skip-by-default-with-no-env-vars means a local run proves nothing about
+whether that second copy was actually touched.
