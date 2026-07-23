@@ -95,4 +95,34 @@ class ResourceTest extends TestCase
 
         $this->assertSame(45, $resource->defaultDurationMinutes);
     }
+
+    public function testPublishedDefaultsToTrue(): void
+    {
+        $resource = new Resource($this->id, $this->type, 'Room A', 10);
+
+        $this->assertTrue($resource->published);
+    }
+
+    public function testPublishedCanBeSetToFalseAtConstruction(): void
+    {
+        $resource = new Resource($this->id, $this->type, 'Room A', 10, published: false);
+
+        $this->assertFalse($resource->published);
+    }
+
+    public function testWithPublishedReturnsNewInstance(): void
+    {
+        $resource = new Resource($this->id, $this->type, 'Room A', 10);
+        $updated  = $resource->withPublished(false);
+
+        $this->assertFalse($updated->published);
+    }
+
+    public function testWithPublishedDoesNotMutateOriginal(): void
+    {
+        $resource = new Resource($this->id, $this->type, 'Room A', 10);
+        $resource->withPublished(false);
+
+        $this->assertTrue($resource->published);
+    }
 }
