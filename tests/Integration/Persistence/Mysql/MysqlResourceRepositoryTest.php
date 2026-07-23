@@ -151,4 +151,24 @@ class MysqlResourceRepositoryTest extends MysqlIntegrationTestCase
 
         $this->assertSame(2, $this->repository->findAll()->count());
     }
+
+    public function testDefaultDurationMinutesRoundtripsWhenSet(): void
+    {
+        $resource = new Resource(ResourceId::generate(), ResourceType::fromString('class'), 'Pilates', 20, defaultDurationMinutes: 45);
+        $this->repository->save($resource);
+
+        $found = $this->repository->findById($resource->id);
+
+        $this->assertSame(45, $found->defaultDurationMinutes);
+    }
+
+    public function testDefaultDurationMinutesRoundtripsAsNullWhenUnset(): void
+    {
+        $resource = $this->makeResource();
+        $this->repository->save($resource);
+
+        $found = $this->repository->findById($resource->id);
+
+        $this->assertNull($found->defaultDurationMinutes);
+    }
 }

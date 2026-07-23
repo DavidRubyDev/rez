@@ -34,6 +34,7 @@ final class UpdateResourceUseCase implements UpdateResourceUseCaseInterface
             $request->capacity ?? $existing->capacity,
             $request->attributes ?? $existing->attributes,
             $existing->active,
+            $request->defaultDurationMinutes ?? $existing->defaultDurationMinutes,
         );
 
         try {

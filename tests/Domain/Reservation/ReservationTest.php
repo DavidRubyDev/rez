@@ -14,6 +14,7 @@ use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Session\SessionId;
 
 class ReservationTest extends TestCase
 {
@@ -114,5 +115,21 @@ class ReservationTest extends TestCase
         $this->assertNotSame($original, $confirmed);
         $this->assertSame(ReservationStatus::Pending, $original->status);
         $this->assertSame(ReservationStatus::Confirmed, $confirmed->status);
+    }
+
+    public function testSessionIdDefaultsToNull(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+
+        $this->assertNull($reservation->sessionId);
+    }
+
+    public function testSessionIdIsStoredAndReturned(): void
+    {
+        $sessionId   = SessionId::generate();
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party, $sessionId);
+
+        $this->assertNotNull($reservation->sessionId);
+        $this->assertTrue($sessionId->equals($reservation->sessionId));
     }
 }

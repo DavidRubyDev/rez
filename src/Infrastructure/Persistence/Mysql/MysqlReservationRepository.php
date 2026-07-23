@@ -18,6 +18,7 @@ use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Session\SessionId;
 use Rez\Domain\Shared\Utc;
 use Rez\Infrastructure\Mapper\ReservationStatusMapper;
 
@@ -80,6 +81,22 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
                 ':end_at'           => $slot->end->format('Y-m-d H:i:s'),
                 ':cancelled_status' => $this->statusMapper->toString(ReservationStatus::Cancelled),
             ]);
+        } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+
+        /** @var array<int, array<string, mixed>> $rows */
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return ReservationCollection::fromArray(array_values(array_map($this->hydrate(...), $rows)));
+    }
+
+    public function findBySessionId(SessionId $sessionId): ReservationCollection
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM reservations WHERE session_id = :session_id');
+            $stmt->execute([':session_id' => $sessionId->toString()]);
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
             throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
@@ -238,8 +255,8 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     {
         try {
             $stmt = $this->pdo->prepare('
-                INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, external_ref, created_at)
-                VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :external_ref, :created_at)
+                INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, external_ref, created_at, session_id)
+                VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :external_ref, :created_at, :session_id)
                 ON DUPLICATE KEY UPDATE
                     status       = VALUES(status),
                     start_at     = VALUES(start_at),
@@ -248,7 +265,8 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
                     party_email  = VALUES(party_email),
                     party_size   = VALUES(party_size),
                     party_phone  = VALUES(party_phone),
-                    external_ref = VALUES(external_ref)
+                    external_ref = VALUES(external_ref),
+                    session_id   = VALUES(session_id)
             ');
 
             $stmt->execute([
@@ -262,6 +280,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
                 ':party_phone'  => $reservation->party->phone,
                 ':external_ref' => $reservation->party->externalRef,
                 ':created_at'   => $reservation->createdAt->format('Y-m-d H:i:s'),
+                ':session_id'   => $reservation->sessionId?->toString(),
             ]);
 
             $delete = $this->pdo->prepare('DELETE FROM reservation_resources WHERE reservation_id = :id');
@@ -304,6 +323,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
             ),
             $this->statusMapper->fromString($this->str($row['status'])),
             new DateTimeImmutable($this->str($row['created_at']), $utc),
+            $this->nullStr($row['session_id']) !== null ? SessionId::fromString($this->str($row['session_id'])) : null,
         );
     }
 

@@ -35,6 +35,15 @@ abstract class MysqlRepository
         return $value;
     }
 
+    protected function nullInt(mixed $value): ?int
+    {
+        if ($value !== null && !is_int($value)) {
+            throw new UnexpectedValueException('Expected a nullable integer value from database row.');
+        }
+
+        return $value;
+    }
+
     protected function bool(mixed $value): bool
     {
         if (!is_int($value) && !is_bool($value)) {

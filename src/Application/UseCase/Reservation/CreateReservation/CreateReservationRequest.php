@@ -16,6 +16,7 @@ final class CreateReservationRequest
         public readonly DateTimeImmutable $start,
         public readonly DateTimeImmutable $end,
         public readonly Party $party,
+        public readonly ?string $sessionId = null,
     ) {
     }
 }

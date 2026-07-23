@@ -44,7 +44,16 @@
 > client-side to server-driven pagination/filtering/sorting, via a `Page<T>` API type,
 > `usePagination`/`useDebouncedValue` hooks, and a shared `Pagination` component (rendered above
 > the list, with a "Per page" size selector) — closing out the pagination feature across all
-> three repos. Platform extensions (payments, credits, subscriptions) not yet built.
+> three repos. `14_rez-sessions.md` added `Session` — a discrete, admin-created, fixed-length
+> class occurrence (Pilates, cycling, massage) — as the unit customers book against for
+> class-type resources, closing a gap where `AvailabilityService` never verified a submitted
+> `TimeSlot` matched anything specific for such resources. `Resource.defaultDurationMinutes` and
+> `Reservation.sessionId` were added alongside it, and `CreateReservationUseCase` gained a
+> session-booking path (session is the sole source of truth for resourceId/TimeSlot on that
+> path, body-supplied values are ignored) and `CancelSessionUseCase` cascade-cancels every
+> reservation on a cancelled session via `BulkCancelReservationsUseCase`. `rez-starter` routes,
+> `rez-admin` session management UI, and `rez-components`' class-booking flow are not yet built.
+> Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -123,6 +132,11 @@ use cases directly. See step 73 in `docs/CONTEXT.md`.
 - `Party` — immutable value object. Fields: `name`, `email`, `size`, `phone`, `externalRef`.
   `externalRef` is a nullable opaque string — platform layer sets it to `userId.toString()`
   for authenticated bookings, null for guests. The library never interprets it.
+- `Reservation.sessionId` — nullable `SessionId` (`rez-sessions`). Same boundary as
+  `Party.externalRef`: the library stores and returns it but never interprets it. Set when a
+  reservation is booked against a `Session` (see below); null for reservations against
+  continuous `AvailabilityRule`-governed resources (tables). No FK on the `session_id` column —
+  same reasoning as `wallet_transactions.reservation_id`.
 - `ResourceIdCollection` — immutable collection of `ResourceId[]`, min 1 element
 - `ReservationSettings` — immutable value object, four `bool` fields: `autoConfirm`,
   `autoSendReservationCreated`, `autoSendReservationConfirmed`, `autoSendReservationCancelled`.
@@ -135,9 +149,14 @@ use cases directly. See step 73 in `docs/CONTEXT.md`.
 
 #### Resources (COMPLETE)
 - `Resource` — entity. Fields: `id`, `type`, `name`, `capacity`, `attributes`, `active` (bool, default
-  `true`). `deactivate(): self` — immutable updater. Deletion is soft (invariant 13): `resources` rows
+  `true`), `defaultDurationMinutes` (nullable int, `rez-sessions`). Deletion is soft (invariant 13): `resources` rows
   are never removed, only deactivated, so the `reservation_resources`/`availability_*` `ON DELETE
   CASCADE` FKs stay harmless and existing reservations never lose their resource references.
+  `defaultDurationMinutes` is a fallback session length for class-type resources — table-type
+  resources leave it null; `CreateSessionUseCase` uses it when a session-creation request doesn't
+  override the duration itself. No invariant enforced on it here — validation that a class-type
+  resource *should* have one is an application-layer/admin-UI concern, per the existing pattern of
+  `attributes` being an untyped bag the domain doesn't interpret.
 - `ResourceId` — UUID v4 value object
 - `ResourceType` — value object wrapping a lowercase slug string
 - `ResourceCollection` — immutable collection
@@ -147,6 +166,31 @@ use cases directly. See step 73 in `docs/CONTEXT.md`.
 - `AvailabilityOverride` — value object. Per-resource, per-date available/blocked.
 - `AvailabilityWindow` — value object. Resolved available `TimeSlot[]` for a resource on a date.
 - `DayOfWeek` — pure enum. Monday-first (ISO-8601). String mapping in `DayOfWeekMapper`.
+
+Continuous per-day-of-week windows are the right model for resources like tables where any
+start/end inside the window is a legal booking. They are the *wrong* model for fixed-length
+classes with irregular start times set by a lecturer's own schedule — see `Sessions` below, a
+parallel model for that case, not a replacement for this one.
+
+#### Sessions (COMPLETE — `rez-sessions`)
+- `Session` — immutable entity, static factory only (matches `Reservation`/`NewsletterSubscriber`,
+  not `Resource`'s public-constructor style, since its state transition needs the same guard
+  pattern as `Reservation::cancel()`). Fields: `id`, `resourceId`, `startTime`, `durationMinutes`,
+  `capacity`, `status` — all `public readonly`, no getters. `create()` sets
+  `status = SessionStatus::Scheduled`, throws `\InvalidArgumentException` if `durationMinutes <= 0`
+  or `capacity <= 0`. `cancel()` — only from `Scheduled`, throws `InvalidSessionStateException` if
+  already `Cancelled`. `toTimeSlot()` — `new TimeSlot($startTime, $startTime->modify("+{duration}
+  minutes"))` — the one place session duration becomes a `TimeSlot`; nothing else computes it.
+  A discrete, admin-created occurrence with a fixed start time — the unit customers actually book
+  against for class-type resources (Pilates, cycling, massage), where `AvailabilityRule`'s
+  continuous open/close window can't express "class starts at 09:15, not any time in [09:00,
+  17:00]". Before this, nothing stopped a client submitting an arbitrary `TimeSlot` to
+  `POST /api/reservations` for such a resource — `AvailabilityService::isSlotAvailable()` only
+  checked a rule existed and nothing conflicted, never that the slot matched anything specific.
+- `SessionId` — UUID v4 value object (`UuidV4Id` trait)
+- `SessionStatus` — pure enum, no backing values: `Scheduled`, `Cancelled`. String mapping in
+  `SessionStatusMapper`.
+- `SessionCollection` — immutable collection, same shape as `ResourceCollection`.
 
 #### Users (CORE — COMPLETE, `rez-users`)
 
@@ -244,6 +288,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `NewsletterRepositoryInterface` ✅ | `MysqlNewsletterRepository` ✅ | COMPLETE |
 | `UserRepositoryInterface` | `MysqlUserRepository` | COMPLETE (same binding note as above) |
 | `PasswordResetRepositoryInterface` | `MysqlPasswordResetRepository` | COMPLETE (same binding note as above) |
+| `SessionRepositoryInterface` | `MysqlSessionRepository` | COMPLETE (`rez-sessions`) — **bound directly in `config/container.php`**, unlike every other `rez`-owned repository interface above. Per that scaffold's explicit instruction; not left for the client app to bind. |
 
 #### Implemented in client repo (NOT in `rez`)
 
@@ -277,7 +322,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 
 | Use case | Input | Output | Notes |
 |---|---|---|---|
-| `CreateReservationUseCase` | `CreateReservationRequest` | `CreateReservationResponse` | Checks availability, throws `ConflictException` if slot taken. After save: single `if ($settings->autoConfirm) { …confirmed… } else { …created… }` — generates one `CancellationToken` and sends exactly one of the two emails via `ReservationEmailService`, gated by `ReservationSettings` (`rez-lifecycle-email-integration`) |
+| `CreateReservationUseCase` | `CreateReservationRequest` | `CreateReservationResponse` | Checks availability, throws `ConflictException` if slot taken. After save: single `if ($settings->autoConfirm) { …confirmed… } else { …created… }` — generates one `CancellationToken` and sends exactly one of the two emails via `ReservationEmailService`, gated by `ReservationSettings` (`rez-lifecycle-email-integration`). `rez-sessions`: `CreateReservationRequest` gained optional `?string $sessionId` — when present, `resolveSessionSlot()` takes over entirely: loads the `Session` (`SessionNotFoundException` propagates), rejects non-`Scheduled` sessions (`InvalidSessionStateException`), derives `TimeSlot`/`resourceId` from the session itself — **any resourceId/timeslot the request body also carries is ignored**. Capacity check sums `Party::size` across `findBySessionId()`'s non-cancelled results, throws `ConflictException` if it would exceed `session.capacity`. `AvailabilityService` is skipped entirely on this path — the session's existence and status *are* the availability check |
 | `CancelReservationUseCase` | `CancelReservationRequest` | `CancelReservationResponse` | Two paths, same underlying cancellation logic: admin (`cancellationToken === null`, no check) and guest (`cancellationToken !== null`, verified via `CancellationToken::verify()` against `UsersConfig::cancellationSecret`, throws `InvalidTokenException` on mismatch before any state change — `rez-guest-cancellation`). After save: sends the cancelled email via `ReservationEmailService::sendCancelledIfEnabled()` unconditionally, no actor-type branching (`rez-lifecycle-email-integration`) |
 | `ConfirmReservationUseCase` | `ConfirmReservationRequest` | `ConfirmReservationResponse` | Manual admin-confirm path. After save: generates a `CancellationToken` and sends the confirmed email via the same `ReservationEmailService::sendConfirmedIfEnabled()` that `CreateReservationUseCase`'s autoConfirm branch uses — exactly one place decides whether a confirmed email goes out (`rez-lifecycle-email-integration`) |
 | `SendReservationCreatedEmailUseCase` | `SendReservationCreatedEmailRequest(ReservationId)` | `SendReservationCreatedEmailResponse` | Manual escape hatch for rez-admin's "send anyway" button. Ignores `ReservationSettings` and reservation state entirely; calls `MailerInterface::sendReservationCreatedEmail()` directly, not through `ReservationEmailService`. Mailer failures propagate unswallowed |
@@ -286,9 +331,9 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `MarkNoShowUseCase` | `MarkNoShowRequest` | `MarkNoShowResponse` | |
 | `GetReservationUseCase` | `GetReservationRequest` | `GetReservationResponse` | |
 | `ListReservationsUseCase` | `ListReservationsRequest` | `ListReservationsResponse(reservations, total)` | `13_rez-pagination.md`: filters (`from`, `to`, `resourceId`, `status`, `search` against party name/email/phone) + `offset`/`limit`/`sortBy`/`sortDir` (`start`\|`end`\|`status`\|`party_name`\|`created_at`), validated via `ListParamsValidator`, executed in one SQL query via `ReservationRepositoryInterface::findPage()`/`countPage()` — the old in-memory `resourceId` filter after `findAll()` is gone. `findAll()` itself is untouched, still used nowhere else in this repo |
-| `CreateResourceUseCase` | `CreateResourceRequest` | `CreateResourceResponse` | |
+| `CreateResourceUseCase` | `CreateResourceRequest` | `CreateResourceResponse` | `CreateResourceRequest` includes `?int $defaultDurationMinutes = null` (`rez-sessions` follow-up fix), passed straight through to `Resource` |
 | `GetResourceUseCase` | `GetResourceRequest` | `GetResourceResponse` | |
-| `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable. No `active` field — carries the existing resource's `active` forward unchanged; there's no reactivate path anywhere in the API yet |
+| `UpdateResourceUseCase` | `UpdateResourceRequest` | `UpdateResourceResponse` | PATCH semantics — all fields nullable. No `active` field — carries the existing resource's `active` forward unchanged; there's no reactivate path anywhere in the API yet. `defaultDurationMinutes` (`rez-sessions` follow-up fix) follows the same nullable-fallback pattern as `capacity`/`name` (`$request->x ?? $existing->x`) — null means "not provided" and preserves the existing value, same as `active`; there is no way to explicitly clear it back to null through this use case yet |
 | `DeleteResourceUseCase` | `DeleteResourceRequest` | `DeleteResourceResponse` | Soft delete — repository's `delete()` deactivates rather than removes (invariant 13) |
 | `ListResourcesUseCase` | `ListResourcesRequest` | `ListResourcesResponse(resources, total)` | `13_rez-pagination.md`: no filters (nothing to filter on yet), `offset`/`limit`/`sortBy`/`sortDir` (`type`\|`name`\|`capacity`) via `ResourceRepositoryInterface::findPage()`/`countPage()`, both preserving the `active = 1` filter (invariant 13). `findAll()` untouched — still reachable via `GetResourceUseCase` for historical lookups |
 | `GetAvailabilityUseCase` | `GetAvailabilityRequest` | `GetAvailabilityResponse` | Validates resource exists (throws `ResourceNotFoundException`) then delegates to AvailabilityService, which returns an empty window for a deactivated resource (invariant 13). `GetAvailabilityRequest` accepts optional `int $partySize = 1`. |
@@ -320,6 +365,10 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `ListUsersUseCase` | `ListUsersRequest` | `ListUsersResponse(users, total)` | Admin-only by convention — auth enforcement is the HTTP layer's job, not this use case's (`rez-users`). `13_rez-pagination.md`: `ListUsersRequest` gained filters (`search` against name/email, `role`) + `offset`/`limit`/`sortBy`/`sortDir` (`name`\|`email`\|`role`\|`created_at`, default sort `created_at ASC` preserved) via `UserRepositoryInterface::findPage()`/`countPage()` — first `Request` in the codebase to go from empty to populated. `findAll()` untouched |
 | `AdminUpdateUserUseCase` | `AdminUpdateUserRequest(UserId, ?UserRole, ?newsletterOptIn)` | `AdminUpdateUserResponse(User)` | Role/newsletter override, PATCH semantics. Admin-only by convention — same auth-enforcement note as `ListUsersUseCase` (`rez-users`) |
 | `AdminCreateUserUseCase` | `AdminCreateUserRequest(name, email, resetBaseUrl, UserRole = Customer, newsletterOptIn = false)` | `AdminCreateUserResponse(User)` | No password field — generates and hashes a random one nobody is ever told, saves the user, then delegates to `RequestPasswordResetUseCaseInterface` (reused, not duplicated) to email a real reset link. No JWT in the response — the admin isn't logging in as the new user. `newsletterOptIn: true` subscribes via `SubscriberSource::Admin`, not `Registered` |
+| `CreateSessionUseCase` | `CreateSessionRequest(resourceId, startTime, ?durationMinutes, ?capacity)` | `CreateSessionResponse(Session)` | (`rez-sessions`) `startTime` parsed as `Y-m-d H:i` with the same round-trip validation `SaveAvailabilityRuleUseCase` uses for its date bounds. Defaults `durationMinutes` from `Resource::defaultDurationMinutes` and `capacity` from `Resource::capacity` when the request omits them; throws `\InvalidArgumentException` if duration is missing from both — a class resource with no duration anywhere is a configuration error, not a silent 0 |
+| `CancelSessionUseCase` | `CancelSessionRequest(SessionId)` | `CancelSessionResponse(Session, BulkCancelReservationsResponse)` | (`rez-sessions`) Cancels the session, saves, then calls `findBySessionId()` and reuses `BulkCancelReservationsUseCase` to bulk-cancel every reservation on it — deliberately not reimplementing its skip-on-invalid-state loop |
+| `GetSessionUseCase` | `GetSessionRequest(SessionId)` | `GetSessionResponse(Session)` | (`rez-sessions`) Trivial, matches `GetResourceUseCase` |
+| `ListSessionsUseCase` | `ListSessionsRequest(resourceId, ?from, ?to)` | `ListSessionsResponse(SessionCollection)` | (`rez-sessions`) Validates the resource exists (`ResourceNotFoundException` propagates) then delegates entirely to `SessionRepositoryInterface::findForResource()` — same "validate then delegate" shape as `GetAvailabilityUseCase` |
 
 #### Not yet built
 
@@ -468,8 +517,8 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 
 | Table | Purpose |
 |---|---|
-| `resources` | id, type, name, capacity, attributes (JSON), active (TINYINT(1), default 1 — soft-delete flag, invariant 13) |
-| `reservations` | id, status, start_at, end_at, party_name, party_email, party_size, party_phone, party_external_ref, created_at |
+| `resources` | id, type, name, capacity, attributes (JSON), active (TINYINT(1), default 1 — soft-delete flag, invariant 13), default_duration_minutes (INT nullable, `rez-sessions`) |
+| `reservations` | id, status, start_at, end_at, party_name, party_email, party_size, party_phone, party_external_ref, created_at, session_id (CHAR(36) nullable, no FK, `rez-sessions`) |
 | `reservation_resources` | reservation_id, resource_id (many-to-many join) |
 | `availability_rules` | resource_id, day_of_week, open_time (CHAR 5), close_time (CHAR 5), valid_from (DATE nullable), valid_until (DATE nullable) |
 | `availability_overrides` | resource_id, date, available (TINYINT) |
@@ -478,6 +527,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `email_templates` | id, subject, html (MEDIUMTEXT), created_at | Seeded via `database/seeds/schema/003_email_templates.sql` — `CREATE TABLE IF NOT EXISTS` only, no seed rows (a real collection, not a singleton settings table) |
 | `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Seeded via `database/seeds/schema/004_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live, same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
 | `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites. Same file as `users` (`rez-users`) |
+| `sessions` | id, resource_id (FK → resources, no CASCADE — resources are soft-deleted, invariant 13, so it never fires), start_time, duration_minutes, capacity, status | Seeded via `database/seeds/schema/005_sessions.sql` (`rez-sessions`), `CREATE TABLE IF NOT EXISTS` only, no seed rows (a real collection, same pattern as `email_templates`) |
 
 #### Not yet built
 

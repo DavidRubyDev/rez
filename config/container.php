@@ -76,6 +76,16 @@ use Rez\Application\UseCase\Resource\UpdateResource\UpdateResourceUseCaseInterfa
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCase;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCaseInterface;
 use Rez\Application\Port\DatabaseSeederInterface;
+use Rez\Application\Port\SessionRepositoryInterface;
+use Rez\Application\UseCase\Session\CancelSession\CancelSessionUseCase;
+use Rez\Application\UseCase\Session\CancelSession\CancelSessionUseCaseInterface;
+use Rez\Application\UseCase\Session\CreateSession\CreateSessionUseCase;
+use Rez\Application\UseCase\Session\CreateSession\CreateSessionUseCaseInterface;
+use Rez\Application\UseCase\Session\GetSession\GetSessionUseCase;
+use Rez\Application\UseCase\Session\GetSession\GetSessionUseCaseInterface;
+use Rez\Application\UseCase\Session\ListSessions\ListSessionsUseCase;
+use Rez\Application\UseCase\Session\ListSessions\ListSessionsUseCaseInterface;
+use Rez\Infrastructure\Persistence\Mysql\MysqlSessionRepository;
 use Rez\Application\Service\FeatureGuard;
 use Rez\Application\Service\ReservationEmailService;
 use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCase;
@@ -141,6 +151,11 @@ return [
     UpdateResourceUseCaseInterface::class     => autowire(UpdateResourceUseCase::class),
     DeleteResourceUseCaseInterface::class     => autowire(DeleteResourceUseCase::class),
     DatabaseSeederInterface::class            => autowire(MysqlDatabaseSeeder::class),
+    SessionRepositoryInterface::class         => autowire(MysqlSessionRepository::class),
+    CreateSessionUseCaseInterface::class      => autowire(CreateSessionUseCase::class),
+    CancelSessionUseCaseInterface::class      => autowire(CancelSessionUseCase::class),
+    GetSessionUseCaseInterface::class         => autowire(GetSessionUseCase::class),
+    ListSessionsUseCaseInterface::class       => autowire(ListSessionsUseCase::class),
     SeedDatabaseUseCaseInterface::class       => autowire(SeedDatabaseUseCase::class),
     // ReservationSettingsRepositoryInterface must be bound by the client app (same pattern as
     // NewsletterRepositoryInterface below — the MySQL implementation lives in this library, but

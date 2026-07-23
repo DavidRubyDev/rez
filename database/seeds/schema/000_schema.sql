@@ -3,12 +3,13 @@
 -- Re-running is safe: all statements use CREATE TABLE IF NOT EXISTS.
 
 CREATE TABLE IF NOT EXISTS resources (
-    id         CHAR(36)     NOT NULL,
-    type       VARCHAR(100) NOT NULL,
-    name       VARCHAR(255) NOT NULL,
-    capacity   INT          NOT NULL,
-    attributes JSON         NOT NULL,
-    active     TINYINT(1)   NOT NULL DEFAULT 1,
+    id                       CHAR(36)     NOT NULL,
+    type                     VARCHAR(100) NOT NULL,
+    name                     VARCHAR(255) NOT NULL,
+    capacity                 INT          NOT NULL,
+    attributes               JSON         NOT NULL,
+    active                   TINYINT(1)   NOT NULL DEFAULT 1,
+    default_duration_minutes INT          NULL,
     PRIMARY KEY (id)
 );
 
@@ -23,6 +24,9 @@ CREATE TABLE IF NOT EXISTS reservations (
     party_phone  VARCHAR(50)  NULL,
     external_ref VARCHAR(255) NULL,
     created_at   DATETIME     NOT NULL,
+    -- No FK on purpose — same reasoning as wallet_transactions.reservation_id: don't couple
+    -- deletion behavior across tables that don't need it.
+    session_id   CHAR(36)     NULL,
     PRIMARY KEY (id)
 );
 

@@ -60,4 +60,18 @@ class CreateResourceUseCaseTest extends TestCase
 
         $this->useCase->execute(new CreateResourceRequest('table', 'Table 1', 0));
     }
+
+    public function testDefaultDurationMinutesDefaultsToNull(): void
+    {
+        $response = $this->useCase->execute(new CreateResourceRequest('table', 'Table 1', 4));
+
+        $this->assertNull($response->resource->defaultDurationMinutes);
+    }
+
+    public function testDefaultDurationMinutesIsPassedToResource(): void
+    {
+        $response = $this->useCase->execute(new CreateResourceRequest('class', 'Pilates', 20, defaultDurationMinutes: 45));
+
+        $this->assertSame(45, $response->resource->defaultDurationMinutes);
+    }
 }

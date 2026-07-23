@@ -81,4 +81,18 @@ class ResourceTest extends TestCase
 
         $this->assertTrue($resource->active);
     }
+
+    public function testDefaultDurationMinutesDefaultsToNull(): void
+    {
+        $resource = new Resource($this->id, $this->type, 'Room A', 10);
+
+        $this->assertNull($resource->defaultDurationMinutes);
+    }
+
+    public function testDefaultDurationMinutesIsStoredAndReturned(): void
+    {
+        $resource = new Resource($this->id, $this->type, 'Pilates', 20, defaultDurationMinutes: 45);
+
+        $this->assertSame(45, $resource->defaultDurationMinutes);
+    }
 }
