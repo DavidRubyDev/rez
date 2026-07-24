@@ -70,8 +70,17 @@
 > a nullable `Reservation.checkedIn` timestamp — an admin-only action recording when a party
 > actually showed up, reachable from `Confirmed` or `NoShow` (so a no-show can be corrected by
 > checking in later), with `markNoShow()` reachable from `CheckedIn` too so the two states toggle
-> back and forth, clearing `checkedIn` on the way back to `NoShow`. Platform extensions (payments,
-> credits, subscriptions) not yet built.
+> back and forth, clearing `checkedIn` on the way back to `NoShow`. `feature/db-migrations`
+> replaced `database/seeds/schema/` with classic up-only, timestamp-ordered SQL migrations tracked
+> in a `schema_migrations` table (`MigrationRepositoryInterface`/`RunMigrationsUseCase`/
+> `BaselineMigrationsUseCase`) — every prior schema change needed a manual `ALTER TABLE` on every
+> deployed database since the old seed files only ever used `CREATE TABLE IF NOT EXISTS`; a new
+> migration file now just runs itself. `rez-starter`'s Docker entrypoint runs `composer migrate`
+> on every container start. Also fixed a real, previously-undetected bug this surfaced: the
+> integration test harness's hand-duplicated schema was missing FK constraints production
+> actually has, letting `MysqlReservationRepositoryTest`/`MysqlAvailabilityRepositoryTest`/
+> `MysqlSessionRepositoryTest` pass without ever inserting a real `resources` row. Platform
+> extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -311,6 +320,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `MailerSettingsRepositoryInterface` | `MysqlMailerSettingsRepository` | COMPLETE (same binding note as above) |
 | `EmailTemplateRepositoryInterface` | `MysqlEmailTemplateRepository` | COMPLETE (same binding note as above) |
 | `DatabaseSeederInterface` | `MysqlDatabaseSeeder` | COMPLETE |
+| `MigrationRepositoryInterface` | `MysqlMigrationRepository` | COMPLETE (`feature/db-migrations`) |
 | `StripeEventRepositoryInterface` | `MysqlStripeEventRepository` | NOT YET BUILT |
 | `WalletRepositoryInterface` | `MysqlWalletRepository` | NOT YET BUILT |
 | `SubscriptionRepositoryInterface` | `MysqlSubscriptionRepository` | NOT YET BUILT |
@@ -381,7 +391,9 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `UpdateEmailTemplateUseCase` | `UpdateEmailTemplateRequest` | `UpdateEmailTemplateResponse` | PATCH semantics via `EmailTemplate::withContent()` |
 | `DeleteEmailTemplateUseCase` | `DeleteEmailTemplateRequest` | `DeleteEmailTemplateResponse` | `findById` before `delete`, so a missing template throws rather than silently no-opping |
 | `SendEmailTemplateUseCase` | `SendEmailTemplateRequest(EmailTemplateId, string[] $recipients)` | `SendEmailTemplateResponse(int $sent)` | Validates every recipient up front, fails fast if any is malformed; per-recipient mailer failures are caught, logged, and skipped — same pattern as `BroadcastUseCase` |
-| `SeedDatabaseUseCase` | `SeedDatabaseRequest(string[] $seedsDirectories)` | `SeedDatabaseResponse` | Globs *.sql, executes in filename order across all directories |
+| `SeedDatabaseUseCase` | `SeedDatabaseRequest(string[] $seedsDirectories)` | `SeedDatabaseResponse` | Globs *.sql, executes in filename order across all directories. Now only ever pointed at `dataPath()` (optional demo data) — `seedsPath()` (schema) was removed |
+| `RunMigrationsUseCase` | `RunMigrationsRequest(string[] $migrationsDirectories)` | `RunMigrationsResponse(string[] $applied)` | (`feature/db-migrations`) Wraps `MigrationRepositoryInterface::withLock()` around: ensure tracking table exists → resolve pending via `MigrationFileResolver` → execute + record each one |
+| `BaselineMigrationsUseCase` | `BaselineMigrationsRequest(string[] $migrationsDirectories)` | `BaselineMigrationsResponse(string[] $baselined)` | (`feature/db-migrations`) Same shape as `RunMigrationsUseCase` but calls `markMigrationApplied()` instead of `applyMigration()` — records as applied without executing any SQL, for databases already at that schema state via the old seed files |
 | `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
 | `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
 | `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). |
@@ -553,12 +565,13 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `reservation_resources` | reservation_id, resource_id (many-to-many join) |
 | `availability_rules` | resource_id, day_of_week, open_time (CHAR 5), close_time (CHAR 5), valid_from (DATE nullable), valid_until (DATE nullable) |
 | `availability_overrides` | resource_id, date, available (TINYINT) |
-| `reservation_settings` | id (always 1, single row by convention), auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at | Seeded via `database/seeds/schema/001_reservation_settings.sql` (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`) — a new numbered file rather than appended to `000_schema.sql`, per explicit instruction on this scaffold |
-| `mailer_settings` | id (always 1, single row by convention), from_address, from_name, updated_at | Seeded via `database/seeds/schema/002_mailer_settings.sql`, same pattern as `reservation_settings`. Seeded defaults (`noreply@example.com` / `Rez`) are placeholders — every deployment must update them before going live |
-| `email_templates` | id, subject, html (MEDIUMTEXT), created_at | Seeded via `database/seeds/schema/003_email_templates.sql` — `CREATE TABLE IF NOT EXISTS` only, no seed rows (a real collection, not a singleton settings table) |
-| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Seeded via `database/seeds/schema/004_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live, same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
-| `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites. Same file as `users` (`rez-users`) |
-| `sessions` | id, resource_id (FK → resources, no CASCADE — resources are soft-deleted, invariant 13, so it never fires), start_time, duration_minutes, capacity, status | Seeded via `database/seeds/schema/005_sessions.sql` (`rez-sessions`), `CREATE TABLE IF NOT EXISTS` only, no seed rows (a real collection, same pattern as `email_templates`) |
+| `reservation_settings` | id (always 1, single row by convention), auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at | Created via `database/migrations/20260101000002_create_reservation_settings.sql` (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`) |
+| `mailer_settings` | id (always 1, single row by convention), from_address, from_name, updated_at | Created via `database/migrations/20260101000003_create_mailer_settings.sql`, same pattern as `reservation_settings`. Seeded defaults (`noreply@example.com` / `Rez`) are placeholders — every deployment must update them before going live |
+| `email_templates` | id, subject, html (MEDIUMTEXT), created_at | Created via `database/migrations/20260101000004_create_email_templates.sql` — no seed rows (a real collection, not a singleton settings table) |
+| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Created via `database/migrations/20260101000005_create_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live, same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
+| `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites. Same migration file as `users` (`rez-users`) |
+| `sessions` | id, resource_id (FK → resources, no CASCADE — resources are soft-deleted, invariant 13, so it never fires), start_time, duration_minutes, capacity, status | Created via `database/migrations/20260101000006_create_sessions.sql` (`rez-sessions`), no seed rows (a real collection, same pattern as `email_templates`) |
+| `schema_migrations` | name (PK), applied_at | `feature/db-migrations`. Tracks which migration files have run — bootstrap table, created by `MigrationRepositoryInterface::ensureMigrationsTable()` itself, not a numbered migration |
 
 #### Not yet built
 
@@ -569,14 +582,40 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `stripe_events` | stripe_event_id (PK), type, payload (JSON), processed_at | PK is the Stripe event ID — provides idempotency |
 | `newsletter_subscribers` ✅ | id, email (UNIQUE), name, source, opted_in_at | Upsert by email |
 
-#### Seed directory convention
+#### Migrations (`feature/db-migrations` — replaces the old `database/seeds/schema/`)
+
+Classic up-only SQL migrations, tracked in the `schema_migrations` table above, replacing the
+old `CREATE TABLE IF NOT EXISTS`-only seed files — those never altered an already-existing table,
+so every schema change needed a manual `ALTER TABLE` on every deployed database (dev, test, every
+client). See `docs/CONTEXT.md` #95 for the full design writeup.
+
+- **Ownership is directory-based, not number-range-based** (unlike the old seed convention below):
+  `rez` owns `database/migrations/` in this repo; a client app (`rez-starter` or a `client-*` repo)
+  owns its own `database/migrations/` directory. `RunMigrationsRequest`/`BaselineMigrationsRequest`
+  both accept `string[] $migrationsDirectories` — the client app decides which directories to pass
+  and in what order (see §4's `rez-starter` section for `bin/migrate.php`).
+- **Filenames are timestamp-prefixed** (`20260101000001_create_resources_and_reservations.sql`),
+  not sequentially numbered — avoids collisions between migrations authored on parallel branches,
+  and doubles as the sort key (`MigrationFileResolver::resolvePending()` sorts by filename).
+- **Up-only, no rollback tooling** — matches this codebase's existing "fix forward" convention (no
+  rollback exists anywhere else in this repo either). A mistake gets corrected by a new migration,
+  not by reverting an old one.
+- **The six baseline migrations** (`20260101000001` through `20260101000006`) are the one exception
+  to "no defensive guards" — they're converted 1:1 from the deleted seed files and kept idempotent
+  (`IF NOT EXISTS`/`INSERT IGNORE`) since they still need to work for a genuinely fresh database.
+  Every already-existing database gets **baselined** instead (`BaselineMigrationsUseCase` records
+  them as applied without running their SQL). Every migration written after the baseline should
+  **not** use defensive guards — `schema_migrations` is what guarantees "runs exactly once" now.
+- `MysqlMigrationRepository::migrationsPath(): string` mirrors the old `MysqlDatabaseSeeder::seedsPath()`'s shape.
+
+#### Seed directory convention (`database/seeds/data/` only — demo data, unaffected by the above)
 
 | Range | Owner |
 |---|---|
 | 000–099 | `davidrubydev/rez` |
 | 200+ | Client repo |
 
-`SeedDatabaseRequest` accepts `string[] $seedsDirectories` (multiple directories, executed in order). Each package exposes `MysqlDatabaseSeeder::seedsPath(): string`.
+`SeedDatabaseRequest` accepts `string[] $seedsDirectories` (multiple directories, executed in order). `MysqlDatabaseSeeder::dataPath(): string` — `seedsPath()` (the old schema half) was removed, since `database/seeds/schema/` no longer exists.
 
 ---
 

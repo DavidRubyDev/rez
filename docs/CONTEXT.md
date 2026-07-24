@@ -2255,3 +2255,78 @@ small, orthogonal piece of state layered onto an existing entity, not a new aggr
   tests) passed, not just the new `MysqlReservationRepositoryTest` cases in isolation.
 - `rez-starter`'s `POST /api/reservations/{id}/check-in` route/handler and `rez-admin`'s check-in
   action are out of scope for this repo — see the matching work in those two repos.
+
+### 95. Database migrations replace `database/seeds/schema/` (`feature/db-migrations`)
+
+Every prior schema change in this repo (see #93, #94 above, and others further back) needed a
+manual `ALTER TABLE` on every already-deployed database, because `database/seeds/schema/*.sql`
+only ever used `CREATE TABLE IF NOT EXISTS` — idempotent for a fresh install, a no-op for an
+existing one. This replaces that whole mechanism with classic up-only, timestamp-ordered SQL
+migrations tracked in a `schema_migrations` table, so a column addition is a new file that runs
+itself, not a step someone has to remember.
+
+- **`MigrationFileResolver`** (`Application/Migration/`) — stateless static helper, same
+  own-namespace pattern as `ListParamsValidator`. `resolvePending(directories[], appliedNames[])`
+  globs `*.sql` across one or more directories, keyed by filename-without-extension, sorted by
+  name (timestamp-prefixed filenames sort chronologically for free), minus whatever's already in
+  `appliedNames`.
+- **`MigrationRepositoryInterface`** (port) — `ensureMigrationsTable()`, `appliedMigrationNames()`,
+  `applyMigration(name, sql)` (executes + records), `markMigrationApplied(name)` (records only,
+  never executes — this is what makes baselining safe), `withLock(callback)` (MySQL advisory lock,
+  `GET_LOCK('rez_schema_migrations', 10)`, wraps read-then-apply so two containers starting at
+  once can't both apply the same pending migration — a real TOCTOU race without it).
+- **`RunMigrationsUseCase`** / **`BaselineMigrationsUseCase`** (`Application/UseCase/Migration/`) —
+  both wrap the same read-then-resolve-then-act sequence in `withLock()`; the only difference is
+  `applyMigration()` (executes SQL) vs `markMigrationApplied()` (doesn't). Two small use cases
+  rather than one flag-driven use case, matching this codebase's existing convention (see
+  `Confirm`/`Cancel`/`MarkNoShow`/`CheckIn` as separate use cases rather than one parameterized
+  `TransitionReservation`).
+- **`MysqlMigrationRepository`** — the MySQL implementation. `applyMigration()` has no real
+  transactional guarantee under MySQL — DDL (`CREATE TABLE`/`ALTER TABLE`) implicitly commits, so
+  wrapping it in a PDO transaction would be a false promise, not a safety net. Documented on the
+  method rather than papered over; keep migrations small (one logical change per file) so a
+  partial failure is easy to reason about by hand. `migrationsPath()` static helper mirrors
+  `MysqlDatabaseSeeder::seedsPath()`'s old shape.
+- **`SqlStatementSplitter`** — extracted from `MysqlDatabaseSeeder` (shared by both it and the new
+  migration repository), then hardened after real end-to-end testing caught a bug: the original
+  naive `explode(';', ...)` broke on any semicolon inside a `--` comment or a string literal — it
+  tripped on this repo's *own* first migration file, whose header comment had a semicolon in
+  prose. Now tracks quote/comment state character-by-character before splitting. Does not handle
+  escaped quotes (`\'`, `''`) — a full SQL lexer is out of scope; documented as a known limitation.
+- **`database/migrations/`** replaces `database/seeds/schema/` (deleted). Six migrations,
+  converted 1:1 from the six deleted schema files (verified byte-identical via diff aside from
+  comments), backdated to `2026-01-01` as a symbolic epoch — not real dated work, just a marker
+  that these predate the migrations system itself. Kept idempotent (`IF NOT EXISTS`/`INSERT
+  IGNORE`) since the first one still needs to work for real against a genuinely fresh database;
+  every *already-existing* database (dev, test, any live client) instead gets **baselined** via
+  `BaselineMigrationsUseCase` — all six names recorded as applied without running their SQL, since
+  those tables already exist from the old seed files. Every migration *after* this baseline should
+  **not** use defensive guards — `schema_migrations` is what guarantees "runs exactly once" now.
+- **`MysqlDatabaseSeeder::seedsPath()` removed** — the schema directory it pointed to no longer
+  exists. `dataPath()` (the optional demo-data seeder, `database/seeds/data/`) is unaffected and
+  stays a separate concept from migrations, matching the classic migrations-vs-seeders split
+  (Rails, Laravel) — required singleton rows (`reservation_settings`/`mailer_settings` defaults,
+  the default admin/customer users) moved into the migrations themselves since the app doesn't
+  function without them; only genuinely optional demo data (fake resources/reservations) stays in
+  `database/seeds/data/`.
+- **`tests/Integration/Persistence/Mysql/MysqlIntegrationTestCase.php`**'s `createSchema()` — used
+  to hand-duplicate the full schema as a second, separately-maintained copy (the exact thing #93's
+  follow-up fix already flagged as a drift risk). Now calls the real `RunMigrationsUseCase`
+  against `database/migrations/` directly, so there is exactly one schema definition in this repo,
+  full stop. **This surfaced a real, pre-existing bug**: the old inline DDL was missing FK
+  constraints that production actually has on `reservation_resources`/`availability_rules`/
+  `availability_overrides`/`sessions` (all reference `resources(id)`) — `MysqlReservationRepositoryTest`,
+  `MysqlAvailabilityRepositoryTest`, and `MysqlSessionRepositoryTest` had all been passing only
+  because they used a bare `ResourceId::generate()` with no row behind it, and the lenient test
+  schema let that slide silently. Added `MysqlIntegrationTestCase::insertResource()` and switched
+  all three classes to use it — tests now exercise the same FK constraints production enforces.
+- Verified for real at every step against the live `rez-starter` Docker stack (`rez-starter-app-1`
+  has `pdo_mysql` and this repo's `vendor/` live-mounted at `/var/rez`), not just mocked unit
+  tests: a fresh throwaway database ran all six baseline migrations correctly (12 tables, default
+  admin/customer rows, second run applied nothing), the concurrent-lock test used two independent
+  PDO connections to prove `GET_LOCK`/`RELEASE_LOCK` actually serialise, and the full
+  `--testsuite Integration` run (113 tests) passed against a fresh database built entirely through
+  migrations.
+- `rez-starter`'s `bin/migrate.php`/`bin/migrate-baseline.php`, the Docker entrypoint wiring (so
+  pending migrations run automatically on every container start), and baselining the real dev/test
+  databases are out of scope for this repo — see the matching work there.
