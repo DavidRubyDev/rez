@@ -2211,3 +2211,47 @@ definitions that must be kept in sync by hand — the seed files (what real depl
 this test-only inline DDL (what `composer test-integration`/CI runs) — any future column addition
 needs both updated, and skip-by-default-with-no-env-vars means a local run proves nothing about
 whether that second copy was actually touched.
+
+### 94. Reservation check-in (`feature/reservation-check-in`)
+
+Adds a `checked_in` nullable timestamp to `Reservation`, plus a new `ReservationStatus::CheckedIn`
+case, so an admin can record when a party actually showed up — independent of (but built on top
+of) the existing `Confirmed`/`NoShow` states. Mirrors the shape of the `published` flag work: a
+small, orthogonal piece of state layered onto an existing entity, not a new aggregate.
+
+- `ReservationStatus::CheckedIn` added as a fifth case; `ReservationStatusMapper` maps it to/from
+  the wire value `'checked_in'`, following the existing `snake_case` convention (`no_show`).
+- `Reservation` gained `checkedIn: ?DateTimeImmutable = null` (constructor, `create()`,
+  `reconstruct()`) and a new `checkIn(): self` transition, guarded like every other transition
+  method (`InvalidReservationStateException` on an illegal source state):
+  - `checkIn()` — allowed from `Confirmed` **or** `NoShow` only. Sets `status = CheckedIn` and
+    `checkedIn = Utc::now()`. This is the "admin can switch between no-show and checked-in" half
+    of the spec — a party marked no-show can still be checked in later if they turn up.
+  - `markNoShow()` — its guard widened from "only `Confirmed`" to "`Confirmed` **or**
+    `CheckedIn`". When coming from `CheckedIn`, the new reservation's `checkedIn` is reset to
+    `null` — the timestamp means "currently checked in", so undoing that via no-show clears it
+    rather than leaving a stale value behind. Coming from `Confirmed` (the original path),
+    `checkedIn` is already `null` and stays that way.
+  - Deliberately **not** reachable from `Pending` or `Cancelled` in either direction — check-in
+    only makes sense once a reservation has been confirmed (or already resolved to no-show), same
+    reasoning `markNoShow()`'s original guard already encoded.
+- `CheckInUseCase` (`Application/UseCase/Reservation/CheckIn/`) — thin wrapper around
+  `Reservation::checkIn()`, same shape as `MarkNoShowUseCase` (`findById` → transition → `save`),
+  bound in `config/container.php` alongside it.
+- `MysqlReservationRepository`: `save()`/hydrate now read/write the new `checked_in` column
+  (`DATETIME NULL`, formatted the same way `created_at` is, hydrated back as UTC). No changes to
+  `findPage()`/`countPage()` — `status` filtering already goes through `ReservationStatusMapper`,
+  so `CheckedIn` works as a filter value for free.
+- `database/seeds/schema/000_schema.sql` — `checked_in DATETIME NULL` added directly to the
+  `reservations` table definition, same pattern as `published`/`default_duration_minutes` before
+  it. Existing deployed databases (dev, test, any live client) need a manual `ALTER TABLE
+  reservations ADD COLUMN checked_in DATETIME NULL` — `CREATE TABLE IF NOT EXISTS` never alters an
+  already-existing table, same gotcha as every prior column addition.
+- `tests/Integration/Persistence/Mysql/MysqlIntegrationTestCase.php`'s own inline `reservations`
+  DDL updated too, learning last time's lesson — both schema copies touched in the same commit.
+- Verified for real against a fresh throwaway database inside the `rez-starter` Docker stack
+  (`DB_HOST=db DB_NAME=rez_integration_verify` from `rez-starter-app-1`, which has `pdo_mysql` and
+  this repo's `vendor/` live-mounted at `/var/rez`) — the full `--testsuite Integration` run (105
+  tests) passed, not just the new `MysqlReservationRepositoryTest` cases in isolation.
+- `rez-starter`'s `POST /api/reservations/{id}/check-in` route/handler and `rez-admin`'s check-in
+  action are out of scope for this repo — see the matching work in those two repos.
