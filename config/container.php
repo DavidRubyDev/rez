@@ -43,6 +43,8 @@ use Rez\Application\UseCase\Reservation\BulkCancelReservations\BulkCancelReserva
 use Rez\Application\UseCase\Reservation\BulkCancelReservations\BulkCancelReservationsUseCaseInterface;
 use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationUseCase;
 use Rez\Application\UseCase\Reservation\CancelReservation\CancelReservationUseCaseInterface;
+use Rez\Application\UseCase\Reservation\CheckIn\CheckInUseCase;
+use Rez\Application\UseCase\Reservation\CheckIn\CheckInUseCaseInterface;
 use Rez\Application\UseCase\Reservation\ConfirmReservation\ConfirmReservationUseCase;
 use Rez\Application\UseCase\Reservation\ConfirmReservation\ConfirmReservationUseCaseInterface;
 use Rez\Application\UseCase\Reservation\CreateReservation\CreateReservationUseCase;
@@ -138,6 +140,7 @@ return [
     CancelReservationUseCaseInterface::class      => autowire(CancelReservationUseCase::class),
     ConfirmReservationUseCaseInterface::class => autowire(ConfirmReservationUseCase::class),
     MarkNoShowUseCaseInterface::class         => autowire(MarkNoShowUseCase::class),
+    CheckInUseCaseInterface::class            => autowire(CheckInUseCase::class),
     GetReservationUseCaseInterface::class     => autowire(GetReservationUseCase::class),
     ListReservationsUseCaseInterface::class   => autowire(ListReservationsUseCase::class),
     GetAvailabilityUseCaseInterface::class               => autowire(GetAvailabilityUseCase::class),

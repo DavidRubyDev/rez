@@ -66,7 +66,12 @@
 > `feature/resource-published-flag` added a `Resource.published` bool, orthogonal to the existing
 > `active` soft-delete flag — public listings (`GET /api/resources` with no admin token) exclude
 > unpublished resources, an authenticated admin sees everything, and admins can set it either way
-> on create/update. Platform extensions (payments, credits, subscriptions) not yet built.
+> on create/update. `feature/reservation-check-in` added a `ReservationStatus::CheckedIn` case and
+> a nullable `Reservation.checkedIn` timestamp — an admin-only action recording when a party
+> actually showed up, reachable from `Confirmed` or `NoShow` (so a no-show can be corrected by
+> checking in later), with `markNoShow()` reachable from `CheckedIn` too so the two states toggle
+> back and forth, clearing `checkedIn` on the way back to `NoShow`. Platform extensions (payments,
+> credits, subscriptions) not yet built.
 
 ---
 
@@ -137,10 +142,16 @@ use cases directly. See step 73 in `docs/CONTEXT.md`.
 ### 3.2 Domain modules and their status
 
 #### Reservations (COMPLETE)
-- `Reservation` — entity. States: `Pending → Confirmed → Cancelled | NoShow`
+- `Reservation` — entity. States: `Pending → Confirmed → Cancelled | NoShow | CheckedIn`, with
+  `NoShow ⇄ CheckedIn` toggling in both directions (`feature/reservation-check-in`).
 - `ReservationId` — UUID v4 value object
 - `ReservationStatus` — pure enum (no backing values)
 - `ReservationCollection` — immutable collection
+- `Reservation.checkedIn` — nullable `DateTimeImmutable` (`feature/reservation-check-in`).
+  Timestamp of the most recent `checkIn()` call; `null` until an admin checks the reservation in.
+  `checkIn()` is reachable from `Confirmed` or `NoShow` and sets it to `Utc::now()`; `markNoShow()`
+  is reachable from `Confirmed` or `CheckedIn` and, when coming from `CheckedIn`, resets it to
+  `null` — the column tracks "checked in right now," not a historical log of every check-in.
 - `TimeSlot` — immutable value object. `start < end` enforced. Adjacent slots do NOT overlap.
 - `Party` — immutable value object. Fields: `name`, `email`, `size`, `phone`, `externalRef`.
   `externalRef` is a nullable opaque string — platform layer sets it to `userId.toString()`
@@ -346,7 +357,8 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `SendReservationCreatedEmailUseCase` | `SendReservationCreatedEmailRequest(ReservationId)` | `SendReservationCreatedEmailResponse` | Manual escape hatch for rez-admin's "send anyway" button. Ignores `ReservationSettings` and reservation state entirely; calls `MailerInterface::sendReservationCreatedEmail()` directly, not through `ReservationEmailService`. Mailer failures propagate unswallowed |
 | `SendReservationConfirmedEmailUseCase` | `SendReservationConfirmedEmailRequest(ReservationId)` | `SendReservationConfirmedEmailResponse` | Same pattern as above, for the confirmed email |
 | `SendReservationCancelledEmailUseCase` | `SendReservationCancelledEmailRequest(ReservationId)` | `SendReservationCancelledEmailResponse` | Same pattern as above, for the cancelled email — no token needed |
-| `MarkNoShowUseCase` | `MarkNoShowRequest` | `MarkNoShowResponse` | |
+| `MarkNoShowUseCase` | `MarkNoShowRequest` | `MarkNoShowResponse` | Reachable from `Confirmed` or `CheckedIn` (`feature/reservation-check-in`); clears `checkedIn` when coming from `CheckedIn` |
+| `CheckInUseCase` | `CheckInRequest` | `CheckInResponse` | (`feature/reservation-check-in`) Reachable from `Confirmed` or `NoShow`; sets `checkedIn = Utc::now()`. Same shape as `MarkNoShowUseCase` |
 | `GetReservationUseCase` | `GetReservationRequest` | `GetReservationResponse` | |
 | `ListReservationsUseCase` | `ListReservationsRequest` | `ListReservationsResponse(reservations, total)` | `13_rez-pagination.md`: filters (`from`, `to`, `resourceId`, `status`, `search` against party name/email/phone) + `offset`/`limit`/`sortBy`/`sortDir` (`start`\|`end`\|`status`\|`party_name`\|`created_at`), validated via `ListParamsValidator`, executed in one SQL query via `ReservationRepositoryInterface::findPage()`/`countPage()` — the old in-memory `resourceId` filter after `findAll()` is gone. `findAll()` itself is untouched, still used nowhere else in this repo. **`createdFrom`/`createdTo`** (reservations-created-date-filter): a second, independent date range filtering `r.created_at`, distinct from `from`/`to` which filter `start_at`/`end_at` — lets an admin filter "reservations made in the last week" independent of what date they're booked for |
 | `CreateResourceUseCase` | `CreateResourceRequest` | `CreateResourceResponse` | `CreateResourceRequest` includes `?int $defaultDurationMinutes = null` (`rez-sessions` follow-up fix) and `bool $published = true` (`feature/resource-published-flag`), both passed straight through to `Resource` |
@@ -537,7 +549,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | Table | Purpose |
 |---|---|
 | `resources` | id, type, name, capacity, attributes (JSON), active (TINYINT(1), default 1 — soft-delete flag, invariant 13), default_duration_minutes (INT nullable, `rez-sessions`), published (TINYINT(1), default 1 — public-visibility flag, orthogonal to `active`, `feature/resource-published-flag`) |
-| `reservations` | id, status, start_at, end_at, party_name, party_email, party_size, party_phone, party_external_ref, created_at, session_id (CHAR(36) nullable, no FK, `rez-sessions`) |
+| `reservations` | id, status, start_at, end_at, party_name, party_email, party_size, party_phone, party_external_ref, created_at, session_id (CHAR(36) nullable, no FK, `rez-sessions`), checked_in (DATETIME nullable, `feature/reservation-check-in`) |
 | `reservation_resources` | reservation_id, resource_id (many-to-many join) |
 | `availability_rules` | resource_id, day_of_week, open_time (CHAR 5), close_time (CHAR 5), valid_from (DATE nullable), valid_until (DATE nullable) |
 | `availability_overrides` | resource_id, date, available (TINYINT) |

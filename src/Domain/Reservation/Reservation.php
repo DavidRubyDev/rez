@@ -20,6 +20,7 @@ final class Reservation
         public readonly ReservationStatus $status,
         public readonly DateTimeImmutable $createdAt,
         public readonly ?SessionId $sessionId = null,
+        public readonly ?DateTimeImmutable $checkedIn = null,
     ) {
     }
 
@@ -48,8 +49,9 @@ final class Reservation
         ReservationStatus $status,
         DateTimeImmutable $createdAt,
         ?SessionId $sessionId = null,
+        ?DateTimeImmutable $checkedIn = null,
     ): self {
-        return new self($id, $resourceIds, $slot, $party, $status, $createdAt, $sessionId);
+        return new self($id, $resourceIds, $slot, $party, $status, $createdAt, $sessionId, $checkedIn);
     }
 
     /**
@@ -61,7 +63,7 @@ final class Reservation
             throw new InvalidReservationStateException('Reservation is already cancelled.');
         }
 
-        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Cancelled, $this->createdAt, $this->sessionId);
+        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Cancelled, $this->createdAt, $this->sessionId, $this->checkedIn);
     }
 
     /**
@@ -73,7 +75,7 @@ final class Reservation
             throw new InvalidReservationStateException('Only a pending reservation can be confirmed.');
         }
 
-        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Confirmed, $this->createdAt, $this->sessionId);
+        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::Confirmed, $this->createdAt, $this->sessionId, $this->checkedIn);
     }
 
     /**
@@ -81,10 +83,22 @@ final class Reservation
      */
     public function markNoShow(): self
     {
-        if ($this->status !== ReservationStatus::Confirmed) {
-            throw new InvalidReservationStateException('Only a confirmed reservation can be marked as no-show.');
+        if ($this->status !== ReservationStatus::Confirmed && $this->status !== ReservationStatus::CheckedIn) {
+            throw new InvalidReservationStateException('Only a confirmed or checked-in reservation can be marked as no-show.');
         }
 
-        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::NoShow, $this->createdAt, $this->sessionId);
+        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::NoShow, $this->createdAt, $this->sessionId, checkedIn: null);
+    }
+
+    /**
+     * @throws InvalidReservationStateException
+     */
+    public function checkIn(): self
+    {
+        if ($this->status !== ReservationStatus::Confirmed && $this->status !== ReservationStatus::NoShow) {
+            throw new InvalidReservationStateException('Only a confirmed or no-show reservation can be checked in.');
+        }
+
+        return new self($this->id, $this->resourceIds, $this->slot, $this->party, ReservationStatus::CheckedIn, $this->createdAt, $this->sessionId, checkedIn: Utc::now());
     }
 }

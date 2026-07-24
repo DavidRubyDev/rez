@@ -132,4 +132,80 @@ class ReservationTest extends TestCase
         $this->assertNotNull($reservation->sessionId);
         $this->assertTrue($sessionId->equals($reservation->sessionId));
     }
+
+    public function testCreateSetsCheckedInToNull(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+
+        $this->assertNull($reservation->checkedIn);
+    }
+
+    public function testCheckInFromConfirmedReturnsCheckedInStatus(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)->confirm();
+
+        $this->assertSame(ReservationStatus::CheckedIn, $reservation->checkIn()->status);
+    }
+
+    public function testCheckInSetsCheckedInToApproximatelyNow(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)->confirm();
+
+        $before   = new DateTimeImmutable();
+        $checkedIn = $reservation->checkIn();
+        $after    = new DateTimeImmutable();
+
+        $this->assertNotNull($checkedIn->checkedIn);
+        $this->assertGreaterThanOrEqual($before->getTimestamp(), $checkedIn->checkedIn->getTimestamp());
+        $this->assertLessThanOrEqual($after->getTimestamp(), $checkedIn->checkedIn->getTimestamp());
+    }
+
+    public function testCheckInFromNoShowReturnsCheckedInStatus(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)
+            ->confirm()
+            ->markNoShow();
+
+        $checkedIn = $reservation->checkIn();
+
+        $this->assertSame(ReservationStatus::CheckedIn, $checkedIn->status);
+        $this->assertNotNull($checkedIn->checkedIn);
+    }
+
+    public function testCheckInFromPendingThrowsDomainException(): void
+    {
+        $this->expectException(DomainException::class);
+        Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)->checkIn();
+    }
+
+    public function testCheckInFromCancelledThrowsDomainException(): void
+    {
+        $this->expectException(DomainException::class);
+        Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)->cancel()->checkIn();
+    }
+
+    public function testCheckInFromCheckedInThrowsDomainException(): void
+    {
+        $this->expectException(DomainException::class);
+        Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)->confirm()->checkIn()->checkIn();
+    }
+
+    public function testMarkNoShowFromCheckedInReturnsNoShowAndClearsCheckedIn(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)
+            ->confirm()
+            ->checkIn();
+
+        $noShow = $reservation->markNoShow();
+
+        $this->assertSame(ReservationStatus::NoShow, $noShow->status);
+        $this->assertNull($noShow->checkedIn);
+    }
+
+    public function testMarkNoShowFromConfirmedLeavesCheckedInNull(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)->confirm();
+
+        $this->assertNull($reservation->markNoShow()->checkedIn);
+    }
 }
