@@ -44,4 +44,37 @@ class SqlStatementSplitterTest extends TestCase
     {
         $this->assertSame([], SqlStatementSplitter::split("  \n  "));
     }
+
+    public function testIgnoresSemicolonInsideLineComment(): void
+    {
+        $sql = "-- a comment; with a semicolon in it\nSELECT 1;\nSELECT 2";
+
+        $this->assertSame(['SELECT 1', 'SELECT 2'], SqlStatementSplitter::split($sql));
+    }
+
+    public function testIgnoresSemicolonInsideSingleQuotedString(): void
+    {
+        $sql = "INSERT INTO t (v) VALUES ('a;b');\nSELECT 1";
+
+        $this->assertSame(["INSERT INTO t (v) VALUES ('a;b')", 'SELECT 1'], SqlStatementSplitter::split($sql));
+    }
+
+    public function testIgnoresSemicolonInsideDoubleQuotedString(): void
+    {
+        $sql = 'INSERT INTO t (v) VALUES ("a;b");' . "\nSELECT 1";
+
+        $this->assertSame(['INSERT INTO t (v) VALUES ("a;b")', 'SELECT 1'], SqlStatementSplitter::split($sql));
+    }
+
+    public function testTrailingCommentAfterStatementIsStripped(): void
+    {
+        $sql = "SELECT 1; -- trailing comment; with a semicolon\nSELECT 2";
+
+        $this->assertSame(['SELECT 1', 'SELECT 2'], SqlStatementSplitter::split($sql));
+    }
+
+    public function testCommentOnlyInputReturnsEmptyArray(): void
+    {
+        $this->assertSame([], SqlStatementSplitter::split("-- just a comment; nothing else"));
+    }
 }
