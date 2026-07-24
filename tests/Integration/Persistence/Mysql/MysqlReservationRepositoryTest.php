@@ -30,7 +30,7 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         parent::setUp();
 
         $this->repository = new MysqlReservationRepository($this->pdo(), new ReservationStatusMapper(), new NullLogger());
-        $this->resourceId = ResourceId::generate();
+        $this->resourceId = $this->insertResource();
         $this->party      = new Party('John Doe', 'john@example.com', 2, null);
     }
 
@@ -223,7 +223,7 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
 
     public function testFindPageFiltersByResourceIdWithoutDuplicatesWhenReservationHasMultipleResources(): void
     {
-        $otherResourceId = ResourceId::generate();
+        $otherResourceId = $this->insertResource();
 
         $multiResource = Reservation::create(
             ReservationId::generate(),
@@ -360,7 +360,7 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
 
     public function testCountPageMatchesTrueDistinctCount(): void
     {
-        $otherResourceId = ResourceId::generate();
+        $otherResourceId = $this->insertResource();
 
         $multiResource = Reservation::create(
             ReservationId::generate(),

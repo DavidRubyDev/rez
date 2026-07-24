@@ -24,7 +24,7 @@ class MysqlSessionRepositoryTest extends MysqlIntegrationTestCase
         parent::setUp();
 
         $this->repository = new MysqlSessionRepository($this->pdo(), new SessionStatusMapper(), new NullLogger());
-        $this->resourceId = ResourceId::generate();
+        $this->resourceId = $this->insertResource();
     }
 
     private function makeSession(?DateTimeImmutable $startTime = null, int $capacity = 10): Session
@@ -73,7 +73,7 @@ class MysqlSessionRepositoryTest extends MysqlIntegrationTestCase
 
     public function testFindForResourceReturnsOnlySessionsForThatResource(): void
     {
-        $otherResourceId = ResourceId::generate();
+        $otherResourceId = $this->insertResource();
         $matching         = $this->makeSession();
         $unrelated        = Session::create(SessionId::generate(), $otherResourceId, new DateTimeImmutable('2024-06-03 09:00:00'), 60, 10);
 
