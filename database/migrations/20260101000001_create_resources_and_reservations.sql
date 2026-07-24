@@ -1,6 +1,9 @@
--- Rez reservation engine — MySQL schema
--- Run once against an empty database to create all tables.
--- Re-running is safe: all statements use CREATE TABLE IF NOT EXISTS.
+-- Baseline migration — converted 1:1 from the old database/seeds/schema/000_schema.sql.
+-- Kept idempotent (IF NOT EXISTS) since this one migration still needs to work for real
+-- against a genuinely fresh database. Every already-existing database is baselined
+-- (marked applied without running) instead of re-executing this. Future migrations
+-- should NOT use defensive guards — the schema_migrations tracking table is what
+-- guarantees "runs exactly once" from here on.
 
 CREATE TABLE IF NOT EXISTS resources (
     id                       CHAR(36)     NOT NULL,

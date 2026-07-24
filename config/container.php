@@ -78,6 +78,12 @@ use Rez\Application\UseCase\Resource\UpdateResource\UpdateResourceUseCaseInterfa
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCase;
 use Rez\Application\UseCase\Seed\SeedDatabase\SeedDatabaseUseCaseInterface;
 use Rez\Application\Port\DatabaseSeederInterface;
+use Rez\Application\Port\MigrationRepositoryInterface;
+use Rez\Application\UseCase\Migration\RunMigrations\RunMigrationsUseCase;
+use Rez\Application\UseCase\Migration\RunMigrations\RunMigrationsUseCaseInterface;
+use Rez\Application\UseCase\Migration\BaselineMigrations\BaselineMigrationsUseCase;
+use Rez\Application\UseCase\Migration\BaselineMigrations\BaselineMigrationsUseCaseInterface;
+use Rez\Infrastructure\Persistence\Mysql\MysqlMigrationRepository;
 use Rez\Application\Port\SessionRepositoryInterface;
 use Rez\Application\UseCase\Session\CancelSession\CancelSessionUseCase;
 use Rez\Application\UseCase\Session\CancelSession\CancelSessionUseCaseInterface;
@@ -156,6 +162,9 @@ return [
     UpdateResourceUseCaseInterface::class     => autowire(UpdateResourceUseCase::class),
     DeleteResourceUseCaseInterface::class     => autowire(DeleteResourceUseCase::class),
     DatabaseSeederInterface::class            => autowire(MysqlDatabaseSeeder::class),
+    MigrationRepositoryInterface::class       => autowire(MysqlMigrationRepository::class),
+    RunMigrationsUseCaseInterface::class      => autowire(RunMigrationsUseCase::class),
+    BaselineMigrationsUseCaseInterface::class => autowire(BaselineMigrationsUseCase::class),
     SessionRepositoryInterface::class         => autowire(MysqlSessionRepository::class),
     CreateSessionUseCaseInterface::class      => autowire(CreateSessionUseCase::class),
     CancelSessionUseCaseInterface::class      => autowire(CancelSessionUseCase::class),

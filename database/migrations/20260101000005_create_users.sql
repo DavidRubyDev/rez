@@ -1,11 +1,8 @@
--- Core users table and password reset tokens. Unlike 003_email_templates.sql,
--- this table gets two seed rows: a default Admin and a default Customer,
--- because every deployment needs at least one Admin to log into rez-admin,
--- and a Customer row is useful for exercising the customer-facing flows out
--- of the box. This table (unlike database/seeds/data/) is never expected to
--- be wiped. INSERT IGNORE is safe to re-run and, since email is UNIQUE, also
--- skips if a row was since recreated under a different id — same convention
--- as reservation_settings/mailer_settings. Credentials are a placeholder —
+-- Baseline migration — converted 1:1 from the old database/seeds/schema/004_users.sql.
+-- Core users table and password reset tokens. This table gets two seed rows: a
+-- default Admin and a default Customer, because every deployment needs at least
+-- one Admin to log into rez-admin, and a Customer row is useful for exercising
+-- the customer-facing flows out of the box. Credentials are a placeholder —
 -- every deployment must change these passwords before going live, same
 -- expectation as mailer_settings' noreply@example.com default.
 

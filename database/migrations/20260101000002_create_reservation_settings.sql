@@ -1,7 +1,7 @@
+-- Baseline migration — converted 1:1 from the old database/seeds/schema/001_reservation_settings.sql.
 -- Single-row settings table for the reservation lifecycle (autoConfirm + which
 -- lifecycle emails fire automatically). id is always 1 — enforced by convention,
 -- not a DB constraint, matching this repo's existing seed style.
--- Re-running is safe: CREATE TABLE IF NOT EXISTS + INSERT IGNORE.
 
 CREATE TABLE IF NOT EXISTS reservation_settings (
     id                               TINYINT UNSIGNED NOT NULL,

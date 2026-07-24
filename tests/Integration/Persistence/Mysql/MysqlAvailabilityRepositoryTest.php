@@ -24,7 +24,7 @@ class MysqlAvailabilityRepositoryTest extends MysqlIntegrationTestCase
         parent::setUp();
 
         $this->repository = new MysqlAvailabilityRepository($this->pdo(), new DayOfWeekMapper(), new NullLogger());
-        $this->resourceId = ResourceId::generate();
+        $this->resourceId = $this->insertResource();
     }
 
     public function testSaveAndFindRulesForResourceRoundtrip(): void

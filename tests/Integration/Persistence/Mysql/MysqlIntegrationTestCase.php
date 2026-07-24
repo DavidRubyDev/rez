@@ -6,6 +6,11 @@ namespace Rez\Tests\Integration\Persistence\Mysql;
 
 use PDO;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
+use Rez\Application\UseCase\Migration\RunMigrations\RunMigrationsRequest;
+use Rez\Application\UseCase\Migration\RunMigrations\RunMigrationsUseCase;
+use Rez\Domain\Resource\ResourceId;
+use Rez\Infrastructure\Persistence\Mysql\MysqlMigrationRepository;
 
 abstract class MysqlIntegrationTestCase extends TestCase
 {
@@ -48,139 +53,45 @@ abstract class MysqlIntegrationTestCase extends TestCase
         return self::$pdo ?? throw new \RuntimeException('No PDO connection available.');
     }
 
-    private static function createSchema(PDO $pdo): void
+    // resource_id in reservation_resources/availability_rules/availability_overrides/sessions
+    // is a real foreign key against resources(id) — a bare ResourceId::generate() with no row
+    // behind it only ever worked here because createSchema() used to hand-duplicate the schema
+    // without the FK constraints production actually has. Insert a real row instead.
+    protected function insertResource(?ResourceId $id = null): ResourceId
     {
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS resources (
-                id                        CHAR(36)     NOT NULL PRIMARY KEY,
-                type                      VARCHAR(100) NOT NULL,
-                name                      VARCHAR(255) NOT NULL,
-                capacity                  INT          NOT NULL,
-                attributes                JSON         NOT NULL,
-                active                    TINYINT(1)   NOT NULL DEFAULT 1,
-                default_duration_minutes  INT          NULL,
-                published                 TINYINT(1)   NOT NULL DEFAULT 1
-            )
-        ');
+        $id ??= ResourceId::generate();
 
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS reservations (
-                id           CHAR(36)     NOT NULL PRIMARY KEY,
-                status       VARCHAR(20)  NOT NULL,
-                start_at     DATETIME     NOT NULL,
-                end_at       DATETIME     NOT NULL,
-                party_name   VARCHAR(255) NOT NULL,
-                party_email  VARCHAR(255) NOT NULL,
-                party_size   INT          NOT NULL,
-                party_phone  VARCHAR(50)  NULL,
-                external_ref VARCHAR(255) NULL,
-                created_at   DATETIME     NOT NULL,
-                session_id   CHAR(36)     NULL,
-                checked_in   DATETIME     NULL
-            )
+        $stmt = $this->pdo()->prepare('
+            INSERT INTO resources (id, type, name, capacity, attributes)
+            VALUES (:id, :type, :name, :capacity, :attributes)
         ');
+        $stmt->execute([
+            ':id'         => $id->toString(),
+            ':type'       => 'table',
+            ':name'       => 'Test Resource',
+            ':capacity'   => 10,
+            ':attributes' => '{}',
+        ]);
 
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS reservation_resources (
-                reservation_id CHAR(36) NOT NULL,
-                resource_id    CHAR(36) NOT NULL,
-                PRIMARY KEY (reservation_id, resource_id)
-            )
-        ');
-
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS availability_rules (
-                resource_id  CHAR(36)    NOT NULL,
-                day_of_week  VARCHAR(10) NOT NULL,
-                open_time    CHAR(5)     NOT NULL,
-                close_time   CHAR(5)     NOT NULL,
-                valid_from   DATE        NULL DEFAULT NULL,
-                valid_until  DATE        NULL DEFAULT NULL,
-                PRIMARY KEY (resource_id, day_of_week)
-            )
-        ');
-
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS availability_overrides (
-                resource_id  CHAR(36)   NOT NULL,
-                date         DATE       NOT NULL,
-                available    TINYINT(1) NOT NULL,
-                PRIMARY KEY (resource_id, date)
-            )
-        ');
-
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS newsletter_subscribers (
-                id          CHAR(36)     NOT NULL PRIMARY KEY,
-                email       VARCHAR(255) NOT NULL UNIQUE,
-                name        VARCHAR(255) NULL,
-                source      VARCHAR(20)  NOT NULL,
-                opted_in_at DATETIME     NOT NULL
-            )
-        ');
-
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS reservation_settings (
-                id                               TINYINT UNSIGNED NOT NULL PRIMARY KEY,
-                auto_confirm                     TINYINT(1)       NOT NULL DEFAULT 0,
-                auto_send_reservation_created    TINYINT(1)       NOT NULL DEFAULT 1,
-                auto_send_reservation_confirmed  TINYINT(1)       NOT NULL DEFAULT 1,
-                auto_send_reservation_cancelled  TINYINT(1)       NOT NULL DEFAULT 1,
-                updated_at                       DATETIME         NOT NULL
-            )
-        ');
-
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS mailer_settings (
-                id           TINYINT UNSIGNED NOT NULL PRIMARY KEY,
-                from_address VARCHAR(255)     NOT NULL,
-                from_name    VARCHAR(255)     NOT NULL,
-                updated_at   DATETIME         NOT NULL
-            )
-        ');
-
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS email_templates (
-                id         CHAR(36)     NOT NULL PRIMARY KEY,
-                subject    VARCHAR(255) NOT NULL,
-                html       MEDIUMTEXT   NOT NULL,
-                created_at DATETIME     NOT NULL
-            )
-        ');
-
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS users (
-                id                 CHAR(36)     NOT NULL PRIMARY KEY,
-                name               VARCHAR(255) NOT NULL,
-                email              VARCHAR(255) NOT NULL UNIQUE,
-                password_hash      VARCHAR(255) NOT NULL,
-                role               VARCHAR(20)  NOT NULL DEFAULT "customer",
-                newsletter_opt_in  TINYINT(1)   NOT NULL DEFAULT 0,
-                stripe_customer_id VARCHAR(255) NULL,
-                created_at         DATETIME     NOT NULL
-            )
-        ');
-
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS password_reset_tokens (
-                email      VARCHAR(255) NOT NULL PRIMARY KEY,
-                token_hash CHAR(64)     NOT NULL,
-                expires_at DATETIME     NOT NULL
-            )
-        ');
-
-        $pdo->exec('
-            CREATE TABLE IF NOT EXISTS sessions (
-                id                CHAR(36)    NOT NULL PRIMARY KEY,
-                resource_id       CHAR(36)    NOT NULL,
-                start_time        DATETIME    NOT NULL,
-                duration_minutes  INT         NOT NULL,
-                capacity          INT         NOT NULL,
-                status            VARCHAR(20) NOT NULL
-            )
-        ');
+        return $id;
     }
 
+    // Runs the real database/migrations/*.sql files through the real migration runner,
+    // instead of a hand-duplicated copy of the schema — the two used to drift (see
+    // docs/CONTEXT.md's published-flag follow-up fix), and this is the only way to
+    // guarantee that never happens again: there is now exactly one schema definition.
+    private static function createSchema(PDO $pdo): void
+    {
+        $repository = new MysqlMigrationRepository($pdo, new NullLogger());
+        $useCase    = new RunMigrationsUseCase($repository);
+
+        $useCase->execute(new RunMigrationsRequest([MysqlMigrationRepository::migrationsPath()]));
+    }
+
+    // schema_migrations is deliberately not truncated here — it's schema metadata, not
+    // application data. Truncating it every test would make MysqlMigrationRepositoryTest
+    // fight this method for control of its own state, and would force every subsequent
+    // test to silently re-run migrations that already ran once in setUpBeforeClass().
     private function truncateTables(PDO $pdo): void
     {
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
@@ -199,7 +110,7 @@ abstract class MysqlIntegrationTestCase extends TestCase
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
 
         // reservation_settings and mailer_settings are required singleton rows (id = 1) —
-        // production seeding inserts them once via database/seeds/schema/. Restore both here
+        // the migrations insert them once via database/migrations/. Restore both here
         // so every test starts from the same known-default row instead of a missing one.
         $pdo->exec("
             INSERT INTO reservation_settings
