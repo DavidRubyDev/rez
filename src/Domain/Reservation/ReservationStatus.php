@@ -10,4 +10,5 @@ enum ReservationStatus
     case Confirmed;
     case Cancelled;
     case NoShow;
+    case CheckedIn;
 }

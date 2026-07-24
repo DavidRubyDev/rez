@@ -37,6 +37,11 @@ class ReservationStatusMapperTest extends TestCase
         $this->assertSame('no_show', $this->mapper->toString(ReservationStatus::NoShow));
     }
 
+    public function testCheckedInMapsToString(): void
+    {
+        $this->assertSame('checked_in', $this->mapper->toString(ReservationStatus::CheckedIn));
+    }
+
     public function testStringMapsToPending(): void
     {
         $this->assertSame(ReservationStatus::Pending, $this->mapper->fromString('pending'));
@@ -55,6 +60,11 @@ class ReservationStatusMapperTest extends TestCase
     public function testStringMapsToNoShow(): void
     {
         $this->assertSame(ReservationStatus::NoShow, $this->mapper->fromString('no_show'));
+    }
+
+    public function testStringMapsToCheckedIn(): void
+    {
+        $this->assertSame(ReservationStatus::CheckedIn, $this->mapper->fromString('checked_in'));
     }
 
     public function testUnknownStringThrowsInvalidArgumentException(): void
