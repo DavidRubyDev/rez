@@ -75,7 +75,8 @@ abstract class MysqlIntegrationTestCase extends TestCase
                 party_phone  VARCHAR(50)  NULL,
                 external_ref VARCHAR(255) NULL,
                 created_at   DATETIME     NOT NULL,
-                session_id   CHAR(36)     NULL
+                session_id   CHAR(36)     NULL,
+                checked_in   DATETIME     NULL
             )
         ');
 

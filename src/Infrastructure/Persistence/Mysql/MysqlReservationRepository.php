@@ -269,8 +269,8 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     {
         try {
             $stmt = $this->pdo->prepare('
-                INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, external_ref, created_at, session_id)
-                VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :external_ref, :created_at, :session_id)
+                INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, external_ref, created_at, session_id, checked_in)
+                VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :external_ref, :created_at, :session_id, :checked_in)
                 ON DUPLICATE KEY UPDATE
                     status       = VALUES(status),
                     start_at     = VALUES(start_at),
@@ -280,7 +280,8 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
                     party_size   = VALUES(party_size),
                     party_phone  = VALUES(party_phone),
                     external_ref = VALUES(external_ref),
-                    session_id   = VALUES(session_id)
+                    session_id   = VALUES(session_id),
+                    checked_in   = VALUES(checked_in)
             ');
 
             $stmt->execute([
@@ -295,6 +296,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
                 ':external_ref' => $reservation->party->externalRef,
                 ':created_at'   => $reservation->createdAt->format('Y-m-d H:i:s'),
                 ':session_id'   => $reservation->sessionId?->toString(),
+                ':checked_in'   => $reservation->checkedIn?->format('Y-m-d H:i:s'),
             ]);
 
             $delete = $this->pdo->prepare('DELETE FROM reservation_resources WHERE reservation_id = :id');
@@ -338,6 +340,7 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
             $this->statusMapper->fromString($this->str($row['status'])),
             new DateTimeImmutable($this->str($row['created_at']), $utc),
             $this->nullStr($row['session_id']) !== null ? SessionId::fromString($this->str($row['session_id'])) : null,
+            $this->nullStr($row['checked_in']) !== null ? new DateTimeImmutable($this->str($row['checked_in']), $utc) : null,
         );
     }
 

@@ -442,4 +442,46 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $this->assertSame(1, $result->count());
         $this->assertTrue($result->toArray()[0]->id->equals($matching->id));
     }
+
+    public function testCheckedInTimestampIsPersistedAndHydrated(): void
+    {
+        $reservation = $this->makeReservation()->confirm();
+        $this->repository->save($reservation);
+
+        $checkedIn = $reservation->checkIn();
+        $this->repository->save($checkedIn);
+
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertSame(ReservationStatus::CheckedIn, $found->status);
+        $this->assertNotNull($found->checkedIn);
+        $this->assertSame('UTC', $found->checkedIn->getTimezone()->getName());
+    }
+
+    public function testNullCheckedInRoundtrips(): void
+    {
+        $reservation = $this->makeReservation();
+        $this->repository->save($reservation);
+
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertNull($found->checkedIn);
+    }
+
+    public function testFindPageFiltersByCheckedInStatus(): void
+    {
+        $checkedIn = $this->makeReservation()->confirm()->checkIn();
+        $confirmed = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-16 10:00:00'),
+            new DateTimeImmutable('2024-01-16 11:00:00'),
+        ))->confirm();
+
+        $this->repository->save($checkedIn);
+        $this->repository->save($confirmed);
+
+        $result = $this->repository->findPage(status: ReservationStatus::CheckedIn);
+
+        $this->assertSame(1, $result->count());
+        $this->assertTrue($result->toArray()[0]->id->equals($checkedIn->id));
+    }
 }
