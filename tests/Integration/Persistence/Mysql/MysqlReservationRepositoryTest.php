@@ -468,6 +468,70 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $this->assertNull($found->checkedIn);
     }
 
+    public function testFindPageFiltersByStartsBefore(): void
+    {
+        $soon = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+        ));
+        $later = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-20 10:00:00'),
+            new DateTimeImmutable('2024-01-20 11:00:00'),
+        ));
+
+        $this->repository->save($soon);
+        $this->repository->save($later);
+
+        $result = $this->repository->findPage(startsBefore: new DateTimeImmutable('2024-01-16'));
+        $count  = $this->repository->countPage(startsBefore: new DateTimeImmutable('2024-01-16'));
+
+        $this->assertSame(1, $result->count());
+        $this->assertTrue($result->toArray()[0]->id->equals($soon->id));
+        $this->assertSame(1, $count);
+    }
+
+    public function testFindPageFiltersByStartsBeforeIgnoringDuration(): void
+    {
+        $startsSoonRunsLong = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 23:00:00'),
+        ));
+
+        $this->repository->save($startsSoonRunsLong);
+
+        $result = $this->repository->findPage(startsBefore: new DateTimeImmutable('2024-01-15 12:00:00'));
+
+        $this->assertSame(1, $result->count());
+    }
+
+    public function testFindPageExcludesGivenStatuses(): void
+    {
+        $pending = $this->makeReservation();
+        $cancelled = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-16 10:00:00'),
+            new DateTimeImmutable('2024-01-16 11:00:00'),
+        ))->cancel();
+        $noShow = $this->makeReservation(new TimeSlot(
+            new DateTimeImmutable('2024-01-17 10:00:00'),
+            new DateTimeImmutable('2024-01-17 11:00:00'),
+        ))->confirm()->markNoShow();
+
+        $this->repository->save($pending);
+        $this->repository->save($cancelled);
+        $this->repository->save($noShow);
+
+        $result = $this->repository->findPage(
+            excludeStatuses: [ReservationStatus::Cancelled, ReservationStatus::NoShow],
+        );
+        $count = $this->repository->countPage(
+            excludeStatuses: [ReservationStatus::Cancelled, ReservationStatus::NoShow],
+        );
+
+        $this->assertSame(1, $result->count());
+        $this->assertTrue($result->toArray()[0]->id->equals($pending->id));
+        $this->assertSame(1, $count);
+    }
+
     public function testFindPageFiltersByCheckedInStatus(): void
     {
         $checkedIn = $this->makeReservation()->confirm()->checkIn();
