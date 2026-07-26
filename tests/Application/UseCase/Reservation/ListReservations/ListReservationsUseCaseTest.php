@@ -80,13 +80,13 @@ class ListReservationsUseCaseTest extends TestCase
         $this->reservationRepository
             ->expects($this->once())
             ->method('findPage')
-            ->with($from, $to, null, null, $this->resourceId, $status, 'jane', null, null, null, null)
+            ->with($from, $to, null, null, null, $this->resourceId, $status, null, 'jane', null, null, null, null)
             ->willReturn(ReservationCollection::empty());
 
         $this->reservationRepository
             ->expects($this->once())
             ->method('countPage')
-            ->with($from, $to, null, null, $this->resourceId, $status, 'jane')
+            ->with($from, $to, null, null, null, $this->resourceId, $status, null, 'jane')
             ->willReturn(0);
 
         $this->useCase->execute(new ListReservationsRequest(
@@ -106,13 +106,13 @@ class ListReservationsUseCaseTest extends TestCase
         $this->reservationRepository
             ->expects($this->once())
             ->method('findPage')
-            ->with(null, null, $createdFrom, $createdTo, null, null, null, null, null, null, null)
+            ->with(null, null, null, $createdFrom, $createdTo, null, null, null, null, null, null, null, null)
             ->willReturn(ReservationCollection::empty());
 
         $this->reservationRepository
             ->expects($this->once())
             ->method('countPage')
-            ->with(null, null, $createdFrom, $createdTo, null, null, null)
+            ->with(null, null, null, $createdFrom, $createdTo, null, null, null, null)
             ->willReturn(0);
 
         $this->useCase->execute(new ListReservationsRequest(
@@ -121,12 +121,54 @@ class ListReservationsUseCaseTest extends TestCase
         ));
     }
 
+    public function testPassesStartsBeforeThroughToRepository(): void
+    {
+        $startsBefore = new DateTimeImmutable('2024-01-15 12:00:00');
+
+        $this->reservationRepository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with(null, null, $startsBefore, null, null, null, null, null, null, null, null, null, null)
+            ->willReturn(ReservationCollection::empty());
+
+        $this->reservationRepository
+            ->expects($this->once())
+            ->method('countPage')
+            ->with(null, null, $startsBefore, null, null, null, null, null, null)
+            ->willReturn(0);
+
+        $this->useCase->execute(new ListReservationsRequest(
+            startsBefore: $startsBefore,
+        ));
+    }
+
+    public function testPassesExcludeStatusesThroughToRepository(): void
+    {
+        $excludeStatuses = [ReservationStatus::Cancelled, ReservationStatus::NoShow];
+
+        $this->reservationRepository
+            ->expects($this->once())
+            ->method('findPage')
+            ->with(null, null, null, null, null, null, null, $excludeStatuses, null, null, null, null, null)
+            ->willReturn(ReservationCollection::empty());
+
+        $this->reservationRepository
+            ->expects($this->once())
+            ->method('countPage')
+            ->with(null, null, null, null, null, null, null, $excludeStatuses, null)
+            ->willReturn(0);
+
+        $this->useCase->execute(new ListReservationsRequest(
+            excludeStatuses: $excludeStatuses,
+        ));
+    }
+
     public function testPassesPaginationAndSortThroughToRepository(): void
     {
         $this->reservationRepository
             ->expects($this->once())
             ->method('findPage')
-            ->with(null, null, null, null, null, null, null, 10, 20, 'start', 'desc')
+            ->with(null, null, null, null, null, null, null, null, null, 10, 20, 'start', 'desc')
             ->willReturn(ReservationCollection::empty());
 
         $this->reservationRepository->method('countPage')->willReturn(0);

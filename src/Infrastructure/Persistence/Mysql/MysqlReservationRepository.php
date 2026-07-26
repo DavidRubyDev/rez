@@ -143,17 +143,19 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     public function findPage(
         ?DateTimeImmutable $from = null,
         ?DateTimeImmutable $to = null,
+        ?DateTimeImmutable $startsBefore = null,
         ?DateTimeImmutable $createdFrom = null,
         ?DateTimeImmutable $createdTo = null,
         ?ResourceId $resourceId = null,
         ?ReservationStatus $status = null,
+        ?array $excludeStatuses = null,
         ?string $search = null,
         ?int $offset = null,
         ?int $limit = null,
         ?string $sortBy = null,
         ?string $sortDir = null,
     ): ReservationCollection {
-        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $createdFrom, $createdTo, $resourceId, $status, $search);
+        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $startsBefore, $createdFrom, $createdTo, $resourceId, $status, $excludeStatuses, $search);
 
         $join = $resourceId !== null
             ? ' INNER JOIN reservation_resources rr ON rr.reservation_id = r.id'
@@ -195,13 +197,15 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     public function countPage(
         ?DateTimeImmutable $from = null,
         ?DateTimeImmutable $to = null,
+        ?DateTimeImmutable $startsBefore = null,
         ?DateTimeImmutable $createdFrom = null,
         ?DateTimeImmutable $createdTo = null,
         ?ResourceId $resourceId = null,
         ?ReservationStatus $status = null,
+        ?array $excludeStatuses = null,
         ?string $search = null,
     ): int {
-        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $createdFrom, $createdTo, $resourceId, $status, $search);
+        [$whereSql, $params] = $this->buildPageCriteria($from, $to, $startsBefore, $createdFrom, $createdTo, $resourceId, $status, $excludeStatuses, $search);
 
         $join = $resourceId !== null
             ? ' INNER JOIN reservation_resources rr ON rr.reservation_id = r.id'
@@ -220,14 +224,19 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         return (int) $stmt->fetchColumn();
     }
 
-    /** @return array{0: string, 1: array<string, mixed>} */
+    /**
+     * @param ReservationStatus[]|null $excludeStatuses
+     * @return array{0: string, 1: array<string, mixed>}
+     */
     private function buildPageCriteria(
         ?DateTimeImmutable $from,
         ?DateTimeImmutable $to,
+        ?DateTimeImmutable $startsBefore,
         ?DateTimeImmutable $createdFrom,
         ?DateTimeImmutable $createdTo,
         ?ResourceId $resourceId,
         ?ReservationStatus $status,
+        ?array $excludeStatuses,
         ?string $search,
     ): array {
         $where  = [];
@@ -241,6 +250,10 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
             $where[]       = 'r.end_at <= :to';
             $params[':to'] = $to->format('Y-m-d H:i:s');
         }
+        if ($startsBefore !== null) {
+            $where[]                 = 'r.start_at <= :starts_before';
+            $params[':starts_before'] = $startsBefore->format('Y-m-d H:i:s');
+        }
         if ($createdFrom !== null) {
             $where[]                = 'r.created_at >= :created_from';
             $params[':created_from'] = $createdFrom->format('Y-m-d H:i:s');
@@ -252,6 +265,15 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         if ($status !== null) {
             $where[]           = 'r.status = :status';
             $params[':status'] = $this->statusMapper->toString($status);
+        }
+        if ($excludeStatuses !== null && $excludeStatuses !== []) {
+            $placeholders = [];
+            foreach (array_values($excludeStatuses) as $index => $excludeStatus) {
+                $placeholder = ":exclude_status_{$index}";
+                $placeholders[] = $placeholder;
+                $params[$placeholder] = $this->statusMapper->toString($excludeStatus);
+            }
+            $where[] = 'r.status NOT IN (' . implode(', ', $placeholders) . ')';
         }
         if ($search !== null) {
             $where[]           = '(r.party_name LIKE :search OR r.party_email LIKE :search OR r.party_phone LIKE :search)';

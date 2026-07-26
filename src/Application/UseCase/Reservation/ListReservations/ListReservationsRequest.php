@@ -10,13 +10,16 @@ use Rez\Domain\Resource\ResourceId;
 
 final class ListReservationsRequest
 {
+    /** @param ReservationStatus[]|null $excludeStatuses */
     public function __construct(
         public readonly ?DateTimeImmutable $from = null,
         public readonly ?DateTimeImmutable $to = null,
+        public readonly ?DateTimeImmutable $startsBefore = null,
         public readonly ?DateTimeImmutable $createdFrom = null,
         public readonly ?DateTimeImmutable $createdTo = null,
         public readonly ?ResourceId $resourceId = null,
         public readonly ?ReservationStatus $status = null,
+        public readonly ?array $excludeStatuses = null,
         public readonly ?string $search = null,
         public readonly ?int $offset = null,
         public readonly ?int $limit = null,

@@ -29,10 +29,12 @@ final class ListReservationsUseCase implements ListReservationsUseCaseInterface
             $reservations = $this->reservationRepository->findPage(
                 from: $request->from,
                 to: $request->to,
+                startsBefore: $request->startsBefore,
                 createdFrom: $request->createdFrom,
                 createdTo: $request->createdTo,
                 resourceId: $request->resourceId,
                 status: $request->status,
+                excludeStatuses: $request->excludeStatuses,
                 search: $request->search,
                 offset: $request->offset,
                 limit: $request->limit,
@@ -42,10 +44,12 @@ final class ListReservationsUseCase implements ListReservationsUseCaseInterface
             $total = $this->reservationRepository->countPage(
                 from: $request->from,
                 to: $request->to,
+                startsBefore: $request->startsBefore,
                 createdFrom: $request->createdFrom,
                 createdTo: $request->createdTo,
                 resourceId: $request->resourceId,
                 status: $request->status,
+                excludeStatuses: $request->excludeStatuses,
                 search: $request->search,
             );
         } catch (DatabaseException $e) {

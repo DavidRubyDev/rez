@@ -2330,3 +2330,39 @@ itself, not a step someone has to remember.
 - `rez-starter`'s `bin/migrate.php`/`bin/migrate-baseline.php`, the Docker entrypoint wiring (so
   pending migrations run automatically on every container start), and baselining the real dev/test
   databases are out of scope for this repo — see the matching work there.
+
+### 96. `startsBefore`/`excludeStatuses` reservation filters (`feature/upcoming-reservations-filter`)
+
+Built for a rez-admin "Upcoming" view (reservations arriving in the next couple hours), which
+exposed two gaps the existing filters couldn't cover:
+
+- The existing `to` filter checks `end_at <= :to` — right for "reservations entirely within this
+  window", wrong for "reservations *starting* soon regardless of how long they run". A booking
+  starting in 90 minutes but lasting 3 hours would be wrongly excluded if `to` were reused as the
+  window's upper bound. `startsBefore` (`start_at <= :starts_before`) is a distinct bound on the
+  same column `from` already constrains from below (`start_at >= :from`) — together `from` +
+  `startsBefore` express "starts within this window" with no dependency on duration.
+- `status` only ever matched one exact value — no way to express "not cancelled and not no-show"
+  in one call. `excludeStatuses` (`?ReservationStatus[]`) adds `r.status NOT IN (...)` via
+  indexed placeholders (`:exclude_status_0`, `:exclude_status_1`, ...), independent of and
+  composable with `status` (nothing stops passing both, though no caller has a reason to yet).
+
+`ListReservationsRequest` — `startsBefore` placed right after `to` (groups all three `start_at`/
+`end_at` bounds together, ahead of the `createdFrom`/`created_to` pair per #91); `excludeStatuses`
+placed right after `status`. `ReservationRepositoryInterface::findPage()`/`countPage()` and
+`MysqlReservationRepository` (including `buildPageCriteria()`) gained the same two params, same
+positions. `ListReservationsUseCase` passes both straight through, no new validation beyond what
+`ListParamsValidator` already does.
+
+Verified via the full non-integration suite (`composer ca`); the new
+`MysqlReservationRepositoryTest` cases (`testFindPageFiltersByStartsBefore`,
+`testFindPageFiltersByStartsBeforeIgnoringDuration`, `testFindPageExcludesGivenStatuses`) were
+written but **not run** against a live database this session — the only reachable MySQL instance
+is the shared `rez-starter` dev stack's live database (`docker ps` shows `rez-starter-db-1`), and
+`MysqlIntegrationTestCase::truncateTables()` would have wiped its real data. Run
+`composer test-integration` with `DB_HOST`/`DB_NAME`/`DB_USER`/`DB_PASS` pointed at a disposable
+database before trusting those three cases.
+
+`rez-starter`'s `ListReservationsRequestFactory` (`starts_before`/`exclude_status` query params)
+and `rez-admin`'s "Upcoming" filter UI are out of scope for this repo — see the matching work in
+those two repos.

@@ -30,14 +30,19 @@ interface ReservationRepositoryInterface
     /** @throws \Rez\Application\Exception\DatabaseException */
     public function findAll(?DateTimeImmutable $from = null, ?DateTimeImmutable $to = null): ReservationCollection;
 
-    /** @throws \Rez\Application\Exception\DatabaseException */
+    /**
+     * @param ReservationStatus[]|null $excludeStatuses
+     * @throws \Rez\Application\Exception\DatabaseException
+     */
     public function findPage(
         ?DateTimeImmutable $from = null,
         ?DateTimeImmutable $to = null,
+        ?DateTimeImmutable $startsBefore = null,
         ?DateTimeImmutable $createdFrom = null,
         ?DateTimeImmutable $createdTo = null,
         ?ResourceId $resourceId = null,
         ?ReservationStatus $status = null,
+        ?array $excludeStatuses = null,
         ?string $search = null,
         ?int $offset = null,
         ?int $limit = null,
@@ -45,14 +50,19 @@ interface ReservationRepositoryInterface
         ?string $sortDir = null,
     ): ReservationCollection;
 
-    /** @throws \Rez\Application\Exception\DatabaseException */
+    /**
+     * @param ReservationStatus[]|null $excludeStatuses
+     * @throws \Rez\Application\Exception\DatabaseException
+     */
     public function countPage(
         ?DateTimeImmutable $from = null,
         ?DateTimeImmutable $to = null,
+        ?DateTimeImmutable $startsBefore = null,
         ?DateTimeImmutable $createdFrom = null,
         ?DateTimeImmutable $createdTo = null,
         ?ResourceId $resourceId = null,
         ?ReservationStatus $status = null,
+        ?array $excludeStatuses = null,
         ?string $search = null,
     ): int;
 
