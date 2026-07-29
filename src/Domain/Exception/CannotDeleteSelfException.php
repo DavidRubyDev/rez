@@ -10,4 +10,9 @@ final class CannotDeleteSelfException extends DomainException
     {
         parent::__construct('You cannot delete your own account.');
     }
+
+    public function errorCode(): ErrorCode
+    {
+        return ErrorCode::CannotDeleteSelf;
+    }
 }

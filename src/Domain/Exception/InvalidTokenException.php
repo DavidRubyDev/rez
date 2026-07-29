@@ -10,4 +10,9 @@ class InvalidTokenException extends DomainException
     {
         parent::__construct($reason === null ? 'Invalid token.' : "Invalid token: {$reason}");
     }
+
+    public function errorCode(): ErrorCode
+    {
+        return ErrorCode::InvalidToken;
+    }
 }

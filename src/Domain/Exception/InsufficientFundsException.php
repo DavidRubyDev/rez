@@ -15,4 +15,9 @@ final class InsufficientFundsException extends DomainException
             "Insufficient funds: required {$required} {$code}, available {$available} {$code}."
         );
     }
+
+    public function errorCode(): ErrorCode
+    {
+        return ErrorCode::InsufficientFunds;
+    }
 }
