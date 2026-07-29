@@ -6,4 +6,8 @@ namespace Rez\Domain\Exception;
 
 class ReservationNotFoundException extends DomainException
 {
+    public function errorCode(): ErrorCode
+    {
+        return ErrorCode::ReservationNotFound;
+    }
 }

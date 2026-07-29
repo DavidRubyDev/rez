@@ -15,4 +15,9 @@ class ConflictException extends DomainException
     ) {
         parent::__construct('Reservation conflicts with an existing booking.');
     }
+
+    public function errorCode(): ErrorCode
+    {
+        return ErrorCode::ReservationConflict;
+    }
 }

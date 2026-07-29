@@ -2366,3 +2366,42 @@ database before trusting those three cases.
 `rez-starter`'s `ListReservationsRequestFactory` (`starts_before`/`exclude_status` query params)
 and `rez-admin`'s "Upcoming" filter UI are out of scope for this repo — see the matching work in
 those two repos.
+
+### 97. Stable error codes on domain exceptions (`feature/error-codes`)
+
+Every exception the HTTP layer can turn into a client-facing error response now carries a stable,
+machine-readable code — the first step of a cross-repo change so `rez-admin` can translate error
+messages via i18next instead of showing raw, English-only exception text. Same "pure enum + string
+mapper" shape already used for `ReservationStatus`/`DayOfWeek`:
+
+- **`Domain\Exception\ErrorCode`** — pure enum, one case per exception type that can reach the API
+  boundary across all three repos (including a few — `Forbidden`, `RouteNotFound`,
+  `MethodNotAllowed`, `InternalError` — only ever constructed from `rez-starter`, defined here
+  anyway since `rez-starter` already depends on `rez` and a single shared vocabulary avoids drift).
+- **`Infrastructure\Mapper\ErrorCodeMapper`** — `toString(ErrorCode): string`, `UPPER_SNAKE_CASE`
+  wire values (e.g. `EMAIL_ALREADY_REGISTERED`), same shape as `ReservationStatusMapper`. No
+  `fromString()` — nothing in `rez` deserializes a code, only `rez-starter` serializes one outward.
+- **`Domain\Exception\HasErrorCode`** — interface: `errorCode(): ErrorCode`,
+  `errorParams(): array` (a small flat string map for exceptions whose message interpolates
+  dynamic data, so the frontend can translate a template and fill in the value itself instead of
+  parsing English prose). `DomainException` (the shared abstract base for all 18 domain exception
+  subclasses) implements it, declares `errorCode()` abstract (forcing every subclass to declare
+  its own), and provides a default empty-array `errorParams()` that only the four exceptions with
+  dynamic data override: `EmailAlreadyRegisteredException`/`NewsletterSubscriberNotFoundException`
+  (`email`), `UserNotFoundException` (`identifier`), `FeatureDisabledException` (`feature`) — each
+  of these gained a stored constructor property to back its `errorParams()`, since none of them
+  previously kept the interpolated value around after building the message string.
+- **`Application\Exception\DatabaseException`** — not a `DomainException` subclass, so it
+  implements `HasErrorCode` directly (`ErrorCode::DatabaseError`, no params). Deliberately not
+  wired to translate its raw message — that message can contain PDO/SQL error text, and the
+  `rez-starter` half of this change (next) sends a fixed generic string to the client for this
+  code instead of `getMessage()`, while still logging the real message server-side.
+- Exceptions with many different free-text messages per class
+  (`InvalidPartyException`/`InvalidReservationStateException`/`InvalidSessionStateException`/
+  `InvalidTimeSlotException`) get one code and one generic translated message per *class*, not
+  per message — a deliberate scope boundary, not an oversight.
+
+Verified via `composer ca` (cs-fix, PHPUnit, PHPStan all green). `rez-starter`'s wiring of these
+codes into the JSON error response body (`bootstrap/app.php`'s error handler) and `rez-admin`'s
+`errors.*` i18next namespace are out of scope for this repo — see the matching work in those two
+repos.

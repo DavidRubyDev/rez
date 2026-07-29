@@ -10,4 +10,9 @@ final class InvalidCredentialsException extends DomainException
     {
         parent::__construct('Invalid credentials.');
     }
+
+    public function errorCode(): ErrorCode
+    {
+        return ErrorCode::InvalidCredentials;
+    }
 }
