@@ -84,7 +84,37 @@
 > `end_at <=` so a long reservation starting soon isn't excluded) and `excludeStatuses`
 > (`r.status NOT IN (...)`, letting a caller exclude several statuses in one call) to
 > `ListReservationsUseCase`/`ReservationRepositoryInterface` — built for a rez-admin "reservations
-> starting soon" view. Platform extensions (payments, credits, subscriptions) not yet built.
+> starting soon" view.
+> `feature/send-email-icon-users-subscribers` (`rez-admin` only, no backend change) added a mail
+> icon to Users/Subscribers rows that opens the existing `SendEmailTemplateModal` pre-filled with
+> that row's email, reusing `POST /api/admin/email-templates/{id}/send` — the modal's `template`
+> prop became optional so it can offer its own template picker when opened outside the Custom
+> Emails list. `feature/session-broadcast-button` (`rez-admin` only, no backend change) removed the
+> manual "pick a resource, type a date/time" broadcast panel from the Newsletter page and replaced
+> it with a "Send broadcast" action on `SessionRow`/`SessionDetailModal`, sourcing
+> `POST /api/newsletter/broadcast`'s `resource_name`/`resource_date` straight from the `Session`
+> being viewed instead of free-typed fields. `feature/error-codes` (cross-repo: `rez` + `rez-starter`
+> + `rez-admin`) gave every exception that can reach the HTTP boundary a stable, machine-readable
+> `code` — see §4's exception table below — so `rez-admin` can translate error messages via
+> i18next instead of showing raw backend text. `feature/mobile-responsive` (`rez-admin` only, no
+> backend change) made the admin SPA usable below tablet width: the sidebar becomes an off-canvas
+> drawer behind a hamburger button under the `lg` breakpoint, and every listing table
+> (Reservations, Resources, Users, Sessions, Subscribers, and the resource-scoped
+> rules/overrides/custom-email panels) collapses into a stacked card layout under `md`, via a
+> shared `.responsive-table` CSS pattern rather than a bespoke component per page.
+> `feature/timetable-calendar-view` (cross-repo: `rez-admin` + `rez` + `rez-starter`) adds a
+> day-at-a-glance timetable to the Sessions and Reservations pages, as collapsed-by-default
+> sections above each page's existing list rather than a new route — sessions and continuous
+> resources are the same visual problem (resource rows against an hour axis for one day), so both
+> share a `DateStrip` + `HourTimeline` pair. It widened the **public** `GET /api/sessions`:
+> `resource_id` is now optional (joined by a comma-separated `resource_ids`, the two combining) so
+> one request covers every resource, and each session gained a `booked_count` — summed party size
+> of non-cancelled reservations, the measure `CreateReservationUseCase` enforces capacity against,
+> fetched in one aggregate query rather than the per-session detail lookups the old shape forced.
+> The endpoint keeps the `OptionalAuthMiddleware` visibility rule `GET /api/resources` already
+> established — counts are public, but sessions belonging to an unpublished resource are returned
+> only to an authenticated admin, and a deactivated resource's sessions are hidden from everyone.
+> Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
 
@@ -641,23 +671,41 @@ Thin HTTP delivery layer. Contains no business logic. All logic lives in `rez`.
 
 ### Exception → HTTP status code mapping
 
-| Exception | HTTP |
-|---|---|
-| `ResourceNotFoundException` | 404 |
-| `ReservationNotFoundException` | 404 |
-| `UserNotFoundException` | 404 |
-| `SubscriptionNotFoundException` | 404 |
-| `ConflictException` | 409 |
-| `EmailAlreadyRegisteredException` | 409 |
-| `FeatureDisabledException` | 501 |
-| `InvalidCredentialsException` | 401 |
-| `InvalidTokenException` | 401 |
-| `ForbiddenException` (`App\Http\Middleware\ForbiddenException` — `rez-starter`'s own, not `rez`'s) | 403 |
-| `InsufficientFundsException` | 422 |
-| `\InvalidArgumentException` | 422 |
-| `DomainException` | 422 |
-| `\UnexpectedValueException` (Stripe sig) | 400 |
-| `DatabaseException` | 503 |
+Every exception below implements `Rez\Domain\Exception\HasErrorCode` (`DomainException`'s
+subclasses, `DatabaseException`, and `rez-starter`'s own `ForbiddenException`) or is matched by
+`instanceof` in `rez-starter`'s `App\Http\ErrorMapper` (`feature/error-codes`). `ErrorMapper::map()`
+turns any thrown exception into `{status, code, message, params}`; the JSON error body is
+`{"error": message, "code": code}`, plus `"params": {...}` when non-empty (dynamic values like an
+email or identifier, for the frontend to interpolate into a translated template — this repo's
+`errors.*` i18next namespace, `src/lib/errors.ts`'s `getErrorMessage()`, maps `code → translated
+message`). Two cases send a **fixed generic message instead of the real one** —
+`DatabaseException` (can carry raw PDO/SQL text) and any unrecognized exception
+(`INTERNAL_ERROR`) — the real message is still logged server-side, never surfaced to the browser.
+
+| Exception | HTTP | Code | Params |
+|---|---|---|---|
+| `ResourceNotFoundException` | 404 | `RESOURCE_NOT_FOUND` | — |
+| `ReservationNotFoundException` | 404 | `RESERVATION_NOT_FOUND` | — |
+| `NewsletterSubscriberNotFoundException` | 404 | `NEWSLETTER_SUBSCRIBER_NOT_FOUND` | `email` |
+| `EmailTemplateNotFoundException` | 404 | `EMAIL_TEMPLATE_NOT_FOUND` | — |
+| `UserNotFoundException` | 404 | `USER_NOT_FOUND` | `identifier` |
+| `SessionNotFoundException` | 404 | `SESSION_NOT_FOUND` | — |
+| `ConflictException` | 409 | `RESERVATION_CONFLICT` | — |
+| `EmailAlreadyRegisteredException` | 409 | `EMAIL_ALREADY_REGISTERED` | `email` |
+| `CannotDeleteSelfException` | 409 | `CANNOT_DELETE_SELF` | — |
+| `CannotDeleteLastAdminException` | 409 | `CANNOT_DELETE_LAST_ADMIN` | — |
+| `FeatureDisabledException` | 501 | `FEATURE_DISABLED` | `feature` |
+| `InvalidCredentialsException` | 401 | `INVALID_CREDENTIALS` | — |
+| `InvalidTokenException` | 401 | `INVALID_TOKEN` | — |
+| `ForbiddenException` (`App\Http\Middleware\ForbiddenException` — `rez-starter`'s own, not `rez`'s) | 403 | `FORBIDDEN` | — |
+| `InsufficientFundsException` | 422 | `INSUFFICIENT_FUNDS` | — |
+| `InvalidPartyException` / `InvalidReservationStateException` / `InvalidSessionStateException` / `InvalidTimeSlotException` | 422 | `INVALID_PARTY` / `INVALID_RESERVATION_STATE` / `INVALID_SESSION_STATE` / `INVALID_TIME_SLOT` | — (one code + one generic message per exception *class*, not per the many free-text messages each can carry) |
+| `\InvalidArgumentException` / `\DateMalformedStringException` | 422 | `VALIDATION_ERROR` | — |
+| `Slim\Exception\HttpNotFoundException` | 404 | `ROUTE_NOT_FOUND` | — |
+| `Slim\Exception\HttpMethodNotAllowedException` | 405 | `METHOD_NOT_ALLOWED` | — |
+| `\UnexpectedValueException` (Stripe sig) | 400 | not yet implemented — Stripe webhook handling isn't built | — |
+| `DatabaseException` | 503 | `DATABASE_ERROR` | — (message sanitized, see above) |
+| Anything else | 500 | `INTERNAL_ERROR` | — (message sanitized, see above) |
 
 ### API surface
 
@@ -715,9 +763,16 @@ fields, never `resource_id` or a timeslot — the session id in the URL is the s
 for what's being booked (see `CreateReservationUseCase`'s session-booking path in §3.5). A client
 sending `resource_id`/timeslot alongside it has those values silently ignored, not merged or
 validated against — re-adding either field to this route's request parsing would reopen the exact
-hole this scaffold closed. `GET /api/sessions` requires `resource_id` (no "all resources" query)
-and returns a bare array, not the `{items, total}` envelope the four paginated list routes above
-use — it was never wired into `13_rez-pagination.md`'s pagination work.
+hole this scaffold closed. `GET /api/sessions` returns a bare array, not the `{items, total}`
+envelope the four paginated list routes above use — it was never wired into
+`13_rez-pagination.md`'s pagination work. **`feat/sessions-list-all-resources`**: it no longer
+requires `resource_id` — that param is now optional, joined by a comma-separated `resource_ids`
+(the two combine), and supplying neither means every resource the caller may see. Each session
+carries a `booked_count` (summed party size of non-cancelled reservations, the measure capacity is
+enforced against — not a count of reservation rows). The route stays public but gained
+`OptionalAuthMiddleware`, exactly like `GET /api/resources`: sessions belonging to an *unpublished*
+resource are returned only to an authenticated admin, and sessions of a deactivated resource are
+hidden from everyone.
 
 #### Always available — any authenticated user (JWT required, any role)
 
@@ -1280,7 +1335,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   the active filter. Reservations folded its separate name/email filters into one server-side
   `search` box and dropped resource-name sorting (not in the API's sortable set); Users gained a
   new role filter. `AffectedReservationsGate`/`AvailabilityRuleModal`/`AvailabilityOverrideModal`/
-  `BroadcastPanel`/`ManualBookingModal`/`SendEmailTemplateModal` and the Users/Subscribers
+  `ManualBookingModal`/`SendEmailTemplateModal` and the Users/Subscribers
   `ExportModal` callbacks still fetch the full collection (no `offset`/`limit`), relying on "no
   limit param → everything" as the documented backward-compatible default. Verified end-to-end
   against `rez-starter-04_pagination_DONE.md`. Follow-up UX tweak: `Pagination` moved above the
@@ -1288,7 +1343,10 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   wired to `usePagination`'s `setLimit` + `reset()`.
 - ✅ Sessions (`15_sessions.md`) — `SessionsPage` (required resource select — the list route has
   no "all resources" query — + `DateRangeFilter`, no pagination/sort, the API has neither),
-  `SessionFormModal` (quick-add: resource + date + time only, server defaults duration/capacity),
+  `SessionFormModal` (quick-add: resource + date + time + a required duration input, pre-filled
+  from `Resource.default_duration_minutes` but always editable — `fix/session-duration-input`
+  added this after resources with no default duration made session creation error out with no
+  client-side recourse; capacity is still server-default-only),
   `SessionDetailModal` (metadata, embedded reservations reusing `ReservationRow`/
   `ReservationDetailModal`, a "+ Add reservation" button opening `SessionReservationModal` to book
   directly into the session via `POST /api/sessions/{id}/reservations`). Cancelling a session with
