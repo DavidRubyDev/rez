@@ -27,6 +27,19 @@ interface ReservationRepositoryInterface
     /** @throws \Rez\Application\Exception\DatabaseException */
     public function findBySessionId(SessionId $sessionId): ReservationCollection;
 
+    /**
+     * Booked party size per session — the same measure capacity is enforced against in
+     * CreateReservationUseCase, not a count of reservation rows. Cancelled reservations are
+     * excluded. Sessions nobody has booked are absent from the result rather than mapped to 0.
+     *
+     * @param string[] $sessionIds
+     *
+     * @return array<string, int>
+     *
+     * @throws \Rez\Application\Exception\DatabaseException
+     */
+    public function countBookedBySessionIds(array $sessionIds): array;
+
     /** @throws \Rez\Application\Exception\DatabaseException */
     public function findAll(?DateTimeImmutable $from = null, ?DateTimeImmutable $to = null): ReservationCollection;
 

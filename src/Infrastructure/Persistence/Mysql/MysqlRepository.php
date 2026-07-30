@@ -26,6 +26,19 @@ abstract class MysqlRepository
         return $value;
     }
 
+    /**
+     * Aggregate columns (SUM, COUNT) come back from PDO as numeric strings rather than ints,
+     * so they need a looser check than a plain typed column read through int().
+     */
+    protected function aggregateInt(mixed $value): int
+    {
+        if (!is_numeric($value)) {
+            throw new UnexpectedValueException('Expected a numeric aggregate value from database row.');
+        }
+
+        return (int) $value;
+    }
+
     protected function nullStr(mixed $value): ?string
     {
         if ($value !== null && !is_string($value)) {

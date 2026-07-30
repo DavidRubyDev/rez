@@ -108,6 +108,46 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         return ReservationCollection::fromArray(array_values(array_map($this->hydrate(...), $rows)));
     }
 
+    public function countBookedBySessionIds(array $sessionIds): array
+    {
+        if ($sessionIds === []) {
+            return [];
+        }
+
+        $placeholders = [];
+        $params       = [':cancelled' => $this->statusMapper->toString(ReservationStatus::Cancelled)];
+
+        foreach (array_values($sessionIds) as $index => $sessionId) {
+            $placeholder          = ':session_id_' . $index;
+            $placeholders[]       = $placeholder;
+            $params[$placeholder] = $sessionId;
+        }
+
+        $sql = 'SELECT session_id, SUM(party_size) AS booked
+                FROM reservations
+                WHERE session_id IN (' . implode(', ', $placeholders) . ')
+                  AND status != :cancelled
+                GROUP BY session_id';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+        } catch (\PDOException $e) {
+            $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
+            throw new DatabaseException($e->getMessage(), (int) $e->getCode(), $e);
+        }
+
+        /** @var array<int, array<string, mixed>> $rows */
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[$this->str($row['session_id'])] = $this->aggregateInt($row['booked']);
+        }
+
+        return $counts;
+    }
+
     public function findAll(?DateTimeImmutable $from = null, ?DateTimeImmutable $to = null): ReservationCollection
     {
         $where  = [];

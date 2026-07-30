@@ -2405,3 +2405,47 @@ Verified via `composer ca` (cs-fix, PHPUnit, PHPStan all green). `rez-starter`'s
 codes into the JSON error response body (`bootstrap/app.php`'s error handler) and `rez-admin`'s
 `errors.*` i18next namespace are out of scope for this repo — see the matching work in those two
 repos.
+
+## Sessions across every resource, with booked counts (`feature/sessions-list-all-resources`)
+
+`GET /api/sessions` could only ever answer "sessions for one resource", and the booked count for a
+session existed only on the per-session detail path (`findBySessionId()` + count in the caller).
+A timetable view in `rez-admin` needs both at once — every resource's sessions for a day, each
+already carrying how full it is — and the old shape forced one request per resource plus one per
+visible session. Widened here, in the library, so the HTTP layer stays a thin adapter.
+
+- **`SessionRepositoryInterface::findForResource()` → `findForResources()`** — takes
+  `ResourceId[]` (an **empty list means every resource**, not none), plus the existing `from`/`to`,
+  plus `bool $includeUnpublished = false`. The single-resource call site becomes a one-element
+  array; there is no separate single-resource method any more.
+- **The query now joins `resources`.** It always filters `r.active = 1` (a soft-deleted resource's
+  sessions stay hidden, even from an admin — same reasoning as invariant 13) and filters
+  `r.published = 1` unless `$includeUnpublished` is set. This is a deliberate behaviour change for
+  the existing single-resource path: sessions belonging to a deactivated or unpublished resource
+  used to come back regardless. Who gets `includeUnpublished: true` is the HTTP layer's call, same
+  convention as `ListResourcesUseCase`.
+- **`ReservationRepositoryInterface::countBookedBySessionIds(string[] $sessionIds): array<string, int>`**
+  — one `GROUP BY` aggregate instead of N per-session queries. It sums **`party_size`**, not
+  reservation rows: that is the measure `CreateReservationUseCase` already enforces `session.capacity`
+  against, so a row count would have disagreed with the thing it is displayed next to. Cancelled
+  reservations are excluded. Sessions nobody booked are simply absent from the map — the use case,
+  not the repository, is what fills those in as `0`.
+- **`ListSessionsRequest`** — `resourceIds` (array, default empty), `from`, `to`,
+  `includeUnpublished`. Every requested resource is still validated with `findById()`, so a bogus
+  id keeps raising `ResourceNotFoundException` rather than silently returning nothing; requesting
+  no resources at all skips that validation entirely.
+- **`ListSessionsResponse`** — gained `array<string, int> $bookedCounts`, keyed by session id
+  string, with an entry for every listed session. Kept off the `Session` entity on purpose: booked
+  count is derived from reservations, not session state.
+- **`MysqlRepository::aggregateInt()`** — new shared row helper. `SUM()`/`COUNT()` come back from
+  PDO as numeric *strings*, so the strict `int()` helper (right for typed columns) rejects them;
+  this was found by running the new integration tests against real MySQL, where a unit test with a
+  mocked PDO would have happily returned an int.
+
+Verified with `composer ca` (cs-fix, PHPUnit 901 unit tests, PHPStan max — all green) plus the full
+`composer test-integration` suite (125 tests) run against a real MySQL 8 in the running
+`rez-starter` Docker stack, pointed at a throwaway `rez_lib_test` database rather than the dev one
+— the integration harness truncates every table between tests. `rez-starter`'s HTTP wiring
+(`resource_id`/`resource_ids` query params, `OptionalAuthMiddleware`, `booked_count` in the
+serializer) and `rez-admin`'s timetable UI are out of scope for this repo — see the matching work
+in those two repos.

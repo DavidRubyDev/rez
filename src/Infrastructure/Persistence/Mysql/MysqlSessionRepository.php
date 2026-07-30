@@ -50,22 +50,42 @@ final class MysqlSessionRepository extends MysqlRepository implements SessionRep
         return $this->hydrate($row);
     }
 
-    public function findForResource(ResourceId $resourceId, ?DateTimeImmutable $from = null, ?DateTimeImmutable $to = null): SessionCollection
-    {
-        $where  = ['resource_id = :resource_id'];
-        $params = [':resource_id' => $resourceId->toString()];
+    public function findForResources(
+        array $resourceIds = [],
+        ?DateTimeImmutable $from = null,
+        ?DateTimeImmutable $to = null,
+        bool $includeUnpublished = false,
+    ): SessionCollection {
+        $where  = ['r.active = 1'];
+        $params = [];
+
+        if (!$includeUnpublished) {
+            $where[] = 'r.published = 1';
+        }
+
+        if ($resourceIds !== []) {
+            $placeholders = [];
+            foreach (array_values($resourceIds) as $index => $resourceId) {
+                $placeholder          = ':resource_id_' . $index;
+                $placeholders[]       = $placeholder;
+                $params[$placeholder] = $resourceId->toString();
+            }
+            $where[] = 's.resource_id IN (' . implode(', ', $placeholders) . ')';
+        }
 
         if ($from !== null) {
-            $where[]         = 'start_time >= :from';
+            $where[]         = 's.start_time >= :from';
             $params[':from'] = $from->format('Y-m-d H:i:s');
         }
 
         if ($to !== null) {
-            $where[]       = 'start_time <= :to';
+            $where[]       = 's.start_time <= :to';
             $params[':to'] = $to->format('Y-m-d H:i:s');
         }
 
-        $sql = 'SELECT * FROM sessions WHERE ' . implode(' AND ', $where);
+        $sql = 'SELECT s.* FROM sessions s
+                JOIN resources r ON r.id = s.resource_id
+                WHERE ' . implode(' AND ', $where);
 
         try {
             $stmt = $this->pdo->prepare($sql);

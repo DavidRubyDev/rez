@@ -18,8 +18,21 @@ interface SessionRepositoryInterface
      */
     public function findById(SessionId $id): Session;
 
-    /** @throws \Rez\Application\Exception\DatabaseException */
-    public function findForResource(ResourceId $resourceId, ?DateTimeImmutable $from = null, ?DateTimeImmutable $to = null): SessionCollection;
+    /**
+     * Sessions belonging to a deactivated resource are never returned. $includeUnpublished lets
+     * an authenticated admin see sessions on unpublished resources, mirroring the same flag on
+     * ResourceRepositoryInterface::findPage().
+     *
+     * @param ResourceId[] $resourceIds an empty list means every resource, not none
+     *
+     * @throws \Rez\Application\Exception\DatabaseException
+     */
+    public function findForResources(
+        array $resourceIds = [],
+        ?DateTimeImmutable $from = null,
+        ?DateTimeImmutable $to = null,
+        bool $includeUnpublished = false,
+    ): SessionCollection;
 
     /** @throws \Rez\Application\Exception\DatabaseException */
     public function save(Session $session): void;

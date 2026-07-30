@@ -443,6 +443,68 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $this->assertTrue($result->toArray()[0]->id->equals($matching->id));
     }
 
+    private function makeSessionReservation(SessionId $sessionId, int $partySize, string $day = '2024-01-15'): Reservation
+    {
+        return Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            new TimeSlot(
+                new DateTimeImmutable($day . ' 10:00:00'),
+                new DateTimeImmutable($day . ' 11:00:00'),
+            ),
+            new Party('John Doe', 'john@example.com', $partySize, null),
+            $sessionId,
+        );
+    }
+
+    // Capacity is enforced against summed party size, not a count of rows — so is this.
+    public function testCountBookedBySessionIdsSumsPartySize(): void
+    {
+        $sessionId = SessionId::generate();
+        $this->repository->save($this->makeSessionReservation($sessionId, 2));
+        $this->repository->save($this->makeSessionReservation($sessionId, 3, '2024-01-16'));
+
+        $counts = $this->repository->countBookedBySessionIds([$sessionId->toString()]);
+
+        $this->assertSame(5, $counts[$sessionId->toString()]);
+    }
+
+    public function testCountBookedBySessionIdsExcludesCancelledReservations(): void
+    {
+        $sessionId = SessionId::generate();
+        $this->repository->save($this->makeSessionReservation($sessionId, 2));
+        $this->repository->save($this->makeSessionReservation($sessionId, 3, '2024-01-16')->cancel());
+
+        $counts = $this->repository->countBookedBySessionIds([$sessionId->toString()]);
+
+        $this->assertSame(2, $counts[$sessionId->toString()]);
+    }
+
+    public function testCountBookedBySessionIdsKeepsSessionsApart(): void
+    {
+        $first  = SessionId::generate();
+        $second = SessionId::generate();
+        $this->repository->save($this->makeSessionReservation($first, 2));
+        $this->repository->save($this->makeSessionReservation($second, 4, '2024-01-16'));
+
+        $counts = $this->repository->countBookedBySessionIds([$first->toString(), $second->toString()]);
+
+        $this->assertSame(2, $counts[$first->toString()]);
+        $this->assertSame(4, $counts[$second->toString()]);
+    }
+
+    public function testCountBookedBySessionIdsOmitsSessionsWithNoBookings(): void
+    {
+        $sessionId = SessionId::generate();
+
+        $this->assertSame([], $this->repository->countBookedBySessionIds([$sessionId->toString()]));
+    }
+
+    public function testCountBookedBySessionIdsWithNoIdsRunsNoQuery(): void
+    {
+        $this->assertSame([], $this->repository->countBookedBySessionIds([]));
+    }
+
     public function testCheckedInTimestampIsPersistedAndHydrated(): void
     {
         $reservation = $this->makeReservation()->confirm();

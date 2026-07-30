@@ -41,7 +41,7 @@ class MysqlSessionRepositoryLoggerTest extends TestCase
         $repo->findById(SessionId::generate());
     }
 
-    public function testFindForResourceDatabaseExceptionIsLoggedAsCritical(): void
+    public function testFindForResourcesDatabaseExceptionIsLoggedAsCritical(): void
     {
         $pdo = $this->createMock(PDO::class);
         $pdo->method('prepare')->willThrowException(new \PDOException('connection lost'));
@@ -49,7 +49,7 @@ class MysqlSessionRepositoryLoggerTest extends TestCase
         $repo = new MysqlSessionRepository($pdo, new SessionStatusMapper(), $this->makeLoggerExpectingCritical());
 
         $this->expectException(DatabaseException::class);
-        $repo->findForResource(ResourceId::generate());
+        $repo->findForResources([ResourceId::generate()]);
     }
 
     public function testSaveDatabaseExceptionIsLoggedAsCritical(): void
