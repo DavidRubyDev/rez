@@ -57,13 +57,13 @@ abstract class MysqlIntegrationTestCase extends TestCase
     // is a real foreign key against resources(id) — a bare ResourceId::generate() with no row
     // behind it only ever worked here because createSchema() used to hand-duplicate the schema
     // without the FK constraints production actually has. Insert a real row instead.
-    protected function insertResource(?ResourceId $id = null): ResourceId
+    protected function insertResource(?ResourceId $id = null, bool $published = true, bool $active = true): ResourceId
     {
         $id ??= ResourceId::generate();
 
         $stmt = $this->pdo()->prepare('
-            INSERT INTO resources (id, type, name, capacity, attributes)
-            VALUES (:id, :type, :name, :capacity, :attributes)
+            INSERT INTO resources (id, type, name, capacity, attributes, published, active)
+            VALUES (:id, :type, :name, :capacity, :attributes, :published, :active)
         ');
         $stmt->execute([
             ':id'         => $id->toString(),
@@ -71,6 +71,8 @@ abstract class MysqlIntegrationTestCase extends TestCase
             ':name'       => 'Test Resource',
             ':capacity'   => 10,
             ':attributes' => '{}',
+            ':published'  => $published ? 1 : 0,
+            ':active'     => $active ? 1 : 0,
         ]);
 
         return $id;

@@ -71,22 +71,22 @@ class MysqlSessionRepositoryTest extends MysqlIntegrationTestCase
         $this->assertSame(SessionStatus::Cancelled, $found->status);
     }
 
-    public function testFindForResourceReturnsOnlySessionsForThatResource(): void
+    public function testFindForResourcesReturnsOnlySessionsForThoseResources(): void
     {
         $otherResourceId = $this->insertResource();
-        $matching         = $this->makeSession();
-        $unrelated        = Session::create(SessionId::generate(), $otherResourceId, new DateTimeImmutable('2024-06-03 09:00:00'), 60, 10);
+        $matching        = $this->makeSession();
+        $unrelated       = Session::create(SessionId::generate(), $otherResourceId, new DateTimeImmutable('2024-06-03 09:00:00'), 60, 10);
 
         $this->repository->save($matching);
         $this->repository->save($unrelated);
 
-        $result = $this->repository->findForResource($this->resourceId);
+        $result = $this->repository->findForResources([$this->resourceId]);
 
         $this->assertSame(1, $result->count());
         $this->assertTrue($result->toArray()[0]->id->equals($matching->id));
     }
 
-    public function testFindForResourceFiltersByFromTo(): void
+    public function testFindForResourcesFiltersByFromTo(): void
     {
         $inside  = $this->makeSession(new DateTimeImmutable('2024-06-03 09:00:00'));
         $outside = $this->makeSession(new DateTimeImmutable('2024-06-10 09:00:00'));
@@ -94,13 +94,48 @@ class MysqlSessionRepositoryTest extends MysqlIntegrationTestCase
         $this->repository->save($inside);
         $this->repository->save($outside);
 
-        $result = $this->repository->findForResource(
-            $this->resourceId,
+        $result = $this->repository->findForResources(
+            [$this->resourceId],
             new DateTimeImmutable('2024-06-01'),
             new DateTimeImmutable('2024-06-05'),
         );
 
         $this->assertSame(1, $result->count());
         $this->assertTrue($result->toArray()[0]->id->equals($inside->id));
+    }
+
+    public function testFindForResourcesWithNoResourceIdsSpansEveryResource(): void
+    {
+        $otherResourceId = $this->insertResource();
+
+        $this->repository->save($this->makeSession());
+        $this->repository->save(Session::create(SessionId::generate(), $otherResourceId, new DateTimeImmutable('2024-06-03 10:00:00'), 60, 10));
+
+        $this->assertSame(2, $this->repository->findForResources()->count());
+    }
+
+    public function testFindForResourcesExcludesUnpublishedResourcesByDefault(): void
+    {
+        $unpublishedId = $this->insertResource(null, published: false);
+        $this->repository->save(Session::create(SessionId::generate(), $unpublishedId, new DateTimeImmutable('2024-06-03 09:00:00'), 60, 10));
+
+        $this->assertSame(0, $this->repository->findForResources()->count());
+    }
+
+    public function testFindForResourcesIncludesUnpublishedResourcesForAnAdmin(): void
+    {
+        $unpublishedId = $this->insertResource(null, published: false);
+        $this->repository->save(Session::create(SessionId::generate(), $unpublishedId, new DateTimeImmutable('2024-06-03 09:00:00'), 60, 10));
+
+        $this->assertSame(1, $this->repository->findForResources(includeUnpublished: true)->count());
+    }
+
+    // A deactivated resource is soft-deleted, so its sessions stay hidden even from an admin.
+    public function testFindForResourcesExcludesDeactivatedResourcesEvenForAnAdmin(): void
+    {
+        $inactiveId = $this->insertResource(null, active: false);
+        $this->repository->save(Session::create(SessionId::generate(), $inactiveId, new DateTimeImmutable('2024-06-03 09:00:00'), 60, 10));
+
+        $this->assertSame(0, $this->repository->findForResources(includeUnpublished: true)->count());
     }
 }

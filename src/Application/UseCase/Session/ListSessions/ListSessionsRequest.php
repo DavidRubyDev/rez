@@ -9,10 +9,15 @@ use Rez\Domain\Resource\ResourceId;
 
 final class ListSessionsRequest
 {
+    /**
+     * @param ResourceId[] $resourceIds an empty list means every resource the caller may see,
+     *                                  rather than none
+     */
     public function __construct(
-        public readonly ResourceId $resourceId,
+        public readonly array $resourceIds = [],
         public readonly ?DateTimeImmutable $from = null,
         public readonly ?DateTimeImmutable $to = null,
+        public readonly bool $includeUnpublished = false,
     ) {
     }
 }
