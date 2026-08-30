@@ -1,24 +1,24 @@
 ---
 name: sync-context
-description: Compares docs/REZ-CONTEXT.md across the rez, rez-starter, and rez-admin sibling repos and syncs them so all three carry identical, up-to-date content. Use when asked to sync/check REZ-CONTEXT.md across repos, or after making a cross-repo architectural change that this doc should reflect.
+description: Compares docs/REZ-CONTEXT.md across the rez, rez-starter, rez-admin, and rez-components sibling repos and syncs them so all four carry identical, up-to-date content. Use when asked to sync/check REZ-CONTEXT.md across repos, or after making a cross-repo architectural change that this doc should reflect.
 ---
 
 # sync-context
 
 `docs/REZ-CONTEXT.md` is a single shared document describing the whole Rez ecosystem
 architecture (Domain/Application/Infrastructure layers, modules, invariants, delivery plan).
-It is meant to be byte-for-byte identical across all three repos: `rez`, `rez-starter`,
-`rez-admin`. `docs/CONTEXT.md` is a separate, intentionally per-repo implementation log and
-must NOT be touched by this skill.
+It is meant to be byte-for-byte identical across all four repos: `rez`, `rez-starter`,
+`rez-admin`, `rez-components`. `docs/CONTEXT.md` is a separate, intentionally per-repo
+implementation log and must NOT be touched by this skill.
 
 ## Steps
 
 1. **Locate the sibling repos.** They live as sibling directories of the repo this skill is
-   running in — e.g. if this repo is at `/path/to/rez-admin`, the other two are expected at
-   `/path/to/rez` and `/path/to/rez-starter`. Resolve all three paths and confirm each is a git
-   repository (`git -C <path> rev-parse --is-inside-work-tree`). Skip and report any repo that
-   isn't found on disk rather than failing outright — this skill may run in an environment
-   where not all three are cloned.
+   running in — e.g. if this repo is at `/path/to/rez-admin`, the other three are expected at
+   `/path/to/rez`, `/path/to/rez-starter`, and `/path/to/rez-components`. Resolve all four paths
+   and confirm each is a git repository (`git -C <path> rev-parse --is-inside-work-tree`). Skip
+   and report any repo that isn't found on disk rather than failing outright — this skill may
+   run in an environment where not all four are cloned.
 
 2. **Diff `docs/REZ-CONTEXT.md` across every repo found.** Compare every pair with `diff`. If a
    repo is missing the file entirely, treat that as a difference (it needs the file created).
