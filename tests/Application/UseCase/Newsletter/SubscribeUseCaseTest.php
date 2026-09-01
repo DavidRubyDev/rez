@@ -6,7 +6,10 @@ namespace Rez\Tests\Application\UseCase\Newsletter;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
+use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeRequest;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCase;
@@ -14,16 +17,23 @@ use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
 use Rez\Domain\Newsletter\NewsletterSubscriber;
 use Rez\Domain\Newsletter\NewsletterSubscriberId;
 use Rez\Domain\Newsletter\SubscriberSource;
+use Rez\Domain\Shared\UnsubscribeToken;
 
 class SubscribeUseCaseTest extends TestCase
 {
     private NewsletterRepositoryInterface&MockObject $repository;
+    private MailerInterface&MockObject $mailer;
+    private LoggerInterface&MockObject $logger;
+    private UsersConfig $usersConfig;
     private SubscribeUseCase $useCase;
 
     protected function setUp(): void
     {
-        $this->repository = $this->createMock(NewsletterRepositoryInterface::class);
-        $this->useCase    = new SubscribeUseCase($this->repository);
+        $this->repository  = $this->createMock(NewsletterRepositoryInterface::class);
+        $this->mailer      = $this->createMock(MailerInterface::class);
+        $this->logger      = $this->createMock(LoggerInterface::class);
+        $this->usersConfig = new UsersConfig(jwtSecret: 'jwt-secret', cancellationSecret: 'secret');
+        $this->useCase     = new SubscribeUseCase($this->repository, $this->mailer, $this->logger, $this->usersConfig);
     }
 
     public function testRepositoryDatabaseExceptionPropagates(): void
@@ -62,6 +72,7 @@ class SubscribeUseCaseTest extends TestCase
 
         $this->repository->method('findByEmail')->willReturn($existing);
         $this->repository->expects($this->never())->method('save');
+        $this->mailer->expects($this->never())->method('sendSubscriptionConfirmedEmail');
 
         $response = $this->useCase->execute(new SubscribeRequest('existing@example.com', null, SubscriberSource::Guest));
 
@@ -92,5 +103,37 @@ class SubscribeUseCaseTest extends TestCase
         $response = $this->useCase->execute(new SubscribeRequest('reg@example.com', null, SubscriberSource::Registered));
 
         $this->assertSame(SubscriberSource::Registered, $response->subscriber->source);
+    }
+
+    public function testNewSubscriberIsSentSubscriptionConfirmedEmail(): void
+    {
+        $this->repository
+            ->method('findByEmail')
+            ->willThrowException(new NewsletterSubscriberNotFoundException('new@example.com'));
+
+        $expectedToken = UnsubscribeToken::generate('new@example.com', $this->usersConfig->cancellationSecret);
+        $this->mailer->expects($this->once())
+            ->method('sendSubscriptionConfirmedEmail')
+            ->with('new@example.com', 'Jan', $expectedToken);
+
+        $this->useCase->execute(new SubscribeRequest('new@example.com', 'Jan', SubscriberSource::Guest));
+    }
+
+    public function testSubscriptionConfirmedEmailFailureIsLoggedAndSwallowed(): void
+    {
+        $this->repository
+            ->method('findByEmail')
+            ->willThrowException(new NewsletterSubscriberNotFoundException('new@example.com'));
+
+        $this->mailer->method('sendSubscriptionConfirmedEmail')
+            ->willThrowException(new \RuntimeException('SMTP error'));
+
+        $this->logger->expects($this->once())
+            ->method('error')
+            ->with($this->stringContains('Failed to send'));
+
+        $response = $this->useCase->execute(new SubscribeRequest('new@example.com', 'Jan', SubscriberSource::Guest));
+
+        $this->assertSame('new@example.com', $response->subscriber->email);
     }
 }
