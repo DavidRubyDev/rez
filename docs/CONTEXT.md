@@ -2449,3 +2449,94 @@ Verified with `composer ca` (cs-fix, PHPUnit 901 unit tests, PHPStan max — all
 (`resource_id`/`resource_ids` query params, `OptionalAuthMiddleware`, `booked_count` in the
 serializer) and `rez-admin`'s timetable UI are out of scope for this repo — see the matching work
 in those two repos.
+
+---
+
+### 98. Token-based newsletter unsubscribe (`feature/newsletter-unsubscribe-token`)
+
+Closes the same gap `rez-guest-cancellation` closed for reservations: `DELETE
+/api/newsletter/unsubscribe?email=` was public with no proof of ownership — anyone could
+unsubscribe any guessed email address. rez-admin's subscriber-removal button calls this exact
+route with no token today (`rez-admin/src/api/newsletter.ts`, `deleteSubscriber`), so the fix had
+to keep that call working unchanged rather than making a token mandatory.
+
+`src/Domain/Shared/UnsubscribeToken.php` — same stateless HMAC-SHA256 shape as
+`CancellationToken`, but `generate()`/`verify()` take a subscriber email string instead of a
+`ReservationId`. The HMAC input is namespaced as `"unsubscribe:{$email}"` rather than the bare
+email, and it reuses `UsersConfig::$cancellationSecret` rather than adding a new secret field —
+the namespacing is what keeps that reuse safe (a token minted for cancellation and a token minted
+for unsubscribe can never collide even though they share a secret, since the hashed input differs
+in more than just content). `tests/Domain/Shared/UnsubscribeTokenTest.php` mirrors
+`CancellationTokenTest`'s five cases.
+
+`UnsubscribeRequest` gained `?string $token = null`. `UnsubscribeUseCase` now injects
+`UsersConfig` and, when `$token !== null`, verifies it against `$request->email` after
+`findByEmail()` but before `delete()` — same ordering `CancelReservationUseCase` uses (fetch
+first, verify, then mutate) — throwing `InvalidTokenException` on mismatch (already mapped to
+HTTP 401 in rez-starter's error middleware). `$token === null` is unchanged behavior, preserving
+the admin path.
+
+`MailerInterface::sendNewClassNotification()` gained a fourth parameter, `UnsubscribeToken
+$unsubscribeToken`, same positional style as the `CancellationToken` parameter on
+`sendReservationCreatedEmail()`/`sendReservationConfirmedEmail()`. `NullMailer`'s implementation
+updated to match (no-op body, just the new parameter). `BroadcastUseCase` now injects
+`UsersConfig` and generates `UnsubscribeToken::generate($subscriber->email,
+$usersConfig->cancellationSecret)` inside its existing per-subscriber send loop, passing it to
+`sendNewClassNotification()`.
+
+`MailerConfig` gained a second required field, `unsubscribeBaseUrl` (same non-empty-string
+validation as `cancellationBaseUrl`) — the base URL for the not-yet-built `<rez-unsubscribe>`
+guest-facing page in `rez-components`, same relationship `cancellationBaseUrl` has to
+`<rez-cancel>`. All existing `new MailerConfig(...)` call sites in this repo's test suite
+(`PlatformConfigTest`, `FeatureGuardTest`) updated to pass both arguments.
+
+15 new/changed tests across `UnsubscribeTokenTest` (5), `UnsubscribeUseCaseTest` (+2),
+`MailerInterfaceTest` (+1), `BroadcastUseCaseTest` (+1), `MailerConfigTest` (+1), plus the two
+fixed call sites. `composer ca` clean (cs-fix, PHPUnit, PHPStan max).
+
+**Not done here** (completed since, in the other two repos) — `rez-starter` needed:
+`UnsubscribeRequestFactory` reading the optional `token` query param, `SymfonyMailer`'s mailer
+methods wired for it, the link in the relevant templates, and `MailerConfig`'s
+`unsubscribeBaseUrl` wired from a new `UNSUBSCRIBE_BASE_URL` env var — all done. `rez-components`
+needed the `<rez-unsubscribe>` component itself plus a dev harness page for it — also done. See
+step 99 below for the subscriber-differentiation and subscription-confirmed-email follow-up.
+
+### 99. Subscriber-only unsubscribe links + subscription-confirmed email
+
+Two gaps noticed once `<rez-unsubscribe>` was actually live: an admin-composed custom email
+(`SendEmailTemplateUseCase`) can go to *any* recipient list, not only newsletter subscribers —
+so it had no business attaching an unsubscribe link to a recipient who isn't actually
+subscribed — and subscribing itself fired no email at all.
+
+`MailerInterface::sendCustomEmail()` gained a fourth parameter, `?UnsubscribeToken
+$unsubscribeToken`, nullable specifically because not every recipient is a subscriber.
+`SendEmailTemplateUseCase` now injects `NewsletterRepositoryInterface` and `UsersConfig`; for
+each recipient it attempts `findByEmail()` first — a hit generates a real token, a
+`NewsletterSubscriberNotFoundException` means "not a subscriber," passing `null` instead. A
+`DatabaseException` from that lookup falls through to the same per-recipient `\Throwable` catch
+that already handles mailer failures, so one bad lookup only skips that one recipient.
+
+`MailerInterface::sendSubscriptionConfirmedEmail(string $email, ?string $name, UnsubscribeToken
+$unsubscribeToken): void` is new — unlike `sendCustomEmail` the token here is never nullable,
+since this email only ever goes to an email that just became a real subscriber.
+`SubscribeUseCase` now injects `MailerInterface`, `LoggerInterface`, and `UsersConfig`, and sends
+it from inside the existing `NewsletterSubscriberNotFoundException` branch — i.e. only on a
+genuine new subscription, never on the existing-subscriber no-op return path (an already-
+subscribed email re-submitting the form must not get a second welcome email). The send is
+wrapped in try/catch-and-log, same non-fatal-email convention as `ReservationEmailService` and
+`BroadcastUseCase` — a bad mailer send must not fail the subscribe request itself.
+
+`NullMailer` updated to match both signature changes.
+
+20 new/changed tests: `MailerInterfaceTest` (+2), `SendEmailTemplateUseCaseTest` (+2, plus the
+existing 6 updated for the new constructor deps and the trailing `null`/token argument),
+`SubscribeUseCaseTest` (+2, plus the existing 5 updated for the new constructor deps).
+`composer ca` clean (917 tests, PHPStan max).
+
+`rez-starter`'s `SymfonyMailer::sendCustomEmail()` now passes `unsubscribe_url` as `null` when
+no token is given, and `custom-email.html.twig` only renders the unsubscribe footer `{% if
+unsubscribe_url %}`. `SymfonyMailer::sendSubscriptionConfirmedEmail()` and a new
+`subscription-confirmed.html.twig` (always includes the footer) were added. Verified live against
+Mailpit: a custom email sent to one subscriber and one non-subscriber together produced exactly
+one copy with the unsubscribe link and one without, and a fresh subscribe produced the
+confirmation email with a working link to the local `<rez-unsubscribe>` dev page.

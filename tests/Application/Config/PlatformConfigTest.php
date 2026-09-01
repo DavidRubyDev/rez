@@ -22,7 +22,7 @@ class PlatformConfigTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mailer        = new MailerConfig('https://example.com/cancel');
+        $this->mailer        = new MailerConfig('https://example.com/cancel', 'https://example.com/unsubscribe');
         $this->payments      = new PaymentsConfig('CZK', 'whsec_test');
         $this->users         = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
         $this->credits       = new CreditsConfig(10000, 'CZK');

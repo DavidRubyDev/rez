@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace Rez\Application\UseCase\EmailTemplate\SendEmailTemplate;
 
 use Psr\Log\LoggerInterface;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\EmailTemplateRepositoryInterface;
 use Rez\Application\Port\MailerInterface;
+use Rez\Application\Port\NewsletterRepositoryInterface;
+use Rez\Domain\Exception\NewsletterSubscriberNotFoundException;
 use Rez\Domain\Shared\Email;
+use Rez\Domain\Shared\UnsubscribeToken;
 
 final class SendEmailTemplateUseCase implements SendEmailTemplateUseCaseInterface
 {
@@ -16,6 +20,8 @@ final class SendEmailTemplateUseCase implements SendEmailTemplateUseCaseInterfac
         private readonly EmailTemplateRepositoryInterface $emailTemplateRepository,
         private readonly MailerInterface $mailer,
         private readonly LoggerInterface $logger,
+        private readonly NewsletterRepositoryInterface $newsletterRepository,
+        private readonly UsersConfig $usersConfig,
     ) {
     }
 
@@ -46,7 +52,15 @@ final class SendEmailTemplateUseCase implements SendEmailTemplateUseCaseInterfac
 
         foreach ($request->recipients as $recipient) {
             try {
-                $this->mailer->sendCustomEmail($recipient, $template->subject, $template->html);
+                $unsubscribeToken = null;
+                try {
+                    $this->newsletterRepository->findByEmail($recipient);
+                    $unsubscribeToken = UnsubscribeToken::generate($recipient, $this->usersConfig->cancellationSecret);
+                } catch (NewsletterSubscriberNotFoundException) {
+                    // Not a subscriber — send without an unsubscribe link.
+                }
+
+                $this->mailer->sendCustomEmail($recipient, $template->subject, $template->html, $unsubscribeToken);
                 $sent++;
             } catch (\Throwable $e) {
                 $this->logger->error('Failed to send custom email to recipient', [

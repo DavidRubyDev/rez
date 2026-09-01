@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Rez\Application\UseCase\Newsletter\Broadcast;
 
 use Psr\Log\LoggerInterface;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\NewsletterRepositoryInterface;
+use Rez\Domain\Shared\UnsubscribeToken;
 
 final class BroadcastUseCase implements BroadcastUseCaseInterface
 {
@@ -15,6 +17,7 @@ final class BroadcastUseCase implements BroadcastUseCaseInterface
         private readonly NewsletterRepositoryInterface $newsletterRepository,
         private readonly MailerInterface $mailer,
         private readonly LoggerInterface $logger,
+        private readonly UsersConfig $usersConfig,
     ) {
     }
 
@@ -30,7 +33,13 @@ final class BroadcastUseCase implements BroadcastUseCaseInterface
 
         foreach ($subscribers as $subscriber) {
             try {
-                $this->mailer->sendNewClassNotification($subscriber->email, $request->resourceName, $request->resourceDate);
+                $unsubscribeToken = UnsubscribeToken::generate($subscriber->email, $this->usersConfig->cancellationSecret);
+                $this->mailer->sendNewClassNotification(
+                    $subscriber->email,
+                    $request->resourceName,
+                    $request->resourceDate,
+                    $unsubscribeToken,
+                );
                 $sent++;
             } catch (\Throwable $e) {
                 $this->logger->error('Failed to send broadcast email to subscriber', [

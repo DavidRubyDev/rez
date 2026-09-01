@@ -7,6 +7,7 @@ namespace Rez\Infrastructure\Mailer;
 use Rez\Application\Port\MailerInterface;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Shared\CancellationToken;
+use Rez\Domain\Shared\UnsubscribeToken;
 
 /**
  * Default MailerInterface binding when no client-provided mailer is wired.
@@ -41,6 +42,7 @@ final class NullMailer implements MailerInterface
         string $email,
         string $className,
         \DateTimeImmutable $classDate,
+        UnsubscribeToken $unsubscribeToken,
     ): void {
     }
 
@@ -48,6 +50,14 @@ final class NullMailer implements MailerInterface
         string $recipientEmail,
         string $subject,
         string $htmlBody,
+        ?UnsubscribeToken $unsubscribeToken,
+    ): void {
+    }
+
+    public function sendSubscriptionConfirmedEmail(
+        string $email,
+        ?string $name,
+        UnsubscribeToken $unsubscribeToken,
     ): void {
     }
 }

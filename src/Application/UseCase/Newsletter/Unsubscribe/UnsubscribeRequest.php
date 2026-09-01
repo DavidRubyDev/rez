@@ -8,6 +8,7 @@ final class UnsubscribeRequest
 {
     public function __construct(
         public readonly string $email,
+        public readonly ?string $token = null,
     ) {
     }
 }
