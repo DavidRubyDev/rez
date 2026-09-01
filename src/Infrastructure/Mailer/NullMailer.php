@@ -50,6 +50,14 @@ final class NullMailer implements MailerInterface
         string $recipientEmail,
         string $subject,
         string $htmlBody,
+        ?UnsubscribeToken $unsubscribeToken,
+    ): void {
+    }
+
+    public function sendSubscriptionConfirmedEmail(
+        string $email,
+        ?string $name,
+        UnsubscribeToken $unsubscribeToken,
     ): void {
     }
 }

@@ -85,8 +85,28 @@ class MailerInterfaceTest extends TestCase
         $mailer = $this->createMock(MailerInterface::class);
         $mailer->expects($this->once())
             ->method('sendCustomEmail')
-            ->with('jane@example.com', 'Welcome', '<p>Hello</p>');
+            ->with('jane@example.com', 'Welcome', '<p>Hello</p>', null);
 
-        $mailer->sendCustomEmail('jane@example.com', 'Welcome', '<p>Hello</p>');
+        $mailer->sendCustomEmail('jane@example.com', 'Welcome', '<p>Hello</p>', null);
+    }
+
+    public function testSendCustomEmailAcceptsOptionalUnsubscribeToken(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects($this->once())
+            ->method('sendCustomEmail')
+            ->with('jane@example.com', 'Welcome', '<p>Hello</p>', $this->unsubscribeToken);
+
+        $mailer->sendCustomEmail('jane@example.com', 'Welcome', '<p>Hello</p>', $this->unsubscribeToken);
+    }
+
+    public function testSendSubscriptionConfirmedEmailAcceptsEmailNameAndUnsubscribeToken(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects($this->once())
+            ->method('sendSubscriptionConfirmedEmail')
+            ->with('jane@example.com', 'Jane', $this->unsubscribeToken);
+
+        $mailer->sendSubscriptionConfirmedEmail('jane@example.com', 'Jane', $this->unsubscribeToken);
     }
 }
