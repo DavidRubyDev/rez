@@ -2494,9 +2494,49 @@ guest-facing page in `rez-components`, same relationship `cancellationBaseUrl` h
 `MailerInterfaceTest` (+1), `BroadcastUseCaseTest` (+1), `MailerConfigTest` (+1), plus the two
 fixed call sites. `composer ca` clean (cs-fix, PHPUnit, PHPStan max).
 
-**Not done here** — `rez-starter` still needs: `UnsubscribeRequestFactory` reading the optional
-`token` query param, `SymfonyMailer::sendNewClassNotification()` accepting the new parameter and
-building the actual unsubscribe URL (mirroring its private `cancellationUrl()` helper), the link
-in `new-class-notification.html.twig`, and `MailerConfig`'s `unsubscribeBaseUrl` wired from a new
-`UNSUBSCRIBE_BASE_URL` env var in `config/container.php`/`.env`/`.env.example`. `rez-components`
-still needs the `<rez-unsubscribe>` component itself.
+**Not done here** (completed since, in the other two repos) — `rez-starter` needed:
+`UnsubscribeRequestFactory` reading the optional `token` query param, `SymfonyMailer`'s mailer
+methods wired for it, the link in the relevant templates, and `MailerConfig`'s
+`unsubscribeBaseUrl` wired from a new `UNSUBSCRIBE_BASE_URL` env var — all done. `rez-components`
+needed the `<rez-unsubscribe>` component itself plus a dev harness page for it — also done. See
+step 99 below for the subscriber-differentiation and subscription-confirmed-email follow-up.
+
+### 99. Subscriber-only unsubscribe links + subscription-confirmed email
+
+Two gaps noticed once `<rez-unsubscribe>` was actually live: an admin-composed custom email
+(`SendEmailTemplateUseCase`) can go to *any* recipient list, not only newsletter subscribers —
+so it had no business attaching an unsubscribe link to a recipient who isn't actually
+subscribed — and subscribing itself fired no email at all.
+
+`MailerInterface::sendCustomEmail()` gained a fourth parameter, `?UnsubscribeToken
+$unsubscribeToken`, nullable specifically because not every recipient is a subscriber.
+`SendEmailTemplateUseCase` now injects `NewsletterRepositoryInterface` and `UsersConfig`; for
+each recipient it attempts `findByEmail()` first — a hit generates a real token, a
+`NewsletterSubscriberNotFoundException` means "not a subscriber," passing `null` instead. A
+`DatabaseException` from that lookup falls through to the same per-recipient `\Throwable` catch
+that already handles mailer failures, so one bad lookup only skips that one recipient.
+
+`MailerInterface::sendSubscriptionConfirmedEmail(string $email, ?string $name, UnsubscribeToken
+$unsubscribeToken): void` is new — unlike `sendCustomEmail` the token here is never nullable,
+since this email only ever goes to an email that just became a real subscriber.
+`SubscribeUseCase` now injects `MailerInterface`, `LoggerInterface`, and `UsersConfig`, and sends
+it from inside the existing `NewsletterSubscriberNotFoundException` branch — i.e. only on a
+genuine new subscription, never on the existing-subscriber no-op return path (an already-
+subscribed email re-submitting the form must not get a second welcome email). The send is
+wrapped in try/catch-and-log, same non-fatal-email convention as `ReservationEmailService` and
+`BroadcastUseCase` — a bad mailer send must not fail the subscribe request itself.
+
+`NullMailer` updated to match both signature changes.
+
+20 new/changed tests: `MailerInterfaceTest` (+2), `SendEmailTemplateUseCaseTest` (+2, plus the
+existing 6 updated for the new constructor deps and the trailing `null`/token argument),
+`SubscribeUseCaseTest` (+2, plus the existing 5 updated for the new constructor deps).
+`composer ca` clean (917 tests, PHPStan max).
+
+`rez-starter`'s `SymfonyMailer::sendCustomEmail()` now passes `unsubscribe_url` as `null` when
+no token is given, and `custom-email.html.twig` only renders the unsubscribe footer `{% if
+unsubscribe_url %}`. `SymfonyMailer::sendSubscriptionConfirmedEmail()` and a new
+`subscription-confirmed.html.twig` (always includes the footer) were added. Verified live against
+Mailpit: a custom email sent to one subscriber and one non-subscriber together produced exactly
+one copy with the unsubscribe link and one without, and a fresh subscribe produced the
+confirmation email with a working link to the local `<rez-unsubscribe>` dev page.

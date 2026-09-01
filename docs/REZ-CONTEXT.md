@@ -318,6 +318,11 @@ time this module was built.
 - `NewsletterSubscriber` — entity. Fields: `id`, `email`, `name?`, `source`, `optedInAt` (all `public readonly`). Factories: `create()` (validates email, sets optedInAt = UTC now) and `reconstruct()` (hydration from DB). ✅
 - `NewsletterSubscriberId` — UUID v4 value object ✅
 - `SubscriberSource` — pure enum: `Guest`, `Registered`, `Admin` ✅ (`Admin` added for subscribers manually added via rez-admin). Serialiser lowercases via `strtolower($subscriber->source->name)`.
+- `SubscribeUseCase` sends `MailerInterface::sendSubscriptionConfirmedEmail()` (always carries an
+  `UnsubscribeToken`, unlike `sendCustomEmail`'s nullable one) — but only from the branch that
+  actually creates a new row; the existing-subscriber no-op return path never re-sends it. Send
+  failures are logged and swallowed, never propagated to the subscribe response
+  (`newsletter-unsubscribe-token` follow-up).
 
 #### Mailer (COMPLETE — `rez-mailer-settings`, `rez-custom-email-templates`)
 - `MailerSettings` — immutable value object. Fields: `fromAddress` (validated email), `fromName`
@@ -447,7 +452,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `ListEmailTemplatesUseCase` | `ListEmailTemplatesRequest` (empty) | `ListEmailTemplatesResponse` | Returns a plain `EmailTemplate[]` array, like `ListSubscribersUseCase` |
 | `UpdateEmailTemplateUseCase` | `UpdateEmailTemplateRequest` | `UpdateEmailTemplateResponse` | PATCH semantics via `EmailTemplate::withContent()` |
 | `DeleteEmailTemplateUseCase` | `DeleteEmailTemplateRequest` | `DeleteEmailTemplateResponse` | `findById` before `delete`, so a missing template throws rather than silently no-opping |
-| `SendEmailTemplateUseCase` | `SendEmailTemplateRequest(EmailTemplateId, string[] $recipients)` | `SendEmailTemplateResponse(int $sent)` | Validates every recipient up front, fails fast if any is malformed; per-recipient mailer failures are caught, logged, and skipped — same pattern as `BroadcastUseCase` |
+| `SendEmailTemplateUseCase` | `SendEmailTemplateRequest(EmailTemplateId, string[] $recipients)` | `SendEmailTemplateResponse(int $sent)` | Validates every recipient up front, fails fast if any is malformed; per-recipient mailer failures are caught, logged, and skipped — same pattern as `BroadcastUseCase`. The recipient list can be anyone, not only subscribers, so each one is looked up via `NewsletterRepositoryInterface::findByEmail()` first — a hit generates a real `UnsubscribeToken` for `sendCustomEmail()`, a miss passes `null` (no unsubscribe link on an email to someone who was never subscribed) |
 | `SeedDatabaseUseCase` | `SeedDatabaseRequest(string[] $seedsDirectories)` | `SeedDatabaseResponse` | Globs *.sql, executes in filename order across all directories. Now only ever pointed at `dataPath()` (optional demo data) — `seedsPath()` (schema) was removed |
 | `RunMigrationsUseCase` | `RunMigrationsRequest(string[] $migrationsDirectories)` | `RunMigrationsResponse(string[] $applied)` | (`feature/db-migrations`) Wraps `MigrationRepositoryInterface::withLock()` around: ensure tracking table exists → resolve pending via `MigrationFileResolver` → execute + record each one |
 | `BaselineMigrationsUseCase` | `BaselineMigrationsRequest(string[] $migrationsDirectories)` | `BaselineMigrationsResponse(string[] $baselined)` | (`feature/db-migrations`) Same shape as `RunMigrationsUseCase` but calls `markMigrationApplied()` instead of `applyMigration()` — records as applied without executing any SQL, for databases already at that schema state via the old seed files |
