@@ -14,11 +14,13 @@ use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
 use Rez\Domain\Shared\CancellationToken;
+use Rez\Domain\Shared\UnsubscribeToken;
 
 class MailerInterfaceTest extends TestCase
 {
     private Reservation $reservation;
     private CancellationToken $token;
+    private UnsubscribeToken $unsubscribeToken;
 
     protected function setUp(): void
     {
@@ -33,7 +35,8 @@ class MailerInterfaceTest extends TestCase
             ),
             new Party('John Doe', 'john@example.com', 2, null),
         );
-        $this->token = CancellationToken::generate($id, 'secret');
+        $this->token            = CancellationToken::generate($id, 'secret');
+        $this->unsubscribeToken = UnsubscribeToken::generate('john@example.com', 'secret');
     }
 
     public function testSendReservationCreatedEmailAcceptsReservationAndCancellationToken(): void
@@ -64,6 +67,17 @@ class MailerInterfaceTest extends TestCase
             ->with($this->reservation);
 
         $mailer->sendReservationCancelledEmail($this->reservation);
+    }
+
+    public function testSendNewClassNotificationAcceptsUnsubscribeToken(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $classDate = new DateTimeImmutable('2026-07-01 10:00:00');
+        $mailer->expects($this->once())
+            ->method('sendNewClassNotification')
+            ->with('john@example.com', 'Yoga', $classDate, $this->unsubscribeToken);
+
+        $mailer->sendNewClassNotification('john@example.com', 'Yoga', $classDate, $this->unsubscribeToken);
     }
 
     public function testSendCustomEmailAcceptsRecipientSubjectAndHtml(): void
