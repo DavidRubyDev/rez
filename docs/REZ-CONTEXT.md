@@ -114,6 +114,18 @@
 > The endpoint keeps the `OptionalAuthMiddleware` visibility rule `GET /api/resources` already
 > established — counts are public, but sessions belonging to an unpublished resource are returned
 > only to an authenticated admin, and a deactivated resource's sessions are hidden from everyone.
+> `feature/newsletter-unsubscribe-token` closed the same kind of gap `rez-guest-cancellation`
+> closed for reservations: `DELETE /api/newsletter/unsubscribe?email=` was public with no proof
+> of ownership at all — anyone could unsubscribe any guessed email. `UnsubscribeToken` (a
+> `CancellationToken`-shaped HMAC keyed on the subscriber's email) is now generated per-subscriber
+> inside `BroadcastUseCase` and threaded through `MailerInterface::sendNewClassNotification()`;
+> `UnsubscribeUseCase` accepts it as an optional `token` on `UnsubscribeRequest` — `null` keeps
+> rez-admin's existing no-token subscriber-removal call working unchanged, non-null is verified
+> before deletion. Only built in `rez` so far — `rez-starter` still needs the route/query-param
+> wiring, the `MailerConfig::unsubscribeBaseUrl` env binding, and the link in
+> `new-class-notification.html.twig`, and `rez-components` still needs the guest-facing
+> `<rez-unsubscribe>` landing page itself (same relationship `<rez-cancel>` has to guest
+> cancellation, both still open).
 > Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
@@ -338,6 +350,17 @@ time this module was built.
   optional `cancellationToken` on its request — `null` means admin cancellation (no check);
   non-null means guest cancellation, verified against `UsersConfig::$cancellationSecret` before
   cancelling, throwing `InvalidTokenException` on mismatch.
+- `UnsubscribeToken` — value object, same stateless HMAC-SHA256 shape as `CancellationToken` but
+  keyed on the subscriber's email string instead of a `ReservationId`, and reuses
+  `UsersConfig::$cancellationSecret` rather than a new secret field — the HMAC input is
+  namespaced as `"unsubscribe:{$email}"` (not the bare email) so a token from this generator
+  can't collide with any other HMAC computed from the same secret (`feature/newsletter-unsubscribe-token`).
+  `BroadcastUseCase` generates one per subscriber and passes it to
+  `MailerInterface::sendNewClassNotification()`. `UnsubscribeUseCase` accepts an optional
+  `token` on its request — same dual-path shape as `CancelReservationUseCase`: `null` keeps the
+  existing no-check path (rez-admin's subscriber-removal button calls the route this way today
+  and must keep working), non-null is verified against the request's `email` before the
+  subscriber row is deleted, throwing `InvalidTokenException` on mismatch.
 
 ### 3.3 Port interfaces (Application/Port/)
 
@@ -429,8 +452,8 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `RunMigrationsUseCase` | `RunMigrationsRequest(string[] $migrationsDirectories)` | `RunMigrationsResponse(string[] $applied)` | (`feature/db-migrations`) Wraps `MigrationRepositoryInterface::withLock()` around: ensure tracking table exists → resolve pending via `MigrationFileResolver` → execute + record each one |
 | `BaselineMigrationsUseCase` | `BaselineMigrationsRequest(string[] $migrationsDirectories)` | `BaselineMigrationsResponse(string[] $baselined)` | (`feature/db-migrations`) Same shape as `RunMigrationsUseCase` but calls `markMigrationApplied()` instead of `applyMigration()` — records as applied without executing any SQL, for databases already at that schema state via the old seed files |
 | `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
-| `UnsubscribeUseCase` | `UnsubscribeRequest` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found |
-| `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). |
+| `UnsubscribeUseCase` | `UnsubscribeRequest(email, ?token)` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found. `feature/newsletter-unsubscribe-token`: `token` optional, verified via `UnsubscribeToken` against `email` when present, throwing `InvalidTokenException` on mismatch before `delete()` — `null` preserves the prior no-check behavior admin callers rely on |
+| `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). `feature/newsletter-unsubscribe-token`: generates a per-subscriber `UnsubscribeToken` from `UsersConfig::$cancellationSecret` inside the send loop and passes it to `sendNewClassNotification()` |
 | `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse(subscribers, total)` | `13_rez-pagination.md`: filters (`search` against email/name, `source`) + `offset`/`limit`/`sortBy`/`sortDir` (`email`\|`name`\|`source`\|`opted_in_at`, default sort `opted_in_at ASC` preserved) via `NewsletterRepositoryInterface::findPage()`/`countPage()`. `findAll()` untouched — still `BroadcastUseCase`'s only caller |
 | `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, string $token)` | No `FeatureGuard` — users are never gated. `findByEmail()` first (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; generates a JWT via `JwtService` (`rez-users`) |
 | `LoginUseCase` | `LoginRequest` | `LoginResponse(User, string $token)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6). Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed (`rez-users`) |
@@ -544,6 +567,11 @@ string, no URL-format validation — kept simple). The concrete mailer implement
 `rez-starter`'s `SymfonyMailer`) reads this to build the cancellation link URL itself — `rez`
 only hands the mailer port the `Reservation` and `CancellationToken` object, never a pre-built
 URL string (see `MailerInterface` in §3.3).
+`feature/newsletter-unsubscribe-token` gave it a second required field, `unsubscribeBaseUrl`
+(same non-empty-string validation, same "no pre-built URL" rule — the mailer implementation
+builds the link from the subscriber's email and a token). This is the base URL for the
+guest-facing `<rez-unsubscribe>` page (`rez-components`), same relationship
+`cancellationBaseUrl` has to `<rez-cancel>`.
 `UsersConfig` — COMPLETE (`rez-config-update`). Required. Fields: `jwtSecret`,
 `cancellationSecret` (non-empty string, validated the same way as `jwtSecret`, always a
 separate value — never shares `jwtSecret`), `jwtTtlSeconds` (default 3600, min 1),
@@ -556,7 +584,7 @@ separate value — never shares `jwtSecret`), `jwtTtlSeconds` (default 3600, min
 
 ```
 PlatformConfig
-  ├── MailerConfig          always required (cancellationBaseUrl)
+  ├── MailerConfig          always required (cancellationBaseUrl, unsubscribeBaseUrl)
   ├── UsersConfig           always required (jwtSecret, cancellationSecret, jwtTtlSeconds, passwordResetTtlMinutes)
   ├── PaymentsConfig?       currency, webhookSecret
   ├── CreditsConfig?        minimumTopUpAmount, currency
