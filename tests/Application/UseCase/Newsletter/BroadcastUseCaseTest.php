@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\NewsletterRepositoryInterface;
@@ -16,20 +17,23 @@ use Rez\Application\UseCase\Newsletter\Broadcast\BroadcastUseCase;
 use Rez\Domain\Newsletter\NewsletterSubscriber;
 use Rez\Domain\Newsletter\NewsletterSubscriberId;
 use Rez\Domain\Newsletter\SubscriberSource;
+use Rez\Domain\Shared\UnsubscribeToken;
 
 class BroadcastUseCaseTest extends TestCase
 {
     private NewsletterRepositoryInterface&MockObject $repository;
     private MailerInterface&MockObject $mailer;
     private LoggerInterface&MockObject $logger;
+    private UsersConfig $usersConfig;
     private BroadcastUseCase $useCase;
 
     protected function setUp(): void
     {
-        $this->repository = $this->createMock(NewsletterRepositoryInterface::class);
-        $this->mailer     = $this->createMock(MailerInterface::class);
-        $this->logger     = $this->createMock(LoggerInterface::class);
-        $this->useCase    = new BroadcastUseCase($this->repository, $this->mailer, $this->logger);
+        $this->repository  = $this->createMock(NewsletterRepositoryInterface::class);
+        $this->mailer      = $this->createMock(MailerInterface::class);
+        $this->logger      = $this->createMock(LoggerInterface::class);
+        $this->usersConfig = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
+        $this->useCase     = new BroadcastUseCase($this->repository, $this->mailer, $this->logger, $this->usersConfig);
     }
 
     public function testRepositoryDatabaseExceptionPropagates(): void
@@ -79,6 +83,27 @@ class BroadcastUseCaseTest extends TestCase
         $this->assertSame(2, $response->sent);
     }
 
+    public function testSendsCorrectUnsubscribeTokenPerSubscriber(): void
+    {
+        $this->repository->method('findAll')->willReturn([
+            $this->makeSubscriber('a@example.com'),
+        ]);
+
+        $expectedToken = UnsubscribeToken::generate('a@example.com', $this->usersConfig->cancellationSecret);
+
+        $this->mailer->expects($this->once())
+            ->method('sendNewClassNotification')
+            ->with(
+                'a@example.com',
+                'Yoga',
+                $this->anything(),
+                $this->callback(fn (UnsubscribeToken $token) => $token->verify('a@example.com', $this->usersConfig->cancellationSecret)
+                    && $token->toString() === $expectedToken->toString()),
+            );
+
+        $this->useCase->execute(new BroadcastRequest('Yoga', new DateTimeImmutable('2026-07-01 10:00:00')));
+    }
+
     public function testPerRecipientFailureIsLoggedAndSkipped(): void
     {
         $subscriber = $this->makeSubscriber('a@example.com');
@@ -96,7 +121,7 @@ class BroadcastUseCaseTest extends TestCase
                 $this->arrayHasKey('subscriberId'),
             );
 
-        $useCase = new BroadcastUseCase($this->repository, $this->mailer, $logger);
+        $useCase = new BroadcastUseCase($this->repository, $this->mailer, $logger, $this->usersConfig);
 
         $response = $useCase->execute(new BroadcastRequest('Yoga', new DateTimeImmutable('2026-07-01 10:00:00')));
 

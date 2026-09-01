@@ -6,6 +6,7 @@ namespace Rez\Application\Port;
 
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Shared\CancellationToken;
+use Rez\Domain\Shared\UnsubscribeToken;
 
 interface MailerInterface
 {
@@ -32,6 +33,7 @@ interface MailerInterface
         string $email,
         string $className,
         \DateTimeImmutable $classDate,
+        UnsubscribeToken $unsubscribeToken,
     ): void;
 
     public function sendCustomEmail(
