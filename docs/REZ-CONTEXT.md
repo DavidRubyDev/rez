@@ -126,6 +126,15 @@
 > `new-class-notification.html.twig`, and `rez-components` still needs the guest-facing
 > `<rez-unsubscribe>` landing page itself (same relationship `<rez-cancel>` has to guest
 > cancellation, both still open).
+> `feature/newsletter-unsubscribe-confirmation-email` closed the last asymmetry between the
+> subscribe and unsubscribe flows: `SubscribeUseCase` already sent a confirmation email
+> (`sendSubscriptionConfirmedEmail`) but `UnsubscribeUseCase` sent nothing. It now sends
+> `MailerInterface::sendUnsubscribeConfirmedEmail(string $email, ?string $name)` — no token
+> parameter needed, since the recipient is already unsubscribed by the time it sends — on any
+> actual deletion, whether reached via the no-token (rez-admin) or verified-token (guest) path.
+> Only built in `rez` so far — `rez-starter` needs a `SymfonyMailer::
+> sendUnsubscribeConfirmedEmail()` implementation and an `unsubscribe-confirmed.html.twig`
+> template.
 > Platform extensions (payments, credits, subscriptions) not yet built.
 
 ---
@@ -323,6 +332,11 @@ time this module was built.
   actually creates a new row; the existing-subscriber no-op return path never re-sends it. Send
   failures are logged and swallowed, never propagated to the subscribe response
   (`newsletter-unsubscribe-token` follow-up).
+- `UnsubscribeUseCase` sends `MailerInterface::sendUnsubscribeConfirmedEmail()` — no token
+  parameter, unlike the subscribe side, since the recipient is already unsubscribed by the time
+  it sends. Only on an actual deletion, never on the not-found no-op or an invalid-token
+  rejection; failures logged and swallowed, same convention as the subscribe side
+  (`feature/newsletter-unsubscribe-confirmation-email`).
 
 #### Mailer (COMPLETE — `rez-mailer-settings`, `rez-custom-email-templates`)
 - `MailerSettings` — immutable value object. Fields: `fromAddress` (validated email), `fromName`
@@ -457,7 +471,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `RunMigrationsUseCase` | `RunMigrationsRequest(string[] $migrationsDirectories)` | `RunMigrationsResponse(string[] $applied)` | (`feature/db-migrations`) Wraps `MigrationRepositoryInterface::withLock()` around: ensure tracking table exists → resolve pending via `MigrationFileResolver` → execute + record each one |
 | `BaselineMigrationsUseCase` | `BaselineMigrationsRequest(string[] $migrationsDirectories)` | `BaselineMigrationsResponse(string[] $baselined)` | (`feature/db-migrations`) Same shape as `RunMigrationsUseCase` but calls `markMigrationApplied()` instead of `applyMigration()` — records as applied without executing any SQL, for databases already at that schema state via the old seed files |
 | `SubscribeUseCase` | `SubscribeRequest` | `SubscribeResponse` | Idempotent — returns existing subscriber if email already subscribed |
-| `UnsubscribeUseCase` | `UnsubscribeRequest(email, ?token)` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found. `feature/newsletter-unsubscribe-token`: `token` optional, verified via `UnsubscribeToken` against `email` when present, throwing `InvalidTokenException` on mismatch before `delete()` — `null` preserves the prior no-check behavior admin callers rely on |
+| `UnsubscribeUseCase` | `UnsubscribeRequest(email, ?token)` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found. `feature/newsletter-unsubscribe-token`: `token` optional, verified via `UnsubscribeToken` against `email` when present, throwing `InvalidTokenException` on mismatch before `delete()` — `null` preserves the prior no-check behavior admin callers rely on. `feature/newsletter-unsubscribe-confirmation-email`: on an actual deletion (either path), sends `MailerInterface::sendUnsubscribeConfirmedEmail()` via try/catch-and-log, same non-fatal-email pattern as `SubscribeUseCase` — never sent on the not-found no-op or an invalid-token rejection |
 | `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). `feature/newsletter-unsubscribe-token`: generates a per-subscriber `UnsubscribeToken` from `UsersConfig::$cancellationSecret` inside the send loop and passes it to `sendNewClassNotification()` |
 | `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse(subscribers, total)` | `13_rez-pagination.md`: filters (`search` against email/name, `source`) + `offset`/`limit`/`sortBy`/`sortDir` (`email`\|`name`\|`source`\|`opted_in_at`, default sort `opted_in_at ASC` preserved) via `NewsletterRepositoryInterface::findPage()`/`countPage()`. `findAll()` untouched — still `BroadcastUseCase`'s only caller |
 | `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, string $token)` | No `FeatureGuard` — users are never gated. `findByEmail()` first (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; generates a JWT via `JwtService` (`rez-users`) |
