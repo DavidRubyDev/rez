@@ -6,8 +6,10 @@ namespace Rez\Tests\Application\UseCase\Newsletter;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
+use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\NewsletterRepositoryInterface;
 use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeRequest;
 use Rez\Application\UseCase\Newsletter\Unsubscribe\UnsubscribeUseCase;
@@ -21,14 +23,18 @@ use Rez\Domain\Shared\UnsubscribeToken;
 class UnsubscribeUseCaseTest extends TestCase
 {
     private NewsletterRepositoryInterface&MockObject $repository;
+    private MailerInterface&MockObject $mailer;
+    private LoggerInterface&MockObject $logger;
     private UsersConfig $usersConfig;
     private UnsubscribeUseCase $useCase;
 
     protected function setUp(): void
     {
-        $this->repository = $this->createMock(NewsletterRepositoryInterface::class);
+        $this->repository  = $this->createMock(NewsletterRepositoryInterface::class);
+        $this->mailer      = $this->createMock(MailerInterface::class);
+        $this->logger      = $this->createMock(LoggerInterface::class);
         $this->usersConfig = new UsersConfig('super-secret-jwt', 'super-secret-cancellation-key');
-        $this->useCase    = new UnsubscribeUseCase($this->repository, $this->usersConfig);
+        $this->useCase     = new UnsubscribeUseCase($this->repository, $this->mailer, $this->logger, $this->usersConfig);
     }
 
     public function testRepositoryDatabaseExceptionPropagates(): void
@@ -50,6 +56,7 @@ class UnsubscribeUseCaseTest extends TestCase
             ->willThrowException(new NewsletterSubscriberNotFoundException('unknown@example.com'));
 
         $this->repository->expects($this->never())->method('delete');
+        $this->mailer->expects($this->never())->method('sendUnsubscribeConfirmedEmail');
 
         $response = $this->useCase->execute(new UnsubscribeRequest('unknown@example.com'));
 
@@ -67,6 +74,9 @@ class UnsubscribeUseCaseTest extends TestCase
 
         $this->repository->method('findByEmail')->willReturn($subscriber);
         $this->repository->expects($this->once())->method('delete')->with($subscriber->id);
+        $this->mailer->expects($this->once())
+            ->method('sendUnsubscribeConfirmedEmail')
+            ->with('known@example.com', null);
 
         $response = $this->useCase->execute(new UnsubscribeRequest('known@example.com'));
 
@@ -103,11 +113,51 @@ class UnsubscribeUseCaseTest extends TestCase
 
         $this->repository->method('findByEmail')->willReturn($subscriber);
         $this->repository->expects($this->never())->method('delete');
+        $this->mailer->expects($this->never())->method('sendUnsubscribeConfirmedEmail');
 
         $token = UnsubscribeToken::generate('known@example.com', 'wrong-secret');
 
         $this->expectException(InvalidTokenException::class);
 
         $this->useCase->execute(new UnsubscribeRequest('known@example.com', $token->toString()));
+    }
+
+    public function testConfirmationEmailIncludesSubscriberName(): void
+    {
+        $subscriber = NewsletterSubscriber::create(
+            NewsletterSubscriberId::fromString('f47ac10b-58cc-4372-a567-0e02b2c3d479'),
+            'named@example.com',
+            'Eva',
+            SubscriberSource::Guest,
+        );
+
+        $this->repository->method('findByEmail')->willReturn($subscriber);
+        $this->mailer->expects($this->once())
+            ->method('sendUnsubscribeConfirmedEmail')
+            ->with('named@example.com', 'Eva');
+
+        $this->useCase->execute(new UnsubscribeRequest('named@example.com'));
+    }
+
+    public function testConfirmationEmailFailureIsLoggedAndSwallowed(): void
+    {
+        $subscriber = NewsletterSubscriber::create(
+            NewsletterSubscriberId::fromString('f47ac10b-58cc-4372-a567-0e02b2c3d479'),
+            'known@example.com',
+            null,
+            SubscriberSource::Guest,
+        );
+
+        $this->repository->method('findByEmail')->willReturn($subscriber);
+        $this->mailer->method('sendUnsubscribeConfirmedEmail')
+            ->willThrowException(new \RuntimeException('SMTP error'));
+
+        $this->logger->expects($this->once())
+            ->method('error')
+            ->with($this->stringContains('Failed to send'));
+
+        $response = $this->useCase->execute(new UnsubscribeRequest('known@example.com'));
+
+        $this->assertTrue($response->removed);
     }
 }

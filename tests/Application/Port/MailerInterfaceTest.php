@@ -109,4 +109,14 @@ class MailerInterfaceTest extends TestCase
 
         $mailer->sendSubscriptionConfirmedEmail('jane@example.com', 'Jane', $this->unsubscribeToken);
     }
+
+    public function testSendUnsubscribeConfirmedEmailAcceptsEmailAndName(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects($this->once())
+            ->method('sendUnsubscribeConfirmedEmail')
+            ->with('jane@example.com', 'Jane');
+
+        $mailer->sendUnsubscribeConfirmedEmail('jane@example.com', 'Jane');
+    }
 }

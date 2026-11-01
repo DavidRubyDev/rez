@@ -2540,3 +2540,29 @@ unsubscribe_url %}`. `SymfonyMailer::sendSubscriptionConfirmedEmail()` and a new
 Mailpit: a custom email sent to one subscriber and one non-subscriber together produced exactly
 one copy with the unsubscribe link and one without, and a fresh subscribe produced the
 confirmation email with a working link to the local `<rez-unsubscribe>` dev page.
+
+### 100. Unsubscribe-confirmation email
+
+The subscribe/unsubscribe pair was asymmetric: `SubscribeUseCase` sends a confirmation email
+(step 99), `UnsubscribeUseCase` sent nothing.
+
+`MailerInterface::sendUnsubscribeConfirmedEmail(string $email, ?string $name): void` is new —
+no `UnsubscribeToken` parameter, unlike `sendSubscriptionConfirmedEmail`, since the recipient is
+already unsubscribed by the time this sends and there's nothing left for a token to protect.
+`UnsubscribeUseCase` now injects `MailerInterface` and `LoggerInterface` alongside its existing
+`NewsletterRepositoryInterface`/`UsersConfig`, and calls it from the same branch that calls
+`delete()` — after a successful deletion, whether reached via the no-token (rez-admin) or
+verified-token (guest) path. It is **not** sent on the unknown-email no-op return or when
+`assertValidToken()` throws `InvalidTokenException` before any deletion happens. Send is wrapped
+in try/catch-and-log, same non-fatal-email convention as `sendConfirmationEmail()` in
+`SubscribeUseCase`.
+
+`NullMailer` updated to match.
+
+9 new/changed tests: `MailerInterfaceTest` (+1), `UnsubscribeUseCaseTest` (+2 new, plus the
+existing 5 updated for the new constructor deps and `sendUnsubscribeConfirmedEmail`
+never/once expectations). `composer ca` clean (920 tests, PHPStan max).
+
+Only built in `rez` so far — `rez-starter` still needs a `SymfonyMailer::
+sendUnsubscribeConfirmedEmail()` implementation and an `unsubscribe-confirmed.html.twig`
+template.

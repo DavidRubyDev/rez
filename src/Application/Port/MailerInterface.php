@@ -53,4 +53,9 @@ interface MailerInterface
         ?string $name,
         UnsubscribeToken $unsubscribeToken,
     ): void;
+
+    public function sendUnsubscribeConfirmedEmail(
+        string $email,
+        ?string $name,
+    ): void;
 }
