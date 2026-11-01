@@ -20,7 +20,8 @@
 > Reservations pages built. Guest self-cancellation is wired end-to-end (`rez`'s
 > `CancelReservationUseCase` token verification, `rez-starter`'s public `DELETE
 > /api/reservations/{id}?token=` route and the real cancellation link in reservation emails) —
-> only the guest-facing `<rez-cancel>` confirmation page (`rez-components`) is still missing.
+> the guest-facing `<rez-cancel>` confirmation page (`rez-components`) is now built too — see
+> §5 and `docs/CONTEXT.md` step 13, on branch `feature/rez-cancel`, not yet merged.
 > Users are core (always enabled) and now complete end-to-end too, including `rez-admin`: `rez`
 > (`rez-users` — domain, use cases, `JwtService`), `rez-starter` (auth routes, `/api/users/me`,
 > admin user routes, `AuthMiddleware`/`AdminMiddleware` now enforced on every admin route), and
@@ -793,7 +794,8 @@ not a currently-available route. Guest self-cancellation, however, is now wired 
 the admin `POST /api/reservations/{id}/cancel` below, verified inside the use case rather than by
 middleware. `SymfonyMailer` builds the actual link (`CANCELLATION_BASE_URL` + reservation id +
 token) into the reservation-created/confirmed emails; the guest-facing confirmation page itself
-(`<rez-cancel>`) is still not built in `rez-components`. See §3.2 `CancellationToken` and the
+(`<rez-cancel>`) is now built in `rez-components` (branch `feature/rez-cancel`, not yet merged
+— see §5 and `docs/CONTEXT.md` step 13). See §3.2 `CancellationToken` and the
 `CancelReservationUseCase` row in §3.5. There is no `/api/bookings` route: **booking** (a
 `CreateBookingUseCase` orchestrator layered on top of reservations to add payment/credit/
 subscription resolution before creating the reservation) is a distinct, separately-scoped concept
@@ -930,6 +932,14 @@ DELETE /api/subscription
 | `rez.core.js` | rez-calendar + rez-cancel + rez-account | Base bundle — all clients |
 | `rez.payments.js` | rez-core + rez-checkout | Clients with payments enabled |
 | `rez.full.js` | all components | Convenience alias for rez.payments.js |
+
+**As actually built (deviates from the table above):** `rez-calendar` and `rez-checkout` ship
+together as `rez.core.*` (they're used as a pair — checkout listens for calendar's events).
+`rez-cancel` ships as its own separate `rez.cancel.*` bundle instead of folding into
+`rez.core.*` — it's a standalone confirmation page unrelated to the booking flow, so bundling
+it into core would make every booking-page load ship code it'll never run. See
+`docs/CONTEXT.md` step 13 for the `vite.config.ts`/`vite.cancel.config.ts` split this needed
+(Rollup's iife/umd formats don't support multiple entry points in one Vite config).
 
 ### Component communication
 
@@ -1133,8 +1143,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
     `CANCELLATION_BASE_URL`) into the container's `MailerConfig` binding; `SymfonyMailer` building
     the actual cancellation URL string from `cancellationBaseUrl` + reservation id + token, since
     `MailerInterface` hands it the `CancellationToken` object, not a pre-built URL (see §3.7).
-    `<rez-cancel>` web component (confirmation page reading the token from the URL) is a
-    `rez-components` follow-up, also not built here.
+    `<rez-cancel>` web component (confirmation page reading the token from the URL) was a
+    `rez-components` follow-up, also not built here — since built, see §5 and
+    `docs/CONTEXT.md` step 13.
 - `rez-reservation-settings` — **COMPLETE**, ad hoc (no `docs/instructions/NN_*` file — see
   `docs/CONTEXT.md` step 75). Removed `ReservationsConfig` entirely; `autoConfirm` plus three new
   lifecycle-email toggles (`autoSendReservationCreated/Confirmed/Cancelled`) now live in a
@@ -1270,7 +1281,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   actual cancellation link (`cancellationBaseUrl` + reservation id + token) into the
   reservation-created/confirmed emails; `InvalidTokenException` newly mapped to 401 (was
   documented before this but not actually wired in `bootstrap/app.php`). The `<rez-cancel>`
-  confirmation page the link points to still isn't built in `rez-components`
+  confirmation page the link points to is now built in `rez-components` (`feature/rez-cancel`)
 - ✅ Auth + user routes (`feat/wire-user-usecases`) — `POST /api/auth/{register,login,
   password-reset/request,password-reset/confirm}`, `GET`/`PATCH /api/users/me`,
   admin `GET /api/users` / `PATCH /api/users/{id}` / `POST /api/admin/users`
@@ -1297,10 +1308,11 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ❌ Not initialised (init from rez-starter, local Docker only, for API testing)
 
 ### `rez-components`
-- ❌ `<rez-calendar>` — not started
-- ❌ `<rez-cancel>` — not started
-- ❌ `<rez-checkout>` — not started
-- ❌ `<rez-account>` — not started
+- ✅ `<rez-calendar>` — built, see `docs/CONTEXT.md` steps 6-7, 11-12
+- ✅ `<rez-cancel>` — built, see `docs/CONTEXT.md` step 13 (`feature/rez-cancel`, not yet merged)
+- ✅ `<rez-checkout>` — built, see `docs/CONTEXT.md` steps 8-10, 12
+- ❌ `<rez-account>` — not started (needs `rez-users`'s auth routes wired in, out of scope while
+  the current work is users/payments-free)
 
 ### `rez-admin`
 - ✅ Project scaffold (Vite + React + TypeScript + Tailwind, Vitest, Dockerfile + nginx)
