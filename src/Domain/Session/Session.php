@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Rez\Domain\Exception\InvalidSessionStateException;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
+use Rez\Domain\Shared\Money;
 
 final class Session
 {
@@ -18,6 +19,7 @@ final class Session
         public readonly int $durationMinutes,
         public readonly int $capacity,
         public readonly SessionStatus $status,
+        public readonly ?Money $price = null,
     ) {
     }
 
@@ -30,6 +32,7 @@ final class Session
         DateTimeImmutable $startTime,
         int $durationMinutes,
         int $capacity,
+        ?Money $price = null,
     ): self {
         if ($durationMinutes <= 0) {
             throw new \InvalidArgumentException(sprintf('Session duration must be greater than zero, got %d.', $durationMinutes));
@@ -39,7 +42,7 @@ final class Session
             throw new \InvalidArgumentException(sprintf('Session capacity must be greater than zero, got %d.', $capacity));
         }
 
-        return new self($id, $resourceId, $startTime, $durationMinutes, $capacity, SessionStatus::Scheduled);
+        return new self($id, $resourceId, $startTime, $durationMinutes, $capacity, SessionStatus::Scheduled, $price);
     }
 
     public static function reconstruct(
@@ -49,8 +52,9 @@ final class Session
         int $durationMinutes,
         int $capacity,
         SessionStatus $status,
+        ?Money $price = null,
     ): self {
-        return new self($id, $resourceId, $startTime, $durationMinutes, $capacity, $status);
+        return new self($id, $resourceId, $startTime, $durationMinutes, $capacity, $status, $price);
     }
 
     /**
@@ -62,7 +66,7 @@ final class Session
             throw new InvalidSessionStateException('Session is already cancelled.');
         }
 
-        return new self($this->id, $this->resourceId, $this->startTime, $this->durationMinutes, $this->capacity, SessionStatus::Cancelled);
+        return new self($this->id, $this->resourceId, $this->startTime, $this->durationMinutes, $this->capacity, SessionStatus::Cancelled, $this->price);
     }
 
     public function toTimeSlot(): TimeSlot

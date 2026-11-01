@@ -12,6 +12,8 @@ use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Session\Session;
 use Rez\Domain\Session\SessionId;
 use Rez\Domain\Session\SessionStatus;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 
 class SessionTest extends TestCase
 {
@@ -105,5 +107,30 @@ class SessionTest extends TestCase
         $session = Session::reconstruct($this->id, $this->resourceId, $this->startTime, 60, 10, SessionStatus::Cancelled);
 
         $this->assertSame(SessionStatus::Cancelled, $session->status);
+    }
+
+    public function testPriceDefaultsToNull(): void
+    {
+        $session = Session::create($this->id, $this->resourceId, $this->startTime, 60, 10);
+
+        $this->assertNull($session->price);
+    }
+
+    public function testCreateStoresPrice(): void
+    {
+        $price   = new Money(29000, Currency::Czk);
+        $session = Session::create($this->id, $this->resourceId, $this->startTime, 60, 10, $price);
+
+        $this->assertNotNull($session->price);
+        $this->assertTrue($price->equals($session->price));
+    }
+
+    public function testReconstructTrustsGivenPrice(): void
+    {
+        $price   = new Money(29000, Currency::Czk);
+        $session = Session::reconstruct($this->id, $this->resourceId, $this->startTime, 60, 10, SessionStatus::Scheduled, $price);
+
+        $this->assertNotNull($session->price);
+        $this->assertTrue($price->equals($session->price));
     }
 }

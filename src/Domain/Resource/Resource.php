@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Rez\Domain\Resource;
 
+use Rez\Domain\Shared\Money;
+
 final class Resource
 {
     /**
@@ -19,6 +21,7 @@ final class Resource
         public readonly bool $active = true,
         public readonly ?int $defaultDurationMinutes = null,
         public readonly bool $published = true,
+        public readonly ?Money $price = null,
     ) {
         if ($name === '') {
             throw new \InvalidArgumentException('Resource name must not be empty.');
@@ -32,16 +35,21 @@ final class Resource
     /** @param array<string, mixed> $attributes */
     public function withAttributes(array $attributes): self
     {
-        return new self($this->id, $this->type, $this->name, $this->capacity, array_merge($this->attributes, $attributes), $this->active, $this->defaultDurationMinutes, $this->published);
+        return new self($this->id, $this->type, $this->name, $this->capacity, array_merge($this->attributes, $attributes), $this->active, $this->defaultDurationMinutes, $this->published, $this->price);
     }
 
     public function deactivate(): self
     {
-        return new self($this->id, $this->type, $this->name, $this->capacity, $this->attributes, false, $this->defaultDurationMinutes, $this->published);
+        return new self($this->id, $this->type, $this->name, $this->capacity, $this->attributes, false, $this->defaultDurationMinutes, $this->published, $this->price);
     }
 
     public function withPublished(bool $published): self
     {
-        return new self($this->id, $this->type, $this->name, $this->capacity, $this->attributes, $this->active, $this->defaultDurationMinutes, $published);
+        return new self($this->id, $this->type, $this->name, $this->capacity, $this->attributes, $this->active, $this->defaultDurationMinutes, $published, $this->price);
+    }
+
+    public function withPrice(?Money $price): self
+    {
+        return new self($this->id, $this->type, $this->name, $this->capacity, $this->attributes, $this->active, $this->defaultDurationMinutes, $this->published, $price);
     }
 }
