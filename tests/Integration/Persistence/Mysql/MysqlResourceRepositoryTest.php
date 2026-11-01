@@ -9,6 +9,8 @@ use Rez\Domain\Exception\ResourceNotFoundException;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceType;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 use Rez\Infrastructure\Mapper\ResourceTypeMapper;
 use Rez\Infrastructure\Persistence\Mysql\MysqlResourceRepository;
 
@@ -46,6 +48,25 @@ class MysqlResourceRepositoryTest extends MysqlIntegrationTestCase
         $this->assertSame($resource->capacity, $found->capacity);
         $this->assertSame('table', $found->type->toString());
         $this->assertSame(['location' => 'main-floor'], $found->attributes);
+        $this->assertNull($found->price);
+    }
+
+    public function testSaveAndFindByIdRoundtripsPrice(): void
+    {
+        $price  = new Money(15000, Currency::Czk);
+        $priced = new Resource(
+            ResourceId::generate(),
+            ResourceType::fromString('table'),
+            'Table 1',
+            4,
+            price: $price,
+        );
+        $this->repository->save($priced);
+
+        $found = $this->repository->findById($priced->id);
+
+        $this->assertNotNull($found->price);
+        $this->assertTrue($price->equals($found->price));
     }
 
     public function testFindByIdMissingThrowsResourceNotFoundException(): void

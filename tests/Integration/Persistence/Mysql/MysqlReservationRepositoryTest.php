@@ -15,7 +15,11 @@ use Rez\Domain\Reservation\ReservationStatus;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
+use Rez\Domain\Payment\PaymentMethod;
+use Rez\Domain\Payment\PaymentStatus;
 use Rez\Domain\Session\SessionId;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 use Rez\Infrastructure\Mapper\ReservationStatusMapper;
 use Rez\Infrastructure\Persistence\Mysql\MysqlReservationRepository;
 
@@ -57,6 +61,51 @@ class MysqlReservationRepositoryTest extends MysqlIntegrationTestCase
         $this->assertTrue($reservation->id->equals($found->id));
         $this->assertSame($reservation->status, $found->status);
         $this->assertTrue($found->resourceIds->contains($this->resourceId));
+        $this->assertSame(PaymentStatus::Unpaid, $found->paymentStatus);
+        $this->assertNull($found->paymentMethod);
+        $this->assertNull($found->amountDue);
+        $this->assertNull($found->paidAt);
+    }
+
+    public function testSaveAndFindByIdRoundtripsPaymentFields(): void
+    {
+        $amountDue   = new Money(15000, Currency::Czk);
+        $reservation = Reservation::create(
+            ReservationId::generate(),
+            ResourceIdCollection::fromArray([$this->resourceId]),
+            new TimeSlot(
+                new DateTimeImmutable('2024-01-15 10:00:00'),
+                new DateTimeImmutable('2024-01-15 11:00:00'),
+            ),
+            $this->party,
+            paymentMethod: PaymentMethod::CashAtCashier,
+            amountDue: $amountDue,
+        );
+        $this->repository->save($reservation);
+
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertSame(PaymentMethod::CashAtCashier, $found->paymentMethod);
+        $this->assertNotNull($found->amountDue);
+        $this->assertTrue($amountDue->equals($found->amountDue));
+    }
+
+    public function testSaveAndFindByIdRoundtripsMarkPaid(): void
+    {
+        $reservation = $this->makeReservation();
+        $this->repository->save($reservation);
+
+        $amount = new Money(15000, Currency::Czk);
+        $paid   = $reservation->markPaid($amount, PaymentMethod::CashAtCashier);
+        $this->repository->save($paid);
+
+        $found = $this->repository->findById($reservation->id);
+
+        $this->assertSame(PaymentStatus::Paid, $found->paymentStatus);
+        $this->assertSame(PaymentMethod::CashAtCashier, $found->paymentMethod);
+        $this->assertNotNull($found->amountDue);
+        $this->assertTrue($amount->equals($found->amountDue));
+        $this->assertNotNull($found->paidAt);
     }
 
     public function testFindByIdMissingThrowsReservationNotFoundException(): void

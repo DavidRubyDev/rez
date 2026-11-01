@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Rez\Infrastructure\Persistence\Mysql;
 
+use Rez\Domain\Shared\Money;
+use Rez\Infrastructure\Mapper\CurrencyMapper;
 use UnexpectedValueException;
 
 abstract class MysqlRepository
@@ -64,5 +66,22 @@ abstract class MysqlRepository
         }
 
         return (bool) $value;
+    }
+
+    /**
+     * Money is split across two nullable columns (an amount and a currency code) — null
+     * in either means no price was ever set, not a partially-saved one, so either both
+     * resolve or neither does.
+     */
+    protected function nullMoney(mixed $amountRaw, mixed $currencyRaw): ?Money
+    {
+        $amount   = $this->nullInt($amountRaw);
+        $currency = $this->nullStr($currencyRaw);
+
+        if ($amount === null || $currency === null) {
+            return null;
+        }
+
+        return new Money($amount, (new CurrencyMapper())->fromString($currency));
     }
 }

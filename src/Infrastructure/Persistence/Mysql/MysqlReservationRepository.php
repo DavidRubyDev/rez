@@ -20,6 +20,9 @@ use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
 use Rez\Domain\Session\SessionId;
 use Rez\Domain\Shared\Utc;
+use Rez\Infrastructure\Mapper\CurrencyMapper;
+use Rez\Infrastructure\Mapper\PaymentMethodMapper;
+use Rez\Infrastructure\Mapper\PaymentStatusMapper;
 use Rez\Infrastructure\Mapper\ReservationStatusMapper;
 
 final class MysqlReservationRepository extends MysqlRepository implements ReservationRepositoryInterface
@@ -32,11 +35,18 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
         'created_at' => 'r.created_at',
     ];
 
+    private readonly CurrencyMapper $currencyMapper;
+    private readonly PaymentMethodMapper $paymentMethodMapper;
+    private readonly PaymentStatusMapper $paymentStatusMapper;
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly ReservationStatusMapper $statusMapper,
         private readonly LoggerInterface $logger,
     ) {
+        $this->currencyMapper      = new CurrencyMapper();
+        $this->paymentMethodMapper = new PaymentMethodMapper();
+        $this->paymentStatusMapper = new PaymentStatusMapper();
     }
 
     /**
@@ -331,34 +341,44 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
     {
         try {
             $stmt = $this->pdo->prepare('
-                INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, external_ref, created_at, session_id, checked_in)
-                VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :external_ref, :created_at, :session_id, :checked_in)
+                INSERT INTO reservations (id, status, start_at, end_at, party_name, party_email, party_size, party_phone, external_ref, created_at, session_id, checked_in, payment_status, payment_method, amount_due_amount, amount_due_currency, paid_at)
+                VALUES (:id, :status, :start_at, :end_at, :party_name, :party_email, :party_size, :party_phone, :external_ref, :created_at, :session_id, :checked_in, :payment_status, :payment_method, :amount_due_amount, :amount_due_currency, :paid_at)
                 ON DUPLICATE KEY UPDATE
-                    status       = VALUES(status),
-                    start_at     = VALUES(start_at),
-                    end_at       = VALUES(end_at),
-                    party_name   = VALUES(party_name),
-                    party_email  = VALUES(party_email),
-                    party_size   = VALUES(party_size),
-                    party_phone  = VALUES(party_phone),
-                    external_ref = VALUES(external_ref),
-                    session_id   = VALUES(session_id),
-                    checked_in   = VALUES(checked_in)
+                    status               = VALUES(status),
+                    start_at             = VALUES(start_at),
+                    end_at               = VALUES(end_at),
+                    party_name           = VALUES(party_name),
+                    party_email          = VALUES(party_email),
+                    party_size           = VALUES(party_size),
+                    party_phone          = VALUES(party_phone),
+                    external_ref         = VALUES(external_ref),
+                    session_id           = VALUES(session_id),
+                    checked_in           = VALUES(checked_in),
+                    payment_status       = VALUES(payment_status),
+                    payment_method       = VALUES(payment_method),
+                    amount_due_amount    = VALUES(amount_due_amount),
+                    amount_due_currency  = VALUES(amount_due_currency),
+                    paid_at              = VALUES(paid_at)
             ');
 
             $stmt->execute([
-                ':id'           => $reservation->id->toString(),
-                ':status'       => $this->statusMapper->toString($reservation->status),
-                ':start_at'     => $reservation->slot->start->format('Y-m-d H:i:s'),
-                ':end_at'       => $reservation->slot->end->format('Y-m-d H:i:s'),
-                ':party_name'   => $reservation->party->name,
-                ':party_email'  => $reservation->party->email,
-                ':party_size'   => $reservation->party->size,
-                ':party_phone'  => $reservation->party->phone,
-                ':external_ref' => $reservation->party->externalRef,
-                ':created_at'   => $reservation->createdAt->format('Y-m-d H:i:s'),
-                ':session_id'   => $reservation->sessionId?->toString(),
-                ':checked_in'   => $reservation->checkedIn?->format('Y-m-d H:i:s'),
+                ':id'                   => $reservation->id->toString(),
+                ':status'               => $this->statusMapper->toString($reservation->status),
+                ':start_at'             => $reservation->slot->start->format('Y-m-d H:i:s'),
+                ':end_at'               => $reservation->slot->end->format('Y-m-d H:i:s'),
+                ':party_name'           => $reservation->party->name,
+                ':party_email'          => $reservation->party->email,
+                ':party_size'           => $reservation->party->size,
+                ':party_phone'          => $reservation->party->phone,
+                ':external_ref'         => $reservation->party->externalRef,
+                ':created_at'           => $reservation->createdAt->format('Y-m-d H:i:s'),
+                ':session_id'           => $reservation->sessionId?->toString(),
+                ':checked_in'           => $reservation->checkedIn?->format('Y-m-d H:i:s'),
+                ':payment_status'       => $this->paymentStatusMapper->toString($reservation->paymentStatus),
+                ':payment_method'       => $reservation->paymentMethod !== null ? $this->paymentMethodMapper->toString($reservation->paymentMethod) : null,
+                ':amount_due_amount'    => $reservation->amountDue?->amount,
+                ':amount_due_currency'  => $reservation->amountDue !== null ? $this->currencyMapper->toString($reservation->amountDue->currency) : null,
+                ':paid_at'              => $reservation->paidAt?->format('Y-m-d H:i:s'),
             ]);
 
             $delete = $this->pdo->prepare('DELETE FROM reservation_resources WHERE reservation_id = :id');
@@ -403,6 +423,10 @@ final class MysqlReservationRepository extends MysqlRepository implements Reserv
             new DateTimeImmutable($this->str($row['created_at']), $utc),
             $this->nullStr($row['session_id']) !== null ? SessionId::fromString($this->str($row['session_id'])) : null,
             $this->nullStr($row['checked_in']) !== null ? new DateTimeImmutable($this->str($row['checked_in']), $utc) : null,
+            $this->paymentStatusMapper->fromString($this->str($row['payment_status'])),
+            $this->nullStr($row['payment_method']) !== null ? $this->paymentMethodMapper->fromString($this->str($row['payment_method'])) : null,
+            $this->nullMoney($row['amount_due_amount'], $row['amount_due_currency']),
+            $this->nullStr($row['paid_at']) !== null ? new DateTimeImmutable($this->str($row['paid_at']), $utc) : null,
         );
     }
 

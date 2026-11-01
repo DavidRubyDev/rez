@@ -15,15 +15,19 @@ use Rez\Domain\Session\Session;
 use Rez\Domain\Session\SessionCollection;
 use Rez\Domain\Session\SessionId;
 use Rez\Domain\Shared\Utc;
+use Rez\Infrastructure\Mapper\CurrencyMapper;
 use Rez\Infrastructure\Mapper\SessionStatusMapper;
 
 final class MysqlSessionRepository extends MysqlRepository implements SessionRepositoryInterface
 {
+    private readonly CurrencyMapper $currencyMapper;
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly SessionStatusMapper $statusMapper,
         private readonly LoggerInterface $logger,
     ) {
+        $this->currencyMapper = new CurrencyMapper();
     }
 
     /**
@@ -105,14 +109,16 @@ final class MysqlSessionRepository extends MysqlRepository implements SessionRep
     {
         try {
             $stmt = $this->pdo->prepare('
-                INSERT INTO sessions (id, resource_id, start_time, duration_minutes, capacity, status)
-                VALUES (:id, :resource_id, :start_time, :duration_minutes, :capacity, :status)
+                INSERT INTO sessions (id, resource_id, start_time, duration_minutes, capacity, status, price_amount, price_currency)
+                VALUES (:id, :resource_id, :start_time, :duration_minutes, :capacity, :status, :price_amount, :price_currency)
                 ON DUPLICATE KEY UPDATE
                     resource_id       = VALUES(resource_id),
                     start_time        = VALUES(start_time),
                     duration_minutes  = VALUES(duration_minutes),
                     capacity          = VALUES(capacity),
-                    status            = VALUES(status)
+                    status            = VALUES(status),
+                    price_amount      = VALUES(price_amount),
+                    price_currency    = VALUES(price_currency)
             ');
 
             $stmt->execute([
@@ -122,6 +128,8 @@ final class MysqlSessionRepository extends MysqlRepository implements SessionRep
                 ':duration_minutes' => $session->durationMinutes,
                 ':capacity'         => $session->capacity,
                 ':status'           => $this->statusMapper->toString($session->status),
+                ':price_amount'     => $session->price?->amount,
+                ':price_currency'   => $session->price !== null ? $this->currencyMapper->toString($session->price->currency) : null,
             ]);
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
@@ -139,6 +147,7 @@ final class MysqlSessionRepository extends MysqlRepository implements SessionRep
             $this->int($row['duration_minutes']),
             $this->int($row['capacity']),
             $this->statusMapper->fromString($this->str($row['status'])),
+            $this->nullMoney($row['price_amount'], $row['price_currency']),
         );
     }
 }
