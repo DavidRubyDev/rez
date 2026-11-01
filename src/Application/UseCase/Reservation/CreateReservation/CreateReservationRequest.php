@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Application\UseCase\Reservation\CreateReservation;
 
 use DateTimeImmutable;
+use Rez\Domain\Payment\PaymentMethod;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Resource\ResourceId;
 
@@ -17,6 +18,7 @@ final class CreateReservationRequest
         public readonly DateTimeImmutable $end,
         public readonly Party $party,
         public readonly ?string $sessionId = null,
+        public readonly ?PaymentMethod $paymentMethod = null,
     ) {
     }
 }

@@ -12,6 +12,7 @@ interface CreateReservationUseCaseInterface
      * @throws \Rez\Domain\Exception\InvalidTimeSlotException
      * @throws \Rez\Domain\Exception\InvalidSessionStateException
      * @throws \Rez\Domain\Exception\ConflictException
+     * @throws \InvalidArgumentException
      * @throws \Rez\Application\Exception\DatabaseException
      */
     public function execute(CreateReservationRequest $request): CreateReservationResponse;
