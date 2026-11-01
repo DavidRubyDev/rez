@@ -2566,3 +2566,53 @@ never/once expectations). `composer ca` clean (920 tests, PHPStan max).
 Only built in `rez` so far — `rez-starter` still needs a `SymfonyMailer::
 sendUnsubscribeConfirmedEmail()` implementation and an `unsubscribe-confirmed.html.twig`
 template.
+
+### 101. Payment methods foundation (`feature/payment-methods`)
+
+Platform extensions (payments/credits/subscriptions) are still not built, but this lays the
+groundwork for the simplest real payment method — cash/card collected at the cashier, after
+booking — without presuming anything about the eventual Stripe/credits work in
+`docs/instructions/15_rez-payments.md` onward.
+
+`Domain/Payment/PaymentMethod` (pure enum, single case `CashAtCashier` today) and
+`PaymentStatus` (`Unpaid`, `Paid`), with `Infrastructure/Mapper/PaymentMethodMapper` /
+`PaymentStatusMapper` following the `SubscriberSourceMapper` pattern exactly.
+
+`Resource` gains `price: ?Money` (nullable, `withPrice()` updater, same shape as
+`defaultDurationMinutes`/`published`). `Session` gains its own `price: ?Money`, resolved by
+`CreateSessionUseCase` from an explicit request override or the owning resource's price —
+same division of responsibility already used for `durationMinutes`/`defaultDurationMinutes`,
+except a missing price is valid (not an error) on both sides.
+
+`Reservation` gains `paymentStatus` (default `Unpaid`), `paymentMethod`, `amountDue`,
+`paidAt`, plus a guarded `markPaid(Money, PaymentMethod)` transition (same shape as
+`confirm()`/`cancel()`/`checkIn()` — only reachable while still `Unpaid`).
+`CreateReservationUseCase` defaults `paymentMethod` to `CashAtCashier` when the request omits
+it and computes `amountDue` itself — never trusts a client-supplied amount — by summing every
+booked resource's price (resource path) or reading the session's own already-resolved price
+(session path, no need to re-derive from the resource). New `MarkReservationPaidUseCase`
+(admin action) registered in `config/container.php`.
+
+Migration `20260101000007_add_payment_fields.sql` adds `price_amount`/`price_currency` to
+`resources`/`sessions` and `payment_status`/`payment_method`/`amount_due_amount`/
+`amount_due_currency`/`paid_at` to `reservations`. **Deliberately guarded** with
+`INFORMATION_SCHEMA` checks instead of this project's usual bare `ALTER TABLE` — the first
+ALTER-TABLE migration ever added here, and it surfaced a real, previously-latent bug:
+`MysqlMigrationRepositoryTest` does `DELETE FROM schema_migrations` as part of its own tests,
+so every migration that runs afterward within the same `composer test-integration` process
+replays from scratch against an already-migrated database. `CREATE TABLE IF NOT EXISTS`
+tolerated that by luck; a bare `ADD COLUMN` does not. (Also: the PREPARE/EXECUTE no-op branch
+must be `'DO 0'`, not `'SELECT 1'` — a `SELECT` run through `EXECUTE` leaves an unread result
+set on the connection that breaks the next query.)
+
+Verified against a real MySQL 8 instance — the sandbox PHP has no `pdo_mysql`, so this ran via
+`rez-starter`'s running `app` container (whose `vendor/davidrubydev/rez` symlinks straight to
+this checkout) plus a disposable `mysql:8.0` container joined to the same compose network.
+Full integration suite (129 tests) run twice in a row against the same already-migrated
+database, both clean — confirms the migration is actually idempotent, not just syntactically
+plausible. `composer ca` (969 tests, PHPStan max, cs-fix) clean throughout.
+
+`rez-starter` (HTTP layer: serializers, request factories, `POST
+/api/reservations/{id}/mark-paid`) and `rez-admin`/`rez-components` (payment status display,
+mark-paid action, checkout payment-method step) built alongside this on the same branch name
+in their own repos — see their own `docs/CONTEXT.md`.
