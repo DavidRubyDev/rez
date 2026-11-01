@@ -7,6 +7,8 @@ namespace Rez\Tests\Domain\Reservation;
 use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 use Rez\Domain\Exception\DomainException;
+use Rez\Domain\Payment\PaymentMethod;
+use Rez\Domain\Payment\PaymentStatus;
 use Rez\Domain\Reservation\Party;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationId;
@@ -15,6 +17,8 @@ use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
 use Rez\Domain\Session\SessionId;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 
 class ReservationTest extends TestCase
 {
@@ -207,5 +211,108 @@ class ReservationTest extends TestCase
         $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party)->confirm();
 
         $this->assertNull($reservation->markNoShow()->checkedIn);
+    }
+
+    public function testPaymentStatusDefaultsToUnpaid(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+
+        $this->assertSame(PaymentStatus::Unpaid, $reservation->paymentStatus);
+    }
+
+    public function testPaymentMethodDefaultsToNull(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+
+        $this->assertNull($reservation->paymentMethod);
+    }
+
+    public function testAmountDueDefaultsToNull(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+
+        $this->assertNull($reservation->amountDue);
+    }
+
+    public function testPaidAtDefaultsToNull(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+
+        $this->assertNull($reservation->paidAt);
+    }
+
+    public function testCreateStoresPaymentMethodAndAmountDue(): void
+    {
+        $amountDue   = new Money(15000, Currency::Czk);
+        $reservation = Reservation::create(
+            $this->id,
+            $this->resourceIds,
+            $this->slot,
+            $this->party,
+            paymentMethod: PaymentMethod::CashAtCashier,
+            amountDue: $amountDue,
+        );
+
+        $this->assertSame(PaymentMethod::CashAtCashier, $reservation->paymentMethod);
+        $this->assertNotNull($reservation->amountDue);
+        $this->assertTrue($amountDue->equals($reservation->amountDue));
+    }
+
+    public function testMarkPaidSetsPaymentStatusToPaid(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+        $amount      = new Money(15000, Currency::Czk);
+
+        $paid = $reservation->markPaid($amount, PaymentMethod::CashAtCashier);
+
+        $this->assertSame(PaymentStatus::Paid, $paid->paymentStatus);
+    }
+
+    public function testMarkPaidStoresAmountAndMethod(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+        $amount      = new Money(15000, Currency::Czk);
+
+        $paid = $reservation->markPaid($amount, PaymentMethod::CashAtCashier);
+
+        $this->assertNotNull($paid->amountDue);
+        $this->assertTrue($amount->equals($paid->amountDue));
+        $this->assertSame(PaymentMethod::CashAtCashier, $paid->paymentMethod);
+    }
+
+    public function testMarkPaidSetsPaidAtToApproximatelyNow(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+        $amount      = new Money(15000, Currency::Czk);
+
+        $before = new DateTimeImmutable();
+        $paid   = $reservation->markPaid($amount, PaymentMethod::CashAtCashier);
+        $after  = new DateTimeImmutable();
+
+        $this->assertNotNull($paid->paidAt);
+        $this->assertGreaterThanOrEqual($before->getTimestamp(), $paid->paidAt->getTimestamp());
+        $this->assertLessThanOrEqual($after->getTimestamp(), $paid->paidAt->getTimestamp());
+    }
+
+    public function testMarkPaidReturnsNewInstance(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+        $amount      = new Money(15000, Currency::Czk);
+
+        $paid = $reservation->markPaid($amount, PaymentMethod::CashAtCashier);
+
+        $this->assertNotSame($reservation, $paid);
+        $this->assertSame(PaymentStatus::Unpaid, $reservation->paymentStatus);
+        $this->assertSame(PaymentStatus::Paid, $paid->paymentStatus);
+    }
+
+    public function testMarkPaidFromPaidThrowsDomainException(): void
+    {
+        $reservation = Reservation::create($this->id, $this->resourceIds, $this->slot, $this->party);
+        $amount      = new Money(15000, Currency::Czk);
+        $paid        = $reservation->markPaid($amount, PaymentMethod::CashAtCashier);
+
+        $this->expectException(DomainException::class);
+        $paid->markPaid($amount, PaymentMethod::CashAtCashier);
     }
 }

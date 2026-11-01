@@ -11,6 +11,8 @@ use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Session\Session;
 use Rez\Domain\Session\SessionId;
 use Rez\Domain\Session\SessionStatus;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 use Rez\Infrastructure\Mapper\SessionStatusMapper;
 use Rez\Infrastructure\Persistence\Mysql\MysqlSessionRepository;
 
@@ -50,6 +52,26 @@ class MysqlSessionRepositoryTest extends MysqlIntegrationTestCase
         $this->assertSame($session->durationMinutes, $found->durationMinutes);
         $this->assertSame($session->capacity, $found->capacity);
         $this->assertSame(SessionStatus::Scheduled, $found->status);
+        $this->assertNull($found->price);
+    }
+
+    public function testSaveAndFindByIdRoundtripsPrice(): void
+    {
+        $price   = new Money(29000, Currency::Czk);
+        $session = Session::create(
+            SessionId::generate(),
+            $this->resourceId,
+            new DateTimeImmutable('2024-06-03 09:00:00'),
+            60,
+            10,
+            $price,
+        );
+        $this->repository->save($session);
+
+        $found = $this->repository->findById($session->id);
+
+        $this->assertNotNull($found->price);
+        $this->assertTrue($price->equals($found->price));
     }
 
     public function testFindByIdMissingThrowsSessionNotFoundException(): void

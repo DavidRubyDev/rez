@@ -14,6 +14,7 @@ use Rez\Application\Service\AvailabilityServiceInterface;
 use Rez\Application\Service\ReservationEmailService;
 use Rez\Domain\Exception\ConflictException;
 use Rez\Domain\Exception\InvalidSessionStateException;
+use Rez\Domain\Payment\PaymentMethod;
 use Rez\Domain\Reservation\Reservation;
 use Rez\Domain\Reservation\ReservationId;
 use Rez\Domain\Reservation\ReservationStatus;
@@ -25,6 +26,7 @@ use Rez\Domain\Session\Session;
 use Rez\Domain\Session\SessionId;
 use Rez\Domain\Session\SessionStatus;
 use Rez\Domain\Shared\CancellationToken;
+use Rez\Domain\Shared\Money;
 
 final class CreateReservationUseCase implements CreateReservationUseCaseInterface
 {
@@ -45,12 +47,13 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
      * @throws \Rez\Domain\Exception\InvalidTimeSlotException
      * @throws InvalidSessionStateException
      * @throws ConflictException
+     * @throws \InvalidArgumentException
      * @throws DatabaseException
      */
     public function execute(CreateReservationRequest $request): CreateReservationResponse
     {
         if ($request->sessionId !== null) {
-            [$slot, $resourceIds, $sessionId] = $this->resolveSessionSlot($request);
+            [$slot, $resourceIds, $sessionId, $amountDue] = $this->resolveSessionSlot($request);
         } else {
             $resources = [];
 
@@ -70,6 +73,7 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
 
             $resourceIds = $request->resourceIds;
             $sessionId   = null;
+            $amountDue   = $this->sumResourcePrices($resources);
         }
 
         $reservation = Reservation::create(
@@ -78,6 +82,8 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
             $slot,
             $request->party,
             $sessionId,
+            $request->paymentMethod ?? PaymentMethod::CashAtCashier,
+            $amountDue,
         );
 
         try {
@@ -108,7 +114,7 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
     }
 
     /**
-     * @return array{0: TimeSlot, 1: ResourceId[], 2: SessionId}
+     * @return array{0: TimeSlot, 1: ResourceId[], 2: SessionId, 3: ?Money}
      * @throws \Rez\Domain\Exception\SessionNotFoundException
      * @throws \Rez\Domain\Exception\ResourceNotFoundException
      * @throws InvalidSessionStateException
@@ -140,7 +146,26 @@ final class CreateReservationUseCase implements CreateReservationUseCaseInterfac
 
         $this->assertSessionHasCapacity($session, $slot, $resource, $request->party->size);
 
-        return [$slot, [$session->resourceId], $session->id];
+        return [$slot, [$session->resourceId], $session->id, $session->price];
+    }
+
+    /**
+     * @param Resource[] $resources
+     * @throws \InvalidArgumentException
+     */
+    private function sumResourcePrices(array $resources): ?Money
+    {
+        $total = null;
+
+        foreach ($resources as $resource) {
+            if ($resource->price === null) {
+                continue;
+            }
+
+            $total = $total === null ? $resource->price : $total->add($resource->price);
+        }
+
+        return $total;
     }
 
     /** @throws ConflictException */

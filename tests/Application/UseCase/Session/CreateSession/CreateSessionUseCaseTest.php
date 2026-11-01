@@ -16,6 +16,8 @@ use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceType;
 use Rez\Domain\Session\SessionStatus;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 
 class CreateSessionUseCaseTest extends TestCase
 {
@@ -33,9 +35,9 @@ class CreateSessionUseCaseTest extends TestCase
         $this->resourceId = ResourceId::generate();
     }
 
-    private function classResource(?int $defaultDurationMinutes = 45, int $capacity = 20): Resource
+    private function classResource(?int $defaultDurationMinutes = 45, int $capacity = 20, ?Money $price = null): Resource
     {
-        return new Resource($this->resourceId, ResourceType::fromString('class'), 'Pilates', $capacity, defaultDurationMinutes: $defaultDurationMinutes);
+        return new Resource($this->resourceId, ResourceType::fromString('class'), 'Pilates', $capacity, defaultDurationMinutes: $defaultDurationMinutes, price: $price);
     }
 
     public function testThrowsResourceNotFoundExceptionWhenResourceMissing(): void
@@ -121,6 +123,38 @@ class CreateSessionUseCaseTest extends TestCase
 
         $this->assertSame(SessionStatus::Scheduled, $response->session->status);
         $this->assertTrue($this->resourceId->equals($response->session->resourceId));
+    }
+
+    public function testPriceDefaultsFromResourceWhenNotOverridden(): void
+    {
+        $price = new Money(29000, Currency::Czk);
+        $this->resourceRepository->method('findById')->willReturn($this->classResource(price: $price));
+
+        $response = $this->useCase->execute(new CreateSessionRequest($this->resourceId, '2024-06-03 09:00'));
+
+        $this->assertNotNull($response->session->price);
+        $this->assertTrue($price->equals($response->session->price));
+    }
+
+    public function testPriceOverrideTakesPrecedenceOverResourcePrice(): void
+    {
+        $resourcePrice = new Money(29000, Currency::Czk);
+        $override      = new Money(10000, Currency::Czk);
+        $this->resourceRepository->method('findById')->willReturn($this->classResource(price: $resourcePrice));
+
+        $response = $this->useCase->execute(new CreateSessionRequest($this->resourceId, '2024-06-03 09:00', price: $override));
+
+        $this->assertNotNull($response->session->price);
+        $this->assertTrue($override->equals($response->session->price));
+    }
+
+    public function testPriceIsNullWhenNeitherResourceNorOverrideHasOne(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->classResource());
+
+        $response = $this->useCase->execute(new CreateSessionRequest($this->resourceId, '2024-06-03 09:00'));
+
+        $this->assertNull($response->session->price);
     }
 
     public function testSaveDatabaseExceptionPropagates(): void

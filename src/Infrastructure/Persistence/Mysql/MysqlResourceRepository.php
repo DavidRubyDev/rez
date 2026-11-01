@@ -12,6 +12,7 @@ use Rez\Domain\Exception\ResourceNotFoundException;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceCollection;
 use Rez\Domain\Resource\ResourceId;
+use Rez\Infrastructure\Mapper\CurrencyMapper;
 use Rez\Infrastructure\Mapper\ResourceTypeMapper;
 
 final class MysqlResourceRepository extends MysqlRepository implements ResourceRepositoryInterface
@@ -22,11 +23,14 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
         'capacity' => 'capacity',
     ];
 
+    private readonly CurrencyMapper $currencyMapper;
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly ResourceTypeMapper $typeMapper,
         private readonly LoggerInterface $logger,
     ) {
+        $this->currencyMapper = new CurrencyMapper();
     }
 
     /**
@@ -142,8 +146,8 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
     {
         try {
             $stmt = $this->pdo->prepare('
-                INSERT INTO resources (id, type, name, capacity, attributes, active, default_duration_minutes, published)
-                VALUES (:id, :type, :name, :capacity, :attributes, :active, :default_duration_minutes, :published)
+                INSERT INTO resources (id, type, name, capacity, attributes, active, default_duration_minutes, published, price_amount, price_currency)
+                VALUES (:id, :type, :name, :capacity, :attributes, :active, :default_duration_minutes, :published, :price_amount, :price_currency)
                 ON DUPLICATE KEY UPDATE
                     type                      = VALUES(type),
                     name                      = VALUES(name),
@@ -151,7 +155,9 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
                     attributes                = VALUES(attributes),
                     active                    = VALUES(active),
                     default_duration_minutes  = VALUES(default_duration_minutes),
-                    published                 = VALUES(published)
+                    published                 = VALUES(published),
+                    price_amount              = VALUES(price_amount),
+                    price_currency            = VALUES(price_currency)
             ');
 
             $stmt->execute([
@@ -163,6 +169,8 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
                 ':active'                    => $resource->active ? 1 : 0,
                 ':default_duration_minutes'  => $resource->defaultDurationMinutes,
                 ':published'                 => $resource->published ? 1 : 0,
+                ':price_amount'              => $resource->price?->amount,
+                ':price_currency'            => $resource->price !== null ? $this->currencyMapper->toString($resource->price->currency) : null,
             ]);
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
@@ -185,6 +193,7 @@ final class MysqlResourceRepository extends MysqlRepository implements ResourceR
             $this->bool($row['active']),
             $this->nullInt($row['default_duration_minutes']),
             $this->bool($row['published']),
+            $this->nullMoney($row['price_amount'], $row['price_currency']),
         );
     }
 }

@@ -42,6 +42,7 @@ final class CreateSessionUseCase implements CreateSessionUseCaseInterface
         }
 
         $capacity = $request->capacity ?? $resource->capacity;
+        $price    = $request->price ?? $resource->price;
 
         $session = Session::create(
             SessionId::generate(),
@@ -49,6 +50,7 @@ final class CreateSessionUseCase implements CreateSessionUseCaseInterface
             $startTime,
             $durationMinutes,
             $capacity,
+            $price,
         );
 
         try {

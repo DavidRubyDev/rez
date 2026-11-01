@@ -8,6 +8,8 @@ use PHPUnit\Framework\TestCase;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceType;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 
 class ResourceTest extends TestCase
 {
@@ -124,5 +126,49 @@ class ResourceTest extends TestCase
         $resource->withPublished(false);
 
         $this->assertTrue($resource->published);
+    }
+
+    public function testPriceDefaultsToNull(): void
+    {
+        $resource = new Resource($this->id, $this->type, 'Room A', 10);
+
+        $this->assertNull($resource->price);
+    }
+
+    public function testPriceIsStoredAndReturned(): void
+    {
+        $price    = new Money(15000, Currency::Czk);
+        $resource = new Resource($this->id, $this->type, 'Pilates', 20, price: $price);
+
+        $this->assertNotNull($resource->price);
+        $this->assertTrue($price->equals($resource->price));
+    }
+
+    public function testWithPriceReturnsNewInstance(): void
+    {
+        $price    = new Money(15000, Currency::Czk);
+        $resource = new Resource($this->id, $this->type, 'Room A', 10);
+        $updated  = $resource->withPrice($price);
+
+        $this->assertNotNull($updated->price);
+        $this->assertTrue($price->equals($updated->price));
+    }
+
+    public function testWithPriceDoesNotMutateOriginal(): void
+    {
+        $price    = new Money(15000, Currency::Czk);
+        $resource = new Resource($this->id, $this->type, 'Room A', 10);
+        $resource->withPrice($price);
+
+        $this->assertNull($resource->price);
+    }
+
+    public function testWithPriceCanClearBackToNull(): void
+    {
+        $price    = new Money(15000, Currency::Czk);
+        $resource = new Resource($this->id, $this->type, 'Room A', 10, price: $price);
+        $updated  = $resource->withPrice(null);
+
+        $this->assertNull($updated->price);
     }
 }

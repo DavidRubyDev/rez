@@ -55,6 +55,8 @@ use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCase
 use Rez\Application\UseCase\Reservation\ListReservations\ListReservationsUseCaseInterface;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowUseCase;
 use Rez\Application\UseCase\Reservation\MarkNoShow\MarkNoShowUseCaseInterface;
+use Rez\Application\UseCase\Reservation\MarkReservationPaid\MarkReservationPaidUseCase;
+use Rez\Application\UseCase\Reservation\MarkReservationPaid\MarkReservationPaidUseCaseInterface;
 use Rez\Application\UseCase\ReservationEmail\SendReservationCancelledEmail\SendReservationCancelledEmailUseCase;
 use Rez\Application\UseCase\ReservationEmail\SendReservationCancelledEmail\SendReservationCancelledEmailUseCaseInterface;
 use Rez\Application\UseCase\ReservationEmail\SendReservationConfirmedEmail\SendReservationConfirmedEmailUseCase;
@@ -147,6 +149,7 @@ return [
     ConfirmReservationUseCaseInterface::class => autowire(ConfirmReservationUseCase::class),
     MarkNoShowUseCaseInterface::class         => autowire(MarkNoShowUseCase::class),
     CheckInUseCaseInterface::class            => autowire(CheckInUseCase::class),
+    MarkReservationPaidUseCaseInterface::class => autowire(MarkReservationPaidUseCase::class),
     GetReservationUseCaseInterface::class     => autowire(GetReservationUseCase::class),
     ListReservationsUseCaseInterface::class   => autowire(ListReservationsUseCase::class),
     GetAvailabilityUseCaseInterface::class               => autowire(GetAvailabilityUseCase::class),
