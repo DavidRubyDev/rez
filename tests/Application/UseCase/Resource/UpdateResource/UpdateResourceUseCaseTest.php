@@ -14,6 +14,8 @@ use Rez\Domain\Exception\ResourceNotFoundException;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceType;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 
 class UpdateResourceUseCaseTest extends TestCase
 {
@@ -216,5 +218,28 @@ class UpdateResourceUseCaseTest extends TestCase
         $response = $this->useCase->execute(new UpdateResourceRequest($this->resourceId, null, null, null, published: false));
 
         $this->assertFalse($response->resource->published);
+    }
+
+    public function testPreservesPriceWhenNotProvided(): void
+    {
+        $price   = new Money(15000, Currency::Czk);
+        $priced  = new Resource($this->resourceId, ResourceType::fromString('table'), 'Table 1', 4, price: $price);
+        $this->repository->method('findById')->willReturn($priced);
+
+        $response = $this->useCase->execute(new UpdateResourceRequest($this->resourceId, 'Renamed', null, null));
+
+        $this->assertNotNull($response->resource->price);
+        $this->assertTrue($price->equals($response->resource->price));
+    }
+
+    public function testUpdatesPriceWhenProvided(): void
+    {
+        $price = new Money(15000, Currency::Czk);
+        $this->repository->method('findById')->willReturn($this->existing);
+
+        $response = $this->useCase->execute(new UpdateResourceRequest($this->resourceId, null, null, null, price: $price));
+
+        $this->assertNotNull($response->resource->price);
+        $this->assertTrue($price->equals($response->resource->price));
     }
 }

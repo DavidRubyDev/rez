@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Application\UseCase\Resource\UpdateResource;
 
 use Rez\Domain\Resource\ResourceId;
+use Rez\Domain\Shared\Money;
 
 final class UpdateResourceRequest
 {
@@ -16,6 +17,7 @@ final class UpdateResourceRequest
         public readonly ?array $attributes,
         public readonly ?int $defaultDurationMinutes = null,
         public readonly ?bool $published = null,
+        public readonly ?Money $price = null,
     ) {
     }
 }

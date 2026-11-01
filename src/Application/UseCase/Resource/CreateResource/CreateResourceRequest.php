@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Rez\Application\UseCase\Resource\CreateResource;
 
+use Rez\Domain\Shared\Money;
+
 final class CreateResourceRequest
 {
     /** @param array<string, mixed> $attributes */
@@ -14,6 +16,7 @@ final class CreateResourceRequest
         public readonly array $attributes = [],
         public readonly ?int $defaultDurationMinutes = null,
         public readonly bool $published = true,
+        public readonly ?Money $price = null,
     ) {
     }
 }

@@ -11,6 +11,8 @@ use Rez\Application\Port\ResourceRepositoryInterface;
 use Rez\Application\UseCase\Resource\CreateResource\CreateResourceRequest;
 use Rez\Application\UseCase\Resource\CreateResource\CreateResourceUseCase;
 use Rez\Domain\Resource\Resource;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 
 class CreateResourceUseCaseTest extends TestCase
 {
@@ -87,5 +89,21 @@ class CreateResourceUseCaseTest extends TestCase
         $response = $this->useCase->execute(new CreateResourceRequest('table', 'Table 1', 4, published: false));
 
         $this->assertFalse($response->resource->published);
+    }
+
+    public function testPriceDefaultsToNull(): void
+    {
+        $response = $this->useCase->execute(new CreateResourceRequest('table', 'Table 1', 4));
+
+        $this->assertNull($response->resource->price);
+    }
+
+    public function testPriceIsPassedToResource(): void
+    {
+        $price    = new Money(15000, Currency::Czk);
+        $response = $this->useCase->execute(new CreateResourceRequest('table', 'Table 1', 4, price: $price));
+
+        $this->assertNotNull($response->resource->price);
+        $this->assertTrue($price->equals($response->resource->price));
     }
 }
