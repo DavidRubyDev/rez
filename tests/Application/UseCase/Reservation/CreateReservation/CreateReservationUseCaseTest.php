@@ -34,9 +34,12 @@ use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
 use Rez\Domain\Resource\ResourceIdCollection;
 use Rez\Domain\Resource\ResourceType;
+use Rez\Domain\Payment\PaymentMethod;
 use Rez\Domain\Session\Session;
 use Rez\Domain\Session\SessionId;
 use Rez\Domain\Shared\CancellationToken;
+use Rez\Domain\Shared\Currency;
+use Rez\Domain\Shared\Money;
 
 class CreateReservationUseCaseTest extends TestCase
 {
@@ -459,5 +462,116 @@ class CreateReservationUseCaseTest extends TestCase
         $response = $this->useCase->execute($this->sessionRequest($session->id));
 
         $this->assertSame(ReservationStatus::Pending, $response->reservation->status);
+    }
+
+    // --- payment method / amount due ---
+
+    public function testPaymentMethodDefaultsToCashAtCashierWhenNotProvided(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
+
+        $response = $this->useCase->execute($this->request());
+
+        $this->assertSame(PaymentMethod::CashAtCashier, $response->reservation->paymentMethod);
+    }
+
+    public function testExplicitPaymentMethodIsUsed(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
+
+        $response = $this->useCase->execute(new CreateReservationRequest(
+            [$this->resourceId],
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+            $this->party,
+            paymentMethod: PaymentMethod::CashAtCashier,
+        ));
+
+        $this->assertSame(PaymentMethod::CashAtCashier, $response->reservation->paymentMethod);
+    }
+
+    public function testAmountDueIsNullWhenResourceHasNoPrice(): void
+    {
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
+
+        $response = $this->useCase->execute($this->request());
+
+        $this->assertNull($response->reservation->amountDue);
+    }
+
+    public function testAmountDueComesFromResourcePrice(): void
+    {
+        $price   = new Money(15000, Currency::Czk);
+        $priced  = new Resource($this->resourceId, ResourceType::fromString('table'), 'Table 1', 4, price: $price);
+        $this->resourceRepository->method('findById')->willReturn($priced);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
+
+        $response = $this->useCase->execute($this->request());
+
+        $this->assertNotNull($response->reservation->amountDue);
+        $this->assertTrue($price->equals($response->reservation->amountDue));
+    }
+
+    public function testAmountDueSumsMultiplePricedResources(): void
+    {
+        $otherResourceId = ResourceId::generate();
+        $priceA = new Money(10000, Currency::Czk);
+        $priceB = new Money(5000, Currency::Czk);
+        $resourceA = new Resource($this->resourceId, ResourceType::fromString('table'), 'Table 1', 4, price: $priceA);
+        $resourceB = new Resource($otherResourceId, ResourceType::fromString('table'), 'Table 2', 4, price: $priceB);
+
+        $this->resourceRepository
+            ->method('findById')
+            ->willReturnCallback(fn (ResourceId $id) => $id->equals($this->resourceId) ? $resourceA : $resourceB);
+        $this->availabilityService->method('isSlotAvailable')->willReturn(true);
+
+        $response = $this->useCase->execute(new CreateReservationRequest(
+            [$this->resourceId, $otherResourceId],
+            new DateTimeImmutable('2024-01-15 10:00:00'),
+            new DateTimeImmutable('2024-01-15 11:00:00'),
+            $this->party,
+        ));
+
+        $this->assertNotNull($response->reservation->amountDue);
+        $this->assertTrue((new Money(15000, Currency::Czk))->equals($response->reservation->amountDue));
+    }
+
+    public function testAmountDueComesFromSessionPriceNotResourcePrice(): void
+    {
+        $resourcePrice = new Money(10000, Currency::Czk);
+        $sessionPrice  = new Money(29000, Currency::Czk);
+        $pricedResource = new Resource($this->resourceId, ResourceType::fromString('table'), 'Table 1', 4, price: $resourcePrice);
+        $session = Session::create(
+            SessionId::generate(),
+            $this->resourceId,
+            new DateTimeImmutable('2024-06-03 09:00:00'),
+            60,
+            4,
+            $sessionPrice,
+        );
+
+        $this->sessionRepository->method('findById')->willReturn($session);
+        $this->resourceRepository->method('findById')->willReturn($pricedResource);
+        $this->reservationRepository->method('findBySessionId')->willReturn(ReservationCollection::empty());
+
+        $response = $this->useCase->execute($this->sessionRequest($session->id));
+
+        $this->assertNotNull($response->reservation->amountDue);
+        $this->assertTrue($sessionPrice->equals($response->reservation->amountDue));
+    }
+
+    public function testAmountDueIsNullWhenSessionHasNoPrice(): void
+    {
+        $session = $this->makeSession();
+        $this->sessionRepository->method('findById')->willReturn($session);
+        $this->resourceRepository->method('findById')->willReturn($this->resource);
+        $this->reservationRepository->method('findBySessionId')->willReturn(ReservationCollection::empty());
+
+        $response = $this->useCase->execute($this->sessionRequest($session->id));
+
+        $this->assertNull($response->reservation->amountDue);
     }
 }
