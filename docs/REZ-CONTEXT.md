@@ -5,7 +5,7 @@
 > update it as implementation progresses. It intentionally avoids implementation details
 > (specific SQL queries, PHP syntax) and focuses on structure, contracts, and invariants.
 >
-> **Last updated:** July 2026
+> **Last updated:** November 2026
 > **Implementation status:** Core library complete. Newsletter (subscribe, unsubscribe, broadcast,
 > list subscribers, admin-add) complete. Custom email templates complete end-to-end across all
 > three repos: `rez` (`EmailTemplate` CRUD + `SendEmailTemplateUseCase` +
@@ -312,6 +312,18 @@ time this module was built.
 - `UserCollection` — immutable collection, same pattern as `ResourceCollection`, plus
   `findByEmail(string): ?User`.
 
+**Refresh tokens (`feature/refresh-tokens`).** Login is two tokens: a short-lived access JWT
+(15 min default, sent as `Authorization: Bearer`, never stored server-side) and a long-lived
+opaque refresh token (30 days default) that is rotated on every use.
+- `Domain/Auth/RefreshToken` — immutable entity: `id`, `familyId`, `userId`, `tokenHash`,
+  `expiresAt`, `createdAt`, `usedAt?`, `revokedAt?`. `issue()` hashes the raw token itself
+  (`hashOf()` = SHA-256, invariant 14) — the raw value is never held by the entity.
+  `markUsed()` (throws `InvalidTokenException` if already used), `isExpiredAt()`, `isRevoked()`,
+  `wasUsedWithin(seconds, now)`.
+- `RefreshTokenId`, `RefreshTokenFamilyId` — UUID v4 value objects. A **family** is one login on
+  one device: every rotation issues the successor under the same `familyId`, so revoking the
+  family ends that login no matter how many times it has rotated.
+
 #### Wallet / Credits (NOT YET BUILT)
 - `Wallet` — aggregate computed from `WalletTransaction[]`. Balance = SUM, never stored as column.
 - `WalletTransaction` — immutable value object. Fields: `id`, `userId`, `amount` (Money), `type`, `description`, `reservationId?`, `createdAt`
@@ -404,6 +416,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `NewsletterRepositoryInterface` ✅ | `MysqlNewsletterRepository` ✅ | COMPLETE |
 | `UserRepositoryInterface` | `MysqlUserRepository` | COMPLETE (same binding note as above) |
 | `PasswordResetRepositoryInterface` | `MysqlPasswordResetRepository` | COMPLETE (same binding note as above) |
+| `RefreshTokenRepositoryInterface` | `MysqlRefreshTokenRepository` | COMPLETE (`feature/refresh-tokens`, same binding note as above). `save()` (upsert by id — persists `used_at`/`revoked_at`), `findByTokenHash()` (throws `InvalidTokenException` if absent), `revokeFamily()`, `revokeAllForUser()` (both only touch not-yet-revoked rows, so the first revocation time is kept) |
 | `SessionRepositoryInterface` | `MysqlSessionRepository` | COMPLETE (`rez-sessions`) — **bound directly in `config/container.php`**, unlike every other `rez`-owned repository interface above. Per that scaffold's explicit instruction; not left for the client app to bind. |
 
 #### Implemented in client repo (NOT in `rez`)
@@ -426,7 +439,8 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `AvailabilityService` | Capacity-aware slot availability logic used by CreateReservation + GetAvailability. Injects `ResourceRepositoryInterface`. `isSlotAvailable(ResourceId, TimeSlot, int $partySize = 1)` sums existing party sizes and checks against `resource->capacity`. `getAvailableSlots()` accepts `int $partySize = 1` and filters candidates by the same capacity rule. Both return unavailable (`false` / empty `AvailabilityWindow`) immediately for a deactivated resource (invariant 13) — this is the single place that check lives, so neither `CreateReservationUseCase` nor `GetAvailabilityUseCase` duplicates it. | COMPLETE |
 | `FeatureGuard` | Throws `FeatureDisabledException` if a gated feature is not configured | COMPLETE |
 | `ReservationEmailService` | Settings-gated send/log/swallow for all three reservation-lifecycle emails (`sendCreatedIfEnabled`, `sendConfirmedIfEnabled`, `sendCancelledIfEnabled`). Takes `ReservationSettings` from the caller rather than loading it — avoids a second DB read per request. Single home for invariant 11. No interface, injected as a concrete class (same pattern as `FeatureGuard`) | COMPLETE (`rez-lifecycle-email-integration`) |
-| `JwtService` | JWT generation and validation using `firebase/php-jwt` v7 (HS256). `generate(UserId, UserRole): string`, `validate(string): array` (throws `InvalidTokenException` on bad signature or expiry), `extractUserId()`, `extractRole()`. No interface — injected as a concrete class (same pattern as `FeatureGuard`) | COMPLETE (`rez-users`) |
+| `JwtService` | JWT generation and validation using `firebase/php-jwt` v7 (HS256). `generate(UserId, UserRole): string`, `validate(string): array` (throws `InvalidTokenException` on bad signature or expiry), `extractUserId()`, `extractRole()`. No interface — injected as a concrete class (same pattern as `FeatureGuard`). Lifetime is `UsersConfig::$accessTokenTtlSeconds` | COMPLETE (`rez-users`) |
+| `AuthTokenIssuer` | The single place an access JWT and a refresh token are minted together: `issue(User, ?RefreshTokenFamilyId): AuthTokens` (`accessToken`, `accessTokenExpiresAt`, `refreshToken` (raw), `refreshTokenExpiresAt`). Omit the family to start a new login; pass it when rotating. Saves only the hash. Used by `LoginUseCase`, `RegisterUseCase`, `RefreshUseCase`. Concrete class, no interface | COMPLETE (`feature/refresh-tokens`) |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
 | `LoggerInterface` (PSR-3) | Injected via container. `NullLogger` default. Concrete implementation (Monolog) wired in `rez-starter`. | COMPLETE |
@@ -475,10 +489,12 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `UnsubscribeUseCase` | `UnsubscribeRequest(email, ?token)` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found. `feature/newsletter-unsubscribe-token`: `token` optional, verified via `UnsubscribeToken` against `email` when present, throwing `InvalidTokenException` on mismatch before `delete()` — `null` preserves the prior no-check behavior admin callers rely on. `feature/newsletter-unsubscribe-confirmation-email`: on an actual deletion (either path), sends `MailerInterface::sendUnsubscribeConfirmedEmail()` via try/catch-and-log, same non-fatal-email pattern as `SubscribeUseCase` — never sent on the not-found no-op or an invalid-token rejection |
 | `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). `feature/newsletter-unsubscribe-token`: generates a per-subscriber `UnsubscribeToken` from `UsersConfig::$cancellationSecret` inside the send loop and passes it to `sendNewClassNotification()` |
 | `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse(subscribers, total)` | `13_rez-pagination.md`: filters (`search` against email/name, `source`) + `offset`/`limit`/`sortBy`/`sortDir` (`email`\|`name`\|`source`\|`opted_in_at`, default sort `opted_in_at ASC` preserved) via `NewsletterRepositoryInterface::findPage()`/`countPage()`. `findAll()` untouched — still `BroadcastUseCase`'s only caller |
-| `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, string $token)` | No `FeatureGuard` — users are never gated. `findByEmail()` first (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; generates a JWT via `JwtService` (`rez-users`) |
-| `LoginUseCase` | `LoginRequest` | `LoginResponse(User, string $token)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6). Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed (`rez-users`) |
+| `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, AuthTokens $tokens)` | No `FeatureGuard` — users are never gated. `findByEmail()` first (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; issues access + refresh tokens via `AuthTokenIssuer` — only after the user is saved (`rez-users`, `feature/refresh-tokens`) |
+| `LoginUseCase` | `LoginRequest` | `LoginResponse(User, AuthTokens $tokens)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6). Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed. Success starts a new refresh token family via `AuthTokenIssuer` (`rez-users`, `feature/refresh-tokens`) |
+| `RefreshUseCase` | `RefreshRequest(refreshToken)` | `RefreshResponse(User, AuthTokens)` | (`feature/refresh-tokens`) Looks up by hash; revoked/expired → `InvalidTokenException`. Unused → marked used, successor issued in the same family. **Already used** → within `refreshTokenReuseGraceSeconds` (default 30 — tabs or bundles racing each other) a successor is issued anyway; outside it the token was replayed, so the whole family is revoked, a warning logged, and `InvalidTokenException` thrown (invariant 14). Reloads the user, so the new access token carries the user's *current* role; a deleted user → `InvalidTokenException` |
+| `LogoutUseCase` | `LogoutRequest(refreshToken)` | `LogoutResponse` | (`feature/refresh-tokens`) Revokes the presented token's family. Unknown/already-revoked token → silent success (the caller is logged out either way) |
 | `RequestPasswordResetUseCase` | `RequestPasswordResetRequest(email, resetBaseUrl)` | `RequestPasswordResetResponse(bool $sent)` | Unknown email → `sent: true` silently, no token generated, no email sent (never reveals existence). Known email: generates a raw token via `TokenGeneratorInterface`, stores only `SHA-256(rawToken)` via `PasswordResetRepositoryInterface` (invariant 5), emails the raw token in a URL via `MailerInterface::sendPasswordReset()` (`rez-users`) |
-| `ResetPasswordUseCase` | `ResetPasswordRequest(token, newPassword)` | `ResetPasswordResponse(bool $success)` | Hashes the incoming token and looks it up (never by raw token — invariant 5); `InvalidTokenException` if not found or expired; on success, re-hashes the new password, saves the user, and deletes the reset token row (`rez-users`) |
+| `ResetPasswordUseCase` | `ResetPasswordRequest(token, newPassword)` | `ResetPasswordResponse(bool $success)` | Hashes the incoming token and looks it up (never by raw token — invariant 5); `InvalidTokenException` if not found or expired; on success, re-hashes the new password, saves the user, deletes the reset token row, and revokes every refresh token the user has (`revokeAllForUser`) — a reset is how someone takes their account back, so no earlier login may survive it (`rez-users`, `feature/refresh-tokens`) |
 | `GetUserUseCase` | `GetUserRequest(UserId)` | `GetUserResponse(User)` | (`rez-users`) |
 | `UpdateUserUseCase` | `UpdateUserRequest(UserId, ?name, ?newsletterOptIn)` | `UpdateUserResponse(User)` | PATCH semantics via `User`'s `with*()` methods — self-service profile update, no role field (`rez-users`) |
 | `ListUsersUseCase` | `ListUsersRequest` | `ListUsersResponse(users, total)` | Admin-only by convention — auth enforcement is the HTTP layer's job, not this use case's (`rez-users`). `13_rez-pagination.md`: `ListUsersRequest` gained filters (`search` against name/email, `role`) + `offset`/`limit`/`sortBy`/`sortDir` (`name`\|`email`\|`role`\|`created_at`, default sort `created_at ASC` preserved) via `UserRepositoryInterface::findPage()`/`countPage()` — first `Request` in the codebase to go from empty to populated. `findAll()` untouched |
@@ -568,6 +584,15 @@ These are the contracts the library defines. Implementations live in infrastruct
     `ListResourcesUseCase`, since listing is `findAll()`'s only caller. `AvailabilityService` treats a
     deactivated resource as unbookable (see `isSlotAvailable`/`getAvailableSlots` in §3.4).
 
+14. **Refresh tokens are stored hashed, rotated on every use, and a replay revokes the login.**
+    Only `SHA-256(rawToken)` is stored (same rule as invariant 5). Every refresh consumes the
+    presented token and issues a successor in the same family. A consumed token presented again
+    outside the reuse grace window means a copy exists somewhere else — `RefreshUseCase` revokes
+    the entire family instead of guessing which holder is legitimate. Password reset revokes all
+    of the user's families; deleting a user cascades to their rows (`ON DELETE CASCADE`). Access
+    tokens are stateless and cannot be revoked — they simply expire (15 min default), which is
+    also how long a role change takes to reach an already-issued access token.
+
 ### 3.7 Configuration system
 
 `PlatformConfig` is constructed by the client app and injected via PHP-DI. It is the single root of all feature configuration.
@@ -594,8 +619,10 @@ guest-facing `<rez-unsubscribe>` page (`rez-components`), same relationship
 `cancellationBaseUrl` has to `<rez-cancel>`.
 `UsersConfig` — COMPLETE (`rez-config-update`). Required. Fields: `jwtSecret`,
 `cancellationSecret` (non-empty string, validated the same way as `jwtSecret`, always a
-separate value — never shares `jwtSecret`), `jwtTtlSeconds` (default 3600, min 1),
-`passwordResetTtlMinutes` (default 60, min 1). This resolves the conflict the scaffold flagged:
+separate value — never shares `jwtSecret`), `accessTokenTtlSeconds` (default 900, min 1 —
+renamed from `jwtTtlSeconds` in `feature/refresh-tokens`, when the default dropped from 3600),
+`passwordResetTtlMinutes` (default 60, min 1), `refreshTokenTtlSeconds` (default 2592000 = 30
+days, min 1), `refreshTokenReuseGraceSeconds` (default 30, min 0). This resolves the conflict the scaffold flagged:
 `cancellationSecret` now lives here as originally planned, not on `MailerConfig`.
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
 `CreditsConfig` — COMPLETE. `minimumTopUpAmount` (int, min 1, haléře/cents), `currency` (non-empty string).
@@ -605,7 +632,7 @@ separate value — never shares `jwtSecret`), `jwtTtlSeconds` (default 3600, min
 ```
 PlatformConfig
   ├── MailerConfig          always required (cancellationBaseUrl, unsubscribeBaseUrl)
-  ├── UsersConfig           always required (jwtSecret, cancellationSecret, jwtTtlSeconds, passwordResetTtlMinutes)
+  ├── UsersConfig           always required (jwtSecret, cancellationSecret, accessTokenTtlSeconds, passwordResetTtlMinutes, refreshTokenTtlSeconds, refreshTokenReuseGraceSeconds)
   ├── PaymentsConfig?       currency, webhookSecret
   ├── CreditsConfig?        minimumTopUpAmount, currency
   └── SubscriptionsConfig?  PlanConfig[]
@@ -652,6 +679,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `email_templates` | id, subject, html (MEDIUMTEXT), created_at | Created via `database/migrations/20260101000004_create_email_templates.sql` — no seed rows (a real collection, not a singleton settings table) |
 | `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Created via `database/migrations/20260101000005_create_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live, same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
 | `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites. Same migration file as `users` (`rez-users`) |
+| `refresh_tokens` | id (PK), family_id, user_id (FK → users, `ON DELETE CASCADE`), token_hash (CHAR 64, UNIQUE), expires_at, created_at, used_at (nullable), revoked_at (nullable) | `database/migrations/20260101000008_create_refresh_tokens.sql` (`feature/refresh-tokens`). One row per issued token — rotation inserts, never overwrites. Indexed on family_id and user_id for the two revocation paths. Uses `IF NOT EXISTS` because `MysqlMigrationRepositoryTest` replays migrations (see #101 in `docs/CONTEXT.md`). Expired rows are not purged yet |
 | `sessions` | id, resource_id (FK → resources, no CASCADE — resources are soft-deleted, invariant 13, so it never fires), start_time, duration_minutes, capacity, status | Created via `database/migrations/20260101000006_create_sessions.sql` (`rez-sessions`), no seed rows (a real collection, same pattern as `email_templates`) |
 | `schema_migrations` | name (PK), applied_at | `feature/db-migrations`. Tracks which migration files have run — bootstrap table, created by `MigrationRepositoryInterface::ensureMigrationsTable()` itself, not a numbered migration |
 
@@ -710,7 +738,10 @@ Thin HTTP delivery layer. Contains no business logic. All logic lives in `rez`.
 - Slim 4 routes (build Request objects, call use cases, serialize responses)
 - Auth middleware (validate JWT, attach UserId and UserRole to request)
 - Admin middleware (enforce UserRole::Admin)
-- CORS middleware (allow `rez-admin` origin)
+- Refresh token transport (`App\Http\Auth\RefreshTokenTransport` — cookie or JSON body, per
+  `AUTH_MODE`; the one auth concern `rez` knows nothing about, see "Auth transport" in §4)
+- CORS middleware (`CorsMiddleware` — `*` for everyone, credentials only for origins in
+  `CORS_ALLOWED_ORIGINS`)
 - Error middleware (map domain exceptions → HTTP status codes)
 - Concrete `SymfonyMailer` implementing `MailerInterface`
 - Concrete `StripeGateway` implementing `StripeGatewayInterface`
@@ -765,6 +796,7 @@ All routes prefixed `/api/`.
 |---|---|---|
 | Guest (public) | None | No middleware |
 | Guest cancelling own reservation | HMAC token in query param | Verified in use case, not middleware |
+| Refreshing / logging out | Refresh token (httpOnly cookie, or JSON body in `AUTH_MODE=token`) | Verified in `RefreshUseCase`/`LogoutUseCase`, not middleware |
 | Authenticated user | JWT Bearer token | Auth middleware attaches UserId + UserRole |
 | Admin | JWT Bearer token with `role: Admin` | Admin middleware enforces UserRole::Admin |
 
@@ -781,8 +813,10 @@ POST   /api/sessions/{id}/reservations                        ← body: party fi
 POST   /api/newsletter/subscribe
 DELETE /api/newsletter/unsubscribe
 DELETE /api/reservations/{id}?token={hmac}                    ← guest self-cancellation
-POST   /api/auth/register
-POST   /api/auth/login
+POST   /api/auth/register                                     ← body may add refresh_token_delivery: "cookie" (default) | "body"
+POST   /api/auth/login                                        ← same
+POST   /api/auth/refresh                                      ← credential: refresh cookie or body refresh_token; rotates it
+POST   /api/auth/logout                                       ← 204; revokes the presented login, always clears the cookie
 POST   /api/auth/password-reset/request
 POST   /api/auth/password-reset/confirm
 ```
@@ -803,9 +837,29 @@ from **reservation** and is not yet built — whether it's needed at all is stil
 the payments profile. Do not conflate the two: every route below operates on `Reservation`, not on
 a `Booking` entity.
 
-The four auth routes above are genuinely public and unauthenticated (`RegisterUseCase`/
-`LoginUseCase`/`RequestPasswordResetUseCase`/`ResetPasswordUseCase`) — that's the point, they're
-how a caller obtains a JWT or resets a forgotten password in the first place.
+The auth routes above are genuinely public — no Bearer header (`RegisterUseCase`/`LoginUseCase`/
+`RefreshUseCase`/`LogoutUseCase`/`RequestPasswordResetUseCase`/`ResetPasswordUseCase`) — that's
+the point, they're how a caller obtains tokens or resets a forgotten password in the first place.
+
+**Auth transport (`feature/refresh-tokens`).** Register/login/refresh respond with
+`{access_token, access_token_expires_at, user}` (`token` was renamed `access_token`). Where the
+refresh token goes is the only per-deployment difference, set by `AUTH_MODE` in rez-starter's
+`.env`:
+- `cookie` (default) — only ever an httpOnly `rez_refresh_token` cookie (`SameSite=Strict`,
+  `Path=/api/auth`, `Secure` unless `AUTH_COOKIE_SECURE=false`). Requires every page that logs in
+  to be on the same site as the API (`studio.cz` + `api.studio.cz`, or a `studio.cz/api` reverse
+  proxy). Asking for `refresh_token_delivery: "body"` is a 422.
+- `token` — a client may also ask for `refresh_token_delivery: "body"`, getting `refresh_token`/
+  `refresh_token_expires_at` in the JSON and presenting it back as body `refresh_token`. For
+  booking pages on a site the cookie can't reach. Cookie delivery stays available to same-site
+  clients — rez-admin always uses it.
+
+A refresh answers through the same channel the token arrived on. A request authenticated by the
+cookie must be `Content-Type: application/json` (else 403) — a cross-site `<form>` cannot send
+that without a CORS preflight. `CORS_ALLOWED_ORIGINS` (comma-separated) lists origins that may
+send the cookie cross-origin (echoed `Access-Control-Allow-Origin` + `Allow-Credentials: true`);
+everyone else keeps the credential-less `*`. `ACCESS_TOKEN_TTL_SECONDS`/
+`REFRESH_TOKEN_TTL_SECONDS` override the `UsersConfig` defaults.
 
 `POST /api/sessions/{id}/reservations` is deliberately narrow: the body carries only `party`
 fields, never `resource_id` or a timeslot — the session id in the URL is the sole source of truth
@@ -977,8 +1031,12 @@ Each component accepts `api-base` pointing to the client app API:
 
 ### Stack
 - React + TypeScript + Vite
-- JWT stored in React state / Zustand — never localStorage
+- Access token stored in Zustand memory only — never localStorage/sessionStorage
 - Authorization: Bearer header on every request
+- Session survives reloads via the httpOnly refresh cookie (`feature/refresh-tokens`):
+  `RequireAuth` calls `refreshSession()` once per page load before deciding to redirect to
+  `/login`; any 401 triggers one shared refresh and a single retry; logout revokes server-side.
+  The app never sees the refresh token. A non-admin login is revoked immediately
 
 ### Feature detection
 
@@ -1086,7 +1144,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
 | Sessions | ✅ (`14_rez-sessions.md`) — fixed-time class occurrence; `Resource.defaultDurationMinutes`, `Reservation.sessionId` | ✅ Create/Get/List/Cancel + session-booking path on `CreateReservationUseCase` (cascade-cancel via `BulkCancelReservationsUseCase`) | ✅ | ✅ |
 | CancellationToken | ✅ value object + generation wired into 5 use cases | — | — | ✅ |
-| Users (core) | ✅ | ✅ (9 use cases + JwtService) | ✅ | ✅ (`rez-users`) |
+| Users (core) | ✅ (+ `RefreshToken`) | ✅ (11 use cases + JwtService + AuthTokenIssuer) | ✅ (+ `MysqlRefreshTokenRepository`) | ✅ (`rez-users`, `feature/refresh-tokens`) |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
 | Subscriptions | ❌ | ❌ | ❌ | — |
@@ -1236,6 +1294,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 
 ### `rez-starter`
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
+- ✅ `POST /api/auth/refresh` + `POST /api/auth/logout`, `AUTH_MODE` cookie/body refresh-token
+  transport, `CORS_ALLOWED_ORIGINS` credentialed CORS (`feature/refresh-tokens`, see §4)
 - ✅ Slim bootstrap, PHP-DI wiring, full route surface
 - ✅ Complete exception → HTTP status map (now also `EmailTemplateNotFoundException` → 404)
 - ✅ `PlatformConfig`/`MailerConfig`/`UsersConfig` construction and container wiring fully synced
@@ -1311,11 +1371,16 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ `<rez-calendar>` — built, see `docs/CONTEXT.md` steps 6-7, 11-12
 - ✅ `<rez-cancel>` — built, see `docs/CONTEXT.md` step 13 (`feature/rez-cancel`, not yet merged)
 - ✅ `<rez-checkout>` — built, see `docs/CONTEXT.md` steps 8-10, 12
-- ❌ `<rez-account>` — not started (needs `rez-users`'s auth routes wired in, out of scope while
-  the current work is users/payments-free)
+- ❌ `<rez-account>` — not started. The auth routes it needs now exist, including refresh/logout
+  (`feature/refresh-tokens`, see "Auth transport" in §4): the planned session layer keeps the
+  access token in memory and the refresh token either in the httpOnly cookie (`AUTH_MODE=cookie`)
+  or in `localStorage` (`AUTH_MODE=token`, for booking pages on a site the cookie can't reach),
+  sharing login state between bundles through storage + `rez:*` events, never module state
 
 ### `rez-admin`
 - ✅ Project scaffold (Vite + React + TypeScript + Tailwind, Vitest, Dockerfile + nginx)
+- ✅ Refresh-cookie sessions (`feature/refresh-tokens`) — reloads keep the admin signed in, 401s
+  refresh once and retry, logout revokes server-side (see §6)
 - ✅ AppLayout + Sidebar. Feature-gating via `/api/admin/config` is still just a target design,
   not implemented — that endpoint doesn't exist yet (`GetAdminConfigUseCase`/`rez-admin-config` is
   still ❌, see the `davidrubydev/rez` list above), so `useConfig()` 404s against a real backend

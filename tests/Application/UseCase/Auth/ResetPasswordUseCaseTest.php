@@ -8,6 +8,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\PasswordResetRepositoryInterface;
+use Rez\Application\Port\RefreshTokenRepositoryInterface;
 use Rez\Application\Port\UserRepositoryInterface;
 use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordRequest;
 use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordUseCase;
@@ -21,6 +22,7 @@ class ResetPasswordUseCaseTest extends TestCase
 {
     private UserRepositoryInterface&MockObject $userRepository;
     private PasswordResetRepositoryInterface&MockObject $passwordResetRepository;
+    private RefreshTokenRepositoryInterface&MockObject $refreshTokenRepository;
     private ResetPasswordUseCase $useCase;
     private User $user;
 
@@ -28,7 +30,8 @@ class ResetPasswordUseCaseTest extends TestCase
     {
         $this->userRepository          = $this->createMock(UserRepositoryInterface::class);
         $this->passwordResetRepository = $this->createMock(PasswordResetRepositoryInterface::class);
-        $this->useCase                 = new ResetPasswordUseCase($this->userRepository, $this->passwordResetRepository);
+        $this->refreshTokenRepository  = $this->createMock(RefreshTokenRepositoryInterface::class);
+        $this->useCase                 = new ResetPasswordUseCase($this->userRepository, $this->passwordResetRepository, $this->refreshTokenRepository);
 
         $this->user = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('old-password'));
     }
@@ -100,5 +103,38 @@ class ResetPasswordUseCaseTest extends TestCase
         $response = $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
 
         $this->assertTrue($response->success);
+    }
+
+    public function testSuccessRevokesEveryLoginOfThatUser(): void
+    {
+        $this->passwordResetRepository->method('findByTokenHash')->willReturn($this->record(Utc::now()->modify('+10 minutes')));
+        $this->userRepository->method('findByEmail')->willReturn($this->user);
+        $this->refreshTokenRepository->expects($this->once())->method('revokeAllForUser')->with($this->callback(
+            fn (UserId $userId): bool => $userId->equals($this->user->id),
+        ));
+
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+    }
+
+    public function testExpiredTokenRevokesNothing(): void
+    {
+        $this->passwordResetRepository->method('findByTokenHash')->willReturn($this->record(Utc::now()->modify('-1 minute')));
+        $this->refreshTokenRepository->expects($this->never())->method('revokeAllForUser');
+
+        $this->expectException(InvalidTokenException::class);
+
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+    }
+
+    public function testRevokeDatabaseExceptionPropagates(): void
+    {
+        $this->passwordResetRepository->method('findByTokenHash')->willReturn($this->record(Utc::now()->modify('+10 minutes')));
+        $this->userRepository->method('findByEmail')->willReturn($this->user);
+        $this->refreshTokenRepository->method('revokeAllForUser')->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to revoke refresh tokens.');
+
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
     }
 }

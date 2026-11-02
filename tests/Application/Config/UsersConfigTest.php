@@ -11,20 +11,24 @@ class UsersConfigTest extends TestCase
 {
     public function testValidConstructionStoresValues(): void
     {
-        $config = new UsersConfig('super-secret', 'super-secret-cancellation-key', 7200, 30);
+        $config = new UsersConfig('super-secret', 'super-secret-cancellation-key', 600, 30, 86400, 10);
 
         $this->assertSame('super-secret', $config->jwtSecret);
         $this->assertSame('super-secret-cancellation-key', $config->cancellationSecret);
-        $this->assertSame(7200, $config->jwtTtlSeconds);
+        $this->assertSame(600, $config->accessTokenTtlSeconds);
         $this->assertSame(30, $config->passwordResetTtlMinutes);
+        $this->assertSame(86400, $config->refreshTokenTtlSeconds);
+        $this->assertSame(10, $config->refreshTokenReuseGraceSeconds);
     }
 
     public function testDefaultsAreApplied(): void
     {
         $config = new UsersConfig('super-secret', 'super-secret-cancellation-key');
 
-        $this->assertSame(3600, $config->jwtTtlSeconds);
+        $this->assertSame(900, $config->accessTokenTtlSeconds);
         $this->assertSame(60, $config->passwordResetTtlMinutes);
+        $this->assertSame(2592000, $config->refreshTokenTtlSeconds);
+        $this->assertSame(30, $config->refreshTokenReuseGraceSeconds);
     }
 
     public function testEmptyJwtSecretThrows(): void
@@ -39,7 +43,7 @@ class UsersConfigTest extends TestCase
         new UsersConfig('super-secret', '');
     }
 
-    public function testJwtTtlBelowOneThrows(): void
+    public function testAccessTokenTtlBelowOneThrows(): void
     {
         $this->expectException(\InvalidArgumentException::class);
         new UsersConfig('super-secret', 'super-secret-cancellation-key', 0);
@@ -49,5 +53,24 @@ class UsersConfigTest extends TestCase
     {
         $this->expectException(\InvalidArgumentException::class);
         new UsersConfig('super-secret', 'super-secret-cancellation-key', 3600, 0);
+    }
+
+    public function testRefreshTokenTtlBelowOneThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new UsersConfig('super-secret', 'super-secret-cancellation-key', refreshTokenTtlSeconds: 0);
+    }
+
+    public function testNegativeRefreshTokenReuseGraceThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new UsersConfig('super-secret', 'super-secret-cancellation-key', refreshTokenReuseGraceSeconds: -1);
+    }
+
+    public function testZeroRefreshTokenReuseGraceIsAllowed(): void
+    {
+        $config = new UsersConfig('super-secret', 'super-secret-cancellation-key', refreshTokenReuseGraceSeconds: 0);
+
+        $this->assertSame(0, $config->refreshTokenReuseGraceSeconds);
     }
 }

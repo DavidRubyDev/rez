@@ -56,7 +56,7 @@ class JwtServiceTest extends TestCase
 
     public function testValidateWithExpiredTokenThrowsInvalidTokenException(): void
     {
-        $shortLivedConfig = new UsersConfig('super-secret-jwt-at-least-32-bytes-long', 'super-secret-cancellation-key', jwtTtlSeconds: 1);
+        $shortLivedConfig = new UsersConfig('super-secret-jwt-at-least-32-bytes-long', 'super-secret-cancellation-key', accessTokenTtlSeconds: 1);
         $service          = new JwtService($shortLivedConfig);
         $token            = $service->generate(UserId::generate(), UserRole::Customer);
 

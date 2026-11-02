@@ -29,7 +29,7 @@ final class JwtService
                 'sub'  => $userId->toString(),
                 'role' => $role->name,
                 'iat'  => $now,
-                'exp'  => $now + $this->config->jwtTtlSeconds,
+                'exp'  => $now + $this->config->accessTokenTtlSeconds,
             ],
             $this->config->jwtSecret,
             self::ALGORITHM,

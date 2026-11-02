@@ -7,7 +7,10 @@ namespace Rez\Tests\Application\UseCase\Auth;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Rez\Application\Exception\DatabaseException;
+use Rez\Application\Port\RefreshTokenRepositoryInterface;
+use Rez\Application\Port\TokenGeneratorInterface;
 use Rez\Application\Port\UserRepositoryInterface;
+use Rez\Application\Service\AuthTokenIssuer;
 use Rez\Application\Service\JwtService;
 use Rez\Application\UseCase\Auth\Register\RegisterRequest;
 use Rez\Application\UseCase\Auth\Register\RegisterUseCase;
@@ -28,18 +31,23 @@ class RegisterUseCaseTest extends TestCase
 {
     private UserRepositoryInterface&MockObject $userRepository;
     private SubscribeUseCaseInterface&MockObject $subscribeUseCase;
-    private JwtService $jwtService;
+    private RefreshTokenRepositoryInterface&MockObject $refreshTokenRepository;
+    private AuthTokenIssuer $issuer;
     private RegisterUseCase $useCase;
 
     protected function setUp(): void
     {
         $this->userRepository    = $this->createMock(UserRepositoryInterface::class);
         $this->subscribeUseCase  = $this->createMock(SubscribeUseCaseInterface::class);
-        $this->jwtService        = new JwtService(new UsersConfig('super-secret-jwt-at-least-32-bytes-long', 'super-secret-cancellation-key'));
+        $this->refreshTokenRepository = $this->createMock(RefreshTokenRepositoryInterface::class);
+        $config                       = new UsersConfig('super-secret-jwt-at-least-32-bytes-long', 'super-secret-cancellation-key');
+        $tokenGenerator               = $this->createMock(TokenGeneratorInterface::class);
+        $tokenGenerator->method('generate')->willReturn('raw-refresh-token');
+        $this->issuer = new AuthTokenIssuer(new JwtService($config), $this->refreshTokenRepository, $tokenGenerator, $config);
 
         $this->userRepository->method('findByEmail')->willThrowException(new UserNotFoundException('john@example.com'));
 
-        $this->useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->jwtService);
+        $this->useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer);
     }
 
     private function request(bool $newsletterOptIn = false): RegisterRequest
@@ -52,7 +60,7 @@ class RegisterUseCaseTest extends TestCase
         $existing = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('x'));
         $this->userRepository = $this->createMock(UserRepositoryInterface::class);
         $this->userRepository->method('findByEmail')->willReturn($existing);
-        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->jwtService);
+        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer);
 
         $this->expectException(EmailAlreadyRegisteredException::class);
 
@@ -63,7 +71,7 @@ class RegisterUseCaseTest extends TestCase
     {
         $this->userRepository = $this->createMock(UserRepositoryInterface::class);
         $this->userRepository->method('findByEmail')->willThrowException(new DatabaseException('pdo error'));
-        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->jwtService);
+        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer);
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to check for existing user.');
@@ -78,11 +86,24 @@ class RegisterUseCaseTest extends TestCase
         $this->useCase->execute($this->request());
     }
 
-    public function testSuccessReturnsNonEmptyToken(): void
+    public function testSuccessReturnsAccessAndRefreshTokens(): void
     {
+        $this->refreshTokenRepository->expects($this->once())->method('save');
+
         $response = $this->useCase->execute($this->request());
 
-        $this->assertNotSame('', $response->token);
+        $this->assertNotSame('', $response->tokens->accessToken);
+        $this->assertSame('raw-refresh-token', $response->tokens->refreshToken);
+    }
+
+    public function testRefreshTokenIsIssuedOnlyAfterTheUserIsSaved(): void
+    {
+        $this->userRepository->method('save')->willThrowException(new DatabaseException('pdo error'));
+        $this->refreshTokenRepository->expects($this->never())->method('save');
+
+        $this->expectException(DatabaseException::class);
+
+        $this->useCase->execute($this->request());
     }
 
     public function testSuccessWithNewsletterOptInTrueCallsSubscribeUseCase(): void
