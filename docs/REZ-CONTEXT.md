@@ -964,63 +964,167 @@ DELETE /api/subscription
 
 ## 5. `rez-components` — Web Components Frontend
 
+The public-facing, drop-in UI for any rez deployment. Goal: a client site gets booking and
+account features by adding a script tag and an element — no build step, no glue code — while
+a client who wants their own design can still have it.
+
 ### Stack
 - TypeScript + Lit (Web Components framework, ~5KB, compiles to native Custom Elements)
-- Vite (build tool, multiple IIFE entry points)
+- Vite library mode — one Vite config per bundle (Rollup's iife/umd formats can't do multiple
+  entry points in one config), each emitting ES + UMD builds
 - Shadow DOM for style isolation
 - CSS Custom Properties for theming (pierce Shadow DOM from host page)
 
-### Components
+### Components (built)
 
-| Component | Responsibility | Profile |
+| Component | Responsibility | Bundle |
 |---|---|---|
-| `<rez-calendar>` | Slot browser, booking flow, newsletter opt-in | 1+ |
-| `<rez-cancel>` | Guest cancellation confirmation (reads token from URL, calls API) | 1+ |
-| `<rez-checkout>` | Payment method selection, Stripe redirect | 2+ |
-| `<rez-account>` | Register, login, booking history, credits, subscription | 1+ (always, since users are core) |
+| `<rez-calendar>` | Resource list, date strip, slot grid / session list; fires `rez:slot-selected` | `rez.core.*` |
+| `<rez-checkout>` | Party form, payment-method step, newsletter opt-in, submit, confirmation, 409 conflict handling | `rez.core.*` |
+| `<rez-newsletter>` | Standalone newsletter signup widget | `rez.core.*` |
+| `<rez-cancel>` | Guest cancellation confirmation (reads `id`/`token` from the URL) | `rez.cancel.*` |
+| `<rez-unsubscribe>` | Newsletter unsubscribe confirmation (reads `email`/`token` from the URL) | `rez.unsubscribe.*` |
 
-### Bundle entry points
+### Bundles
 
-| Bundle | Includes | Notes |
+A bundle groups components that appear on the same page, so no page loads code it never runs.
+
+| Bundle | Contains | npm subpath |
 |---|---|---|
-| `rez.core.js` | rez-calendar + rez-cancel + rez-account | Base bundle — all clients |
-| `rez.payments.js` | rez-core + rez-checkout | Clients with payments enabled |
-| `rez.full.js` | all components | Convenience alias for rez.payments.js |
+| `rez.core.*` | `rez-calendar`, `rez-checkout`, `rez-newsletter` — used together on a booking page | `rez-components` |
+| `rez.cancel.*` | `rez-cancel` — standalone page linked from emails | `rez-components/cancel` |
+| `rez.unsubscribe.*` | `rez-unsubscribe` — standalone page linked from emails | `rez-components/unsubscribe` |
+| `rez.account.*` | Account components (planned — see below) | `rez-components/account` |
 
-**As actually built (deviates from the table above):** `rez-calendar` and `rez-checkout` ship
-together as `rez.core.*` (they're used as a pair — checkout listens for calendar's events).
-`rez-cancel` ships as its own separate `rez.cancel.*` bundle instead of folding into
-`rez.core.*` — it's a standalone confirmation page unrelated to the booking flow, so bundling
-it into core would make every booking-page load ship code it'll never run. See
-`docs/CONTEXT.md` step 13 for the `vite.config.ts`/`vite.cancel.config.ts` split this needed
-(Rollup's iife/umd formats don't support multiple entry points in one Vite config).
+The original plan (`rez.core.js` = calendar + cancel + account, `rez.payments.js`,
+`rez.full.js`) is superseded by the table above.
+
+### Account & user features — architecture (decided November 2026, not yet built)
+
+Login, register, logout, profile, password and email changes, account deletion, credit
+balance and top-up, subscription status and checkout, booking history — and whatever comes
+later. Three options were weighed: many small components the client must assemble and design
+around (maximum freedom, long setup), a few ready-made pages and popups (instant, inflexible),
+or both. **Decision: both, as layers, where the ready-made pieces are built only out of the
+smaller ones** — so there is one implementation, not two, and every client picks their own
+level.
+
+**Layer 0 — API and session core (no UI).** Typed wrappers over the API (`src/api/*`) plus a
+session module, exported from the npm package. A developer who wants a completely custom UI
+calls `login()`, `getWallet()` etc. directly. Costs nothing extra — the components need it
+anyway.
+
+**Layer 1 — feature components.** One element per API capability, each self-sufficient with
+only `api-base`:
+`<rez-login>`, `<rez-register>`, `<rez-logout>`, `<rez-password-reset>`, `<rez-profile>`,
+`<rez-change-password>`, `<rez-change-email>`, `<rez-delete-account>`,
+`<rez-booking-history>`, `<rez-wallet-balance>`, `<rez-topup>`, `<rez-subscription-status>`,
+`<rez-subscribe>`. A client with their own design places these wherever they like — e.g.
+`<rez-wallet-balance>` in their own navbar, `<rez-topup>` on their own pricing page.
+
+**Layer 2 — composites.** Pure arrangements of Layer 1, with no logic of their own:
+- `<rez-account>` — a full account page (sections/tabs).
+- `<rez-account-menu>` — a header widget: "Sign in" when logged out, the user's name with a
+  dropdown when logged in; opens login or `<rez-account>` in a dialog/drawer. The zero-setup
+  path is this one line:
+  ```html
+  <rez-account-menu api-base="https://api.studio.cz/api"></rez-account-menu>
+  ```
+Adding a feature later = one new Layer 1 component + one line in the composite.
+
+**Granularity rule.** The smallest unit is a *feature*, never a UI primitive — no
+`<rez-button>`/`<rez-input>`. Shipping primitives means building and maintaining a design
+system. Clients customise instead through, in increasing depth:
+1. `--rez-*` CSS custom properties and the `theme` presets (see Theming)
+2. `lang` / `translations` (see Localization)
+3. `::part()` on exposed structural parts, and named `<slot>`s for injecting content
+4. on composites, a `sections` attribute that picks and orders sections
+   (`sections="profile wallet subscription"`) — chosen over a growing set of `show-x`/`hide-y`
+   boolean flags
+5. Layer 0 for a fully custom UI
+
+**Session layer** (built on the refresh-token design in §4 "Auth transport"):
+- The access token lives in memory only. The refresh token lives where the deployment's
+  `AUTH_MODE` says: the httpOnly cookie (`cookie` — the page's origin must be in rez-starter's
+  `CORS_ALLOWED_ORIGINS`, and `/api/auth/*` calls use `credentials: 'include'`) or
+  `localStorage` (`token` — for pages on a site the cookie can't reach; login asks for
+  `refresh_token_delivery: "body"`). The mode is read from the public config endpoint, so a
+  client site never configures it.
+- **Login state cannot live in a module-level singleton** — not only because CLAUDE.md forbids
+  shared module state: every UMD bundle carries its own copy of every module, so
+  `rez.core.js` and `rez.account.js` on the same page would each have their own. Shared state
+  is storage plus `rez:*` events on `document`. In token mode the `storage` event also syncs
+  login/logout across tabs.
+- One refresh per page: a bundle first asks over `rez:*` events whether another one already
+  holds a session before refreshing itself (every refresh rotates the token, so two bundles
+  refreshing at once would race). The server's 30-second reuse grace window absorbs what is
+  left — several tabs, or two bundles booting at the same instant.
+
+**Cross-component events** (all `bubbles: true, composed: true`, dispatched on `document`):
+- `rez:auth-changed` — login state changed; detail carries the user or `null`.
+- `rez:login-required` — fired by any component that needs a signed-in user (`<rez-topup>`,
+  `<rez-checkout>` when paying with credits, …). `<rez-account-menu>` listens and opens its
+  login dialog, so no client glue code is needed; with no menu on the page, the component falls
+  back to rendering an inline `<rez-login>` itself.
+
+**Feature detection.** Composites show credits and subscription sections only when the
+deployment has them enabled. This needs a **public, unauthenticated config endpoint** in
+rez-starter (next step; `GET /api/admin/config` is admin-only and not wired): enabled features
+(payments/credits/subscriptions), public-safe details (currency, minimum top-up, plan list —
+never Stripe price IDs or secrets), and `auth.mode`. Declaring features in attributes was
+rejected — it reintroduces the setup work this design avoids.
+
+**Payments (credits top-up, subscriptions): Stripe Checkout redirect, never Stripe.js.**
+`POST /api/wallet/topup` / `POST /api/subscription/checkout` return a Stripe Checkout URL; the
+component redirects there. On return it reads the result from the URL query (the same
+URL-reading pattern as `<rez-cancel>`) and re-checks the wallet/subscription for a few seconds,
+because the Stripe webhook may land after the redirect does. No Stripe SDK on the client and
+minimal PCI scope.
+
+**Sensitive actions require the current password** — deleting the account and changing email or
+password — so a session left open on a shared computer can't be used to take the account over or
+delete it. The API side of this (and of these three actions at all) is not built yet.
+
+**Bundle.** All account components ship as a new `rez.account.*` bundle
+(`rez-components/account`), following the cancel/unsubscribe split. It is separate from
+`rez.core.*` so a booking page without accounts doesn't load them, and vice versa.
+
+**Build order.** (1) rez-starter public config endpoint → (2) session layer + `<rez-login>`,
+`<rez-register>`, `<rez-logout>` + `rez:auth-changed` → (3) minimal `<rez-account-menu>`,
+proving the event/storage protocol end to end → (4) profile, password, email, delete →
+(5) credits, then subscriptions, once their rez/rez-starter APIs exist.
 
 ### Component communication
 
-Components communicate only via Custom Events — never via shared global state or direct imports.
-
-Key events:
-- `rez:slot-selected` — fired by `rez-calendar`, listened by `rez-checkout`
-- `rez:booking-complete` — fired by `rez-checkout`
-- `rez:auth-changed` — fired by `rez-account` when login state changes
+Components communicate only via `rez:*` Custom Events on `document` — never via shared module
+state or by reaching into each other. Built: `rez:slot-selected` (calendar → checkout),
+`rez:selection-cleared`, `rez:booking-complete` (checkout). Planned: `rez:auth-changed`,
+`rez:login-required` (see above).
 
 ### Theming
+
+46 `--rez-*` custom properties (colors, typography, radii — grouped by role in
+`src/styles/theme.ts`), each with a default inside the Shadow DOM, plus a `theme` attribute
+selecting a preset (`light`, `dark`, `barbie`). Spacing and layout are deliberately not
+themable. Exposing `::part()`s is part of the account design above.
 
 ```css
 rez-calendar {
   --rez-primary: #1D9E75;
   --rez-font: 'Inter', sans-serif;
   --rez-border-radius: 8px;
-  --rez-slot-available: #E8F5E9;
-  --rez-slot-full: #FFEBEE;
 }
 ```
 
-All CSS custom properties have sensible defaults inside the Shadow DOM.
+### Localization
+
+Root elements take `lang` (falling back to `<html lang>`, then English) and a JS-only
+`translations` property for partial overrides. Built-in dictionaries: `en`, `cs`. API error
+messages are shown as the API returns them.
 
 ### HTML attributes
 
-Each component accepts `api-base` pointing to the client app API:
+Each component takes `api-base`, pointing at the client's API. There is no compiled-in default:
 ```html
 <rez-calendar api-base="https://studio.cz/api"></rez-calendar>
 ```
@@ -1371,11 +1475,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ `<rez-calendar>` — built, see `docs/CONTEXT.md` steps 6-7, 11-12
 - ✅ `<rez-cancel>` — built, see `docs/CONTEXT.md` step 13 (`feature/rez-cancel`, not yet merged)
 - ✅ `<rez-checkout>` — built, see `docs/CONTEXT.md` steps 8-10, 12
-- ❌ `<rez-account>` — not started. The auth routes it needs now exist, including refresh/logout
-  (`feature/refresh-tokens`, see "Auth transport" in §4): the planned session layer keeps the
-  access token in memory and the refresh token either in the httpOnly cookie (`AUTH_MODE=cookie`)
-  or in `localStorage` (`AUTH_MODE=token`, for booking pages on a site the cookie can't reach),
-  sharing login state between bundles through storage + `rez:*` events, never module state
+- ❌ Account & user features (`rez.account.*`) — architecture decided, not started; see §5
+  "Account & user features". The auth routes they need now exist, including refresh/logout
+  (`feature/refresh-tokens`); next prerequisite is rez-starter's public config endpoint
 
 ### `rez-admin`
 - ✅ Project scaffold (Vite + React + TypeScript + Tailwind, Vitest, Dockerfile + nginx)
