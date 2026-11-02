@@ -590,8 +590,11 @@ These are the contracts the library defines. Implementations live in infrastruct
     outside the reuse grace window means a copy exists somewhere else — `RefreshUseCase` revokes
     the entire family instead of guessing which holder is legitimate. Password reset revokes all
     of the user's families; deleting a user cascades to their rows (`ON DELETE CASCADE`). Access
-    tokens are stateless and cannot be revoked — they simply expire (15 min default), which is
-    also how long a role change takes to reach an already-issued access token.
+    tokens themselves cannot be revoked — they expire (15 min default) — but they only prove
+    identity: rez-starter's auth middlewares load the user on every request and authorize by the
+    role in the database, so a role change or deletion takes effect on the very next request
+    (`fix/auth-current-role`). The `role` claim inside the JWT is informational only — never
+    authorize by it.
 
 ### 3.7 Configuration system
 
@@ -884,8 +887,13 @@ GET    /api/users/me
 PATCH  /api/users/me                                          ← name + newsletter_opt_in only, never role/email
 ```
 
-`AuthMiddleware` (`rez-starter`, not `rez`) verifies the JWT via `rez`'s `JwtService` and attaches
-`UserId`/`UserRole` request attributes; missing/invalid token → `InvalidTokenException` → 401.
+`AuthMiddleware` (`rez-starter`, not `rez`) verifies the JWT via `rez`'s `JwtService`, then loads
+the user through `GetUserUseCase` (`App\Http\Auth\BearerTokenAuthenticator`, shared with
+`OptionalAuthMiddleware`) and attaches `UserId`/`UserRole` request attributes **from the database,
+not from the token's claims** (`fix/auth-current-role`) — one primary-key lookup per
+authenticated request, in exchange for role changes and deletions taking effect immediately.
+Missing/invalid token, or a token whose user no longer exists → `InvalidTokenException` → 401.
+`OptionalAuthMiddleware` treats those same cases as anonymous instead.
 
 #### Always available — admin JWT required
 
