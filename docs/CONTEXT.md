@@ -2616,3 +2616,44 @@ plausible. `composer ca` (969 tests, PHPStan max, cs-fix) clean throughout.
 /api/reservations/{id}/mark-paid`) and `rez-admin`/`rez-components` (payment status display,
 mark-paid action, checkout payment-method step) built alongside this on the same branch name
 in their own repos — see their own `docs/CONTEXT.md`.
+
+### 102. Refresh tokens: rotating, revocable logins (`feature/refresh-tokens`)
+
+A login used to be one 1-hour JWT with no way to extend or revoke it: a reload of any page
+that kept the token in memory logged the user out, and a stolen token stayed valid after the
+victim reset their password. Login is now two tokens.
+
+- **Access token** — the same `JwtService` JWT, now 15 minutes by default
+  (`UsersConfig::$jwtTtlSeconds` renamed `accessTokenTtlSeconds`, default 3600 → 900).
+  Stateless; still the only thing `AuthMiddleware` checks.
+- **Refresh token** — 64 hex chars from `TokenGeneratorInterface`, stored only as SHA-256
+  (`RefreshToken::hashOf()`, invariant 14) in the new `refresh_tokens` table (migration
+  `20260101000008`, FK to `users` with `ON DELETE CASCADE`). 30 days by default
+  (`refreshTokenTtlSeconds`), sliding: each rotation gets a fresh expiry.
+
+`Domain/Auth/RefreshToken` + `RefreshTokenId` + `RefreshTokenFamilyId`. A family is one login on
+one device; rotation keeps the family, so `revokeFamily()` ends that login however many times it
+has rotated. `Application/Service/AuthTokenIssuer` mints the pair (`AuthTokens`) — the single
+place, so login, registration and refresh can't drift apart. `LoginResponse`/`RegisterResponse`
+now carry `AuthTokens $tokens` instead of `string $token` (breaking for `rez-starter`, updated on
+the same branch name).
+
+`RefreshUseCase` rotates: unused token → mark used, issue successor in the family. A token that
+was **already used** is allowed again only within `refreshTokenReuseGraceSeconds` (default 30) —
+two tabs, two `rez-components` bundles, or React StrictMode's double effect legitimately race on
+the same token. Outside the window it's a replay of a stolen copy: the family is revoked, a
+warning logged, `InvalidTokenException` thrown. The user is reloaded on every refresh, so a role
+change reaches the next access token (within one access-token lifetime) and a deleted user can't
+refresh. `LogoutUseCase` revokes the presented token's family and silently succeeds for an
+unknown token. `ResetPasswordUseCase` now also calls `revokeAllForUser()`.
+
+Deliberately not built: purging expired rows (they're inert; a cleanup job can come later),
+"log out everywhere" / session listing (`revokeAllForUser()` already exists for it), and
+revoking on role change (the 15-minute access-token window was judged acceptable).
+
+Integration tests ran against a scratch `rez_integration` database inside `rez-starter`'s
+running MySQL container (`docker exec -w /var/rez -e DB_NAME=rez_integration rez-starter-app-1
+vendor/bin/phpunit --testsuite Integration`) — 136 tests, including the full migration replay.
+`composer ca` clean (1018 tests, PHPStan max). `rez-starter` (refresh/logout routes, cookie vs
+body transport, CORS allowlist) and `rez-admin` (sessions that survive reloads) built on the same
+branch name in their own repos.
