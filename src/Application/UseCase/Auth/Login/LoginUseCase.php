@@ -6,7 +6,7 @@ namespace Rez\Application\UseCase\Auth\Login;
 
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\UserRepositoryInterface;
-use Rez\Application\Service\JwtService;
+use Rez\Application\Service\AuthTokenIssuer;
 use Rez\Domain\Exception\InvalidCredentialsException;
 use Rez\Domain\Exception\UserNotFoundException;
 
@@ -14,7 +14,7 @@ final class LoginUseCase implements LoginUseCaseInterface
 {
     public function __construct(
         private readonly UserRepositoryInterface $userRepository,
-        private readonly JwtService $jwtService,
+        private readonly AuthTokenIssuer $tokenIssuer,
     ) {
     }
 
@@ -36,8 +36,6 @@ final class LoginUseCase implements LoginUseCaseInterface
             throw new InvalidCredentialsException();
         }
 
-        $token = $this->jwtService->generate($user->id, $user->role);
-
-        return new LoginResponse($user, $token);
+        return new LoginResponse($user, $this->tokenIssuer->issue($user));
     }
 }

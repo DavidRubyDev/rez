@@ -6,7 +6,7 @@ namespace Rez\Application\UseCase\Auth\Register;
 
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\UserRepositoryInterface;
-use Rez\Application\Service\JwtService;
+use Rez\Application\Service\AuthTokenIssuer;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeRequest;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
 use Rez\Domain\Exception\EmailAlreadyRegisteredException;
@@ -21,7 +21,7 @@ final class RegisterUseCase implements RegisterUseCaseInterface
     public function __construct(
         private readonly UserRepositoryInterface $userRepository,
         private readonly SubscribeUseCaseInterface $subscribeUseCase,
-        private readonly JwtService $jwtService,
+        private readonly AuthTokenIssuer $tokenIssuer,
     ) {
     }
 
@@ -58,8 +58,6 @@ final class RegisterUseCase implements RegisterUseCaseInterface
             $this->subscribeUseCase->execute(new SubscribeRequest($request->email, $request->name, SubscriberSource::Registered));
         }
 
-        $token = $this->jwtService->generate($user->id, $user->role);
-
-        return new RegisterResponse($user, $token);
+        return new RegisterResponse($user, $this->tokenIssuer->issue($user));
     }
 }
