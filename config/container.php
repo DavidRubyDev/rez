@@ -110,6 +110,10 @@ use Rez\Application\UseCase\Auth\Register\RegisterUseCase;
 use Rez\Application\UseCase\Auth\Register\RegisterUseCaseInterface;
 use Rez\Application\UseCase\Auth\Login\LoginUseCase;
 use Rez\Application\UseCase\Auth\Login\LoginUseCaseInterface;
+use Rez\Application\UseCase\Auth\Logout\LogoutUseCase;
+use Rez\Application\UseCase\Auth\Logout\LogoutUseCaseInterface;
+use Rez\Application\UseCase\Auth\Refresh\RefreshUseCase;
+use Rez\Application\UseCase\Auth\Refresh\RefreshUseCaseInterface;
 use Rez\Application\UseCase\Auth\RequestPasswordReset\RequestPasswordResetUseCase;
 use Rez\Application\UseCase\Auth\RequestPasswordReset\RequestPasswordResetUseCaseInterface;
 use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordUseCase;
@@ -214,6 +218,8 @@ return [
     JwtService::class                         => autowire(),
     RegisterUseCaseInterface::class           => autowire(RegisterUseCase::class),
     LoginUseCaseInterface::class              => autowire(LoginUseCase::class),
+    RefreshUseCaseInterface::class            => autowire(RefreshUseCase::class),
+    LogoutUseCaseInterface::class             => autowire(LogoutUseCase::class),
     RequestPasswordResetUseCaseInterface::class => autowire(RequestPasswordResetUseCase::class),
     ResetPasswordUseCaseInterface::class      => autowire(ResetPasswordUseCase::class),
     GetUserUseCaseInterface::class            => autowire(GetUserUseCase::class),
