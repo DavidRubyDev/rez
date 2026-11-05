@@ -816,6 +816,7 @@ POST   /api/sessions/{id}/reservations                        ← body: party fi
 POST   /api/newsletter/subscribe
 DELETE /api/newsletter/unsubscribe
 DELETE /api/reservations/{id}?token={hmac}                    ← guest self-cancellation
+GET    /api/config                                            ← auth.mode + public feature details (null when off); never secrets
 POST   /api/auth/register                                     ← body may add refresh_token_delivery: "cookie" (default) | "body"
 POST   /api/auth/login                                        ← same
 POST   /api/auth/refresh                                      ← credential: refresh cookie or body refresh_token; rotates it
@@ -1029,6 +1030,8 @@ only `api-base`:
 `<rez-booking-history>`, `<rez-wallet-balance>`, `<rez-topup>`, `<rez-subscription-status>`,
 `<rez-subscribe>`. A client with their own design places these wherever they like — e.g.
 `<rez-wallet-balance>` in their own navbar, `<rez-topup>` on their own pricing page.
+Once signed in, `<rez-login>` shows a short "Signed in as {name}" summary instead of the form;
+signing out is `<rez-logout>`'s job, not a button inside `<rez-login>`.
 
 **Layer 2 — composites.** Pure arrangements of Layer 1, with no logic of their own:
 - `<rez-account>` — a full account page (sections/tabs).
@@ -1065,7 +1068,10 @@ system. Clients customise instead through, in increasing depth:
   login/logout across tabs.
 - One refresh per page: a bundle first asks over `rez:*` events whether another one already
   holds a session before refreshing itself (every refresh rotates the token, so two bundles
-  refreshing at once would race). The server's 30-second reuse grace window absorbs what is
+  refreshing at once would race). The bundle holding the session answers with the access token
+  itself in the event detail — decided deliberately: it exposes the token only to scripts on the
+  host page, which can already read every fetch the page makes. The server's 30-second reuse
+  grace window absorbs what is
   left — several tabs, or two bundles booting at the same instant.
 
 **Cross-component events** (all `bubbles: true, composed: true`, dispatched on `document`):
@@ -1076,11 +1082,11 @@ system. Clients customise instead through, in increasing depth:
   back to rendering an inline `<rez-login>` itself.
 
 **Feature detection.** Composites show credits and subscription sections only when the
-deployment has them enabled. This needs a **public, unauthenticated config endpoint** in
-rez-starter (next step; `GET /api/admin/config` is admin-only and not wired): enabled features
-(payments/credits/subscriptions), public-safe details (currency, minimum top-up, plan list —
-never Stripe price IDs or secrets), and `auth.mode`. Declaring features in attributes was
-rejected — it reintroduces the setup work this design avoids.
+deployment has them enabled. They read rez-starter's public, unauthenticated `GET /api/config`
+(built, `feat/public-config`): `{auth: {mode}, payments, credits, subscriptions}`, each optional
+section `null` when off, else public-safe details (currency, minimum top-up, plan list — never
+Stripe price IDs or secrets). Declaring features in attributes was rejected — it reintroduces the
+setup work this design avoids.
 
 **Payments (credits top-up, subscriptions): Stripe Checkout redirect, never Stripe.js.**
 `POST /api/wallet/topup` / `POST /api/subscription/checkout` return a Stripe Checkout URL; the
