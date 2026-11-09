@@ -790,7 +790,7 @@ message`). Two cases send a **fixed generic message instead of the real one** �
 | `CannotDeleteLastAdminException` | 409 | `CANNOT_DELETE_LAST_ADMIN` | — |
 | `FeatureDisabledException` | 501 | `FEATURE_DISABLED` | `feature` |
 | `InvalidCredentialsException` | 401 | `INVALID_CREDENTIALS` | — |
-| `TooManyLoginAttemptsException` | 429 (+ `Retry-After` header) — mapping pending in rez-starter `feat/login-throttling`; until then it falls through to the generic `DomainException` 422 | `TOO_MANY_LOGIN_ATTEMPTS` | `retry_after_seconds` |
+| `TooManyLoginAttemptsException` | 429 (+ `Retry-After` header — `ErrorMapper::map()` returns a `headers` map the error handler applies) | `TOO_MANY_LOGIN_ATTEMPTS` | `retry_after_seconds` |
 | `InvalidTokenException` | 401 | `INVALID_TOKEN` | — |
 | `ForbiddenException` (`App\Http\Middleware\ForbiddenException` — `rez-starter`'s own, not `rez`'s) | 403 | `FORBIDDEN` | — |
 | `InsufficientFundsException` | 422 | `INSUFFICIENT_FUNDS` | — |
@@ -877,6 +877,15 @@ that without a CORS preflight. `CORS_ALLOWED_ORIGINS` (comma-separated) lists or
 send the cookie cross-origin (echoed `Access-Control-Allow-Origin` + `Allow-Credentials: true`);
 everyone else keeps the credential-less `*`. `ACCESS_TOKEN_TTL_SECONDS`/
 `REFRESH_TOKEN_TTL_SECONDS` override the `UsersConfig` defaults.
+
+**Login throttling (`feat/login-throttling`).** `POST /api/auth/login` passes `REMOTE_ADDR` as
+rez's `clientKey`, so failures are throttled per email + client IP (invariant 15):
+`LOGIN_MAX_FAILED_ATTEMPTS` (default 5) within `LOGIN_FAILURE_WINDOW_SECONDS` (default 900), then
+**429** `TOO_MANY_LOGIN_ATTEMPTS`, `params.retry_after_seconds` and a matching `Retry-After`
+header. `X-Forwarded-For` is ignored (the sender writes it); behind a reverse proxy all clients
+share one address and throttling degrades to per email — never to blocking other users.
+Cross-origin JS can't read `Retry-After` (not exposed via CORS), so browser clients use the body
+param.
 
 `POST /api/sessions/{id}/reservations` is deliberately narrow: the body carries only `party`
 fields, never `resource_id` or a timeslot — the session id in the URL is the sole source of truth
@@ -1006,6 +1015,7 @@ a client who wants their own design can still have it.
 | `<rez-newsletter>` | Standalone newsletter signup widget | `rez.core.*` |
 | `<rez-cancel>` | Guest cancellation confirmation (reads `id`/`token` from the URL) | `rez.cancel.*` |
 | `<rez-unsubscribe>` | Newsletter unsubscribe confirmation (reads `email`/`token` from the URL) | `rez.unsubscribe.*` |
+| `<rez-login>` | Email + password sign-in; once signed in, "Signed in as {name}". Follows sign-ins/outs from any other account component or tab | `rez.account.*` |
 
 ### Bundles
 
@@ -1016,12 +1026,12 @@ A bundle groups components that appear on the same page, so no page loads code i
 | `rez.core.*` | `rez-calendar`, `rez-checkout`, `rez-newsletter` — used together on a booking page | `rez-components` |
 | `rez.cancel.*` | `rez-cancel` — standalone page linked from emails | `rez-components/cancel` |
 | `rez.unsubscribe.*` | `rez-unsubscribe` — standalone page linked from emails | `rez-components/unsubscribe` |
-| `rez.account.*` | Account components (planned — see below) | `rez-components/account` |
+| `rez.account.*` | `rez-login` (more account components to come — see below), plus the Layer 0 session layer and auth/config API calls | `rez-components/account` |
 
 The original plan (`rez.core.js` = calendar + cancel + account, `rez.payments.js`,
 `rez.full.js`) is superseded by the table above.
 
-### Account & user features — architecture (decided November 2026, not yet built)
+### Account & user features — architecture (decided November 2026; being built — session layer and `<rez-login>` done)
 
 Login, register, logout, profile, password and email changes, account deletion, credit
 balance and top-up, subscription status and checkout, booking history — and whatever comes
@@ -1045,6 +1055,16 @@ only `api-base`:
 `<rez-wallet-balance>` in their own navbar, `<rez-topup>` on their own pricing page.
 Once signed in, `<rez-login>` shows a short "Signed in as {name}" summary instead of the form;
 signing out is `<rez-logout>`'s job, not a button inside `<rez-login>`.
+
+**`<rez-login>` (built, `feature/rez-login`).** Renders nothing until the stored login has been
+checked (no form flash for a signed-in visitor). Form: email (`autocomplete="username"`) and
+password (`current-password`), client checks before any request, button disabled while signing
+in. Errors: 401 → "Wrong email or password." (email kept, password cleared and focused); 429 →
+"Try again in N minutes" from `params.retry_after_seconds`, rounded up, plural-aware; any other
+API error → the API's message; unreachable server → the generic message. Parts: `form`, `field`,
+`label`, `input`, `field-error`, `error`, `submit`, `summary`; slot `footer` (client links such as
+"Forgot password?"), shown only while signed out. No component-specific event — pages listen to
+`rez:auth-changed`.
 
 **Layer 2 — composites.** Pure arrangements of Layer 1, with no logic of their own:
 - `<rez-account>` — a full account page (sections/tabs).
@@ -1127,13 +1147,20 @@ password — so a session left open on a shared computer can't be used to take t
 delete it. The API side of this (and of these three actions at all) is not built yet.
 
 **Bundle.** All account components ship as a new `rez.account.*` bundle
-(`rez-components/account`), following the cancel/unsubscribe split. It is separate from
+(`rez-components/account`, built in `feature/rez-login`), following the cancel/unsubscribe split.
+It also exports Layer 0: `SessionController` (any object implementing Lit's
+`ReactiveControllerHost` can host one — a non-Lit UI needs only `requestUpdate()`),
+`onAuthChanged`, `getPublicConfig`, the raw `login`/`register`/`refresh`/`logout` calls,
+`ApiError` and the types. A custom UI should sign in through `SessionController`, not bare
+`login()`, so every other account component hears about it. It is separate from
 `rez.core.*` so a booking page without accounts doesn't load them, and vice versa.
 
 **Build order.** (1) rez-starter public config endpoint → (2) session layer + `<rez-login>`,
 `<rez-register>`, `<rez-logout>` + `rez:auth-changed` → (3) minimal `<rez-account-menu>`,
 proving the event/storage protocol end to end → (4) profile, password, email, delete →
-(5) credits, then subscriptions, once their rez/rez-starter APIs exist.
+(5) credits, then subscriptions, once their rez/rez-starter APIs exist. Progress: (1) done;
+(2) session layer, login throttling across rez/rez-starter/rez-admin, and `<rez-login>` done —
+`<rez-logout>` next, alongside (3); `<rez-register>` after.
 
 ### Component communication
 
@@ -1181,7 +1208,9 @@ Each component takes `api-base`, pointing at the client's API. There is no compi
 - Session survives reloads via the httpOnly refresh cookie (`feature/refresh-tokens`):
   `RequireAuth` calls `refreshSession()` once per page load before deciding to redirect to
   `/login`; any 401 triggers one shared refresh and a single retry; logout revokes server-side.
-  The app never sees the refresh token. A non-admin login is revoked immediately
+  The app never sees the refresh token. A non-admin login is revoked immediately. A 429 lockout
+  shows how many minutes to wait (`errors.TOO_MANY_LOGIN_ATTEMPTS`, pluralised from
+  `retry_after_seconds` in `getErrorMessage()`; `feat/login-throttling`)
 
 ### Feature detection
 
@@ -1441,6 +1470,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ Docker stack (PHP-FPM + Nginx + MySQL + Mailpit)
 - ✅ `POST /api/auth/refresh` + `POST /api/auth/logout`, `AUTH_MODE` cookie/body refresh-token
   transport, `CORS_ALLOWED_ORIGINS` credentialed CORS (`feature/refresh-tokens`, see §4)
+- ✅ Login throttling per email + client IP → 429 `TOO_MANY_LOGIN_ATTEMPTS` + `Retry-After`
+  (`feat/login-throttling`, see §4)
 - ✅ Slim bootstrap, PHP-DI wiring, full route surface
 - ✅ Complete exception → HTTP status map (now also `EmailTemplateNotFoundException` → 404)
 - ✅ `PlatformConfig`/`MailerConfig`/`UsersConfig` construction and container wiring fully synced
