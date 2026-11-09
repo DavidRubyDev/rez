@@ -1054,28 +1054,42 @@ system. Clients customise instead through, in increasing depth:
    boolean flags
 5. Layer 0 for a fully custom UI
 
-**Session layer** (built on the refresh-token design in §4 "Auth transport"):
+**Session layer** (built on the refresh-token design in §4 "Auth transport"; built in
+`src/session/`, `feature/auth-session`):
 - The access token lives in memory only. The refresh token lives where the deployment's
   `AUTH_MODE` says: the httpOnly cookie (`cookie` — the page's origin must be in rez-starter's
   `CORS_ALLOWED_ORIGINS`, and `/api/auth/*` calls use `credentials: 'include'`) or
   `localStorage` (`token` — for pages on a site the cookie can't reach; login asks for
-  `refresh_token_delivery: "body"`). The mode is read from the public config endpoint, so a
-  client site never configures it.
+  `refresh_token_delivery: "body"` and sends no credentials, since a page outside
+  `CORS_ALLOWED_ORIGINS` gets `Access-Control-Allow-Origin: *`). The mode is read from
+  `GET /api/config` at login, so a client site never configures it.
+- A login record in `localStorage` (`rez:login:{apiBase}`) in **both** modes: the refresh token
+  in token mode, a secret-free `{delivery: "cookie"}` marker in cookie mode. It lets a page load
+  tell "signed in" from "anonymous" without a refresh that would 401 for every visitor (the
+  httpOnly cookie is invisible to JS), and its `storage` events sync login/logout across tabs in
+  both modes. Without storage (some privacy modes), the component that logged in holds the
+  record in memory and refreshes for the others, so a session lasts as long as the page and no
+  longer.
 - **Login state cannot live in a module-level singleton** — not only because CLAUDE.md forbids
   shared module state: every UMD bundle carries its own copy of every module, so
-  `rez.core.js` and `rez.account.js` on the same page would each have their own. Shared state
-  is storage plus `rez:*` events on `document`. In token mode the `storage` event also syncs
-  login/logout across tabs.
-- One refresh per page: a bundle first asks over `rez:*` events whether another one already
-  holds a session before refreshing itself (every refresh rotates the token, so two bundles
-  refreshing at once would race). The bundle holding the session answers with the access token
-  itself in the event detail — decided deliberately: it exposes the token only to scripts on the
-  host page, which can already read every fetch the page makes. The server's 30-second reuse
-  grace window absorbs what is
-  left — several tabs, or two bundles booting at the same instant.
+  `rez.core.js` and `rez.account.js` on the same page would each have their own. Each root
+  element holds a `SessionController` (a Lit reactive controller); controllers are peers over
+  `rez:*` events on `document`, identically whether they share a bundle or not.
+- One refresh per page: before refreshing, a controller dispatches the internal
+  `rez:session-request`; a peer answers synchronously with its fresh session or with the refresh
+  it already has in flight (every refresh rotates the token, so two refreshing at once would
+  race). The session — access token included — then travels in `rez:auth-changed`; decided
+  deliberately: it exposes the token only to scripts on the host page, which can already read
+  every fetch the page makes. The server's 30-second reuse grace window absorbs what is left —
+  several tabs refreshing at the same instant.
+- A 401 on refresh clears the login record and announces sign-out; any other failure leaves the
+  record for next time. Logout clears locally even if the server can't be reached, and a
+  refresh that finishes after a logout (or a logout and a new login) is discarded. A component
+  removed from the page and added back starts over rather than trusting what it held.
 
 **Cross-component events** (all `bubbles: true, composed: true`, dispatched on `document`):
-- `rez:auth-changed` — login state changed; detail carries the user or `null`.
+- `rez:auth-changed` — login state changed; detail is `{apiBase, session}`, where `session` is
+  `{user, accessToken, accessTokenExpiresAt}` or `null`.
 - `rez:login-required` — fired by any component that needs a signed-in user (`<rez-topup>`,
   `<rez-checkout>` when paying with credits, …). `<rez-account-menu>` listens and opens its
   login dialog, so no client glue code is needed; with no menu on the page, the component falls
