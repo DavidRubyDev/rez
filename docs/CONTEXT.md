@@ -2657,3 +2657,33 @@ vendor/bin/phpunit --testsuite Integration`) — 136 tests, including the full m
 `composer ca` clean (1018 tests, PHPStan max). `rez-starter` (refresh/logout routes, cookie vs
 body transport, CORS allowlist) and `rez-admin` (sessions that survive reloads) built on the same
 branch name in their own repos.
+
+### 103. Login throttling and email-enumeration timing (`feature/login-throttling`)
+
+Step 1 of the vertical login slice (`<rez-login>` will put `POST /api/auth/login` on any client
+site, not just behind the admin page). Two gaps closed in `LoginUseCase`:
+
+- **Brute force.** Failures are counted per `Domain/Auth/LoginThrottleKey` — SHA-256 of the
+  normalised (trimmed, lower-cased) email plus a client key, length-prefixed so no split collides.
+  `LoginRequest` gained a required `clientKey` (rez-starter passes the client IP). At
+  `UsersConfig::$loginMaxFailedAttempts` (default 5) failures within `$loginFailureWindowSeconds`
+  (default 900) the key is refused with the new `TooManyLoginAttemptsException`
+  (`TOO_MANY_LOGIN_ATTEMPTS`, `retryAfterSeconds` + `retry_after_seconds` param) before the
+  password is checked; refused attempts aren't recorded, so the sliding window always reopens
+  when its oldest failure ages out. Success clears the key. Per-pair rather than per-email so
+  nobody can lock a real user out (invariant 15).
+- **Email enumeration by timing.** An unknown email returned before any bcrypt work, measurably
+  faster than a wrong password. It now verifies against `LoginUseCase::TIMING_DUMMY_HASH` (cost
+  12, same as `HashedPassword::fromPlainText()` produces on PHP 8.4+; its password was random and
+  discarded). The test compares the two paths' timings rather than mocking `password_verify`.
+
+New port `LoginFailureRepositoryInterface` (`record`, `failedSince` oldest-first, `clear`),
+`MysqlLoginFailureRepository`, migration `20260101000009_create_login_failures.sql`
+(`IF NOT EXISTS`; inert rows aren't purged — same stance as expired refresh tokens).
+
+**Breaking for rez-starter** (built next, `feat/login-throttling`): `LoginUseCase`'s constructor
+takes the new repository and `UsersConfig`, and `LoginRequest` requires `clientKey`. rez-starter
+must bind the port, pass the IP, run the migration and map the exception to 429 + `Retry-After`.
+
+Integration tests ran in rez-starter's MySQL container against `rez_integration` — 141 tests
+(5 new), including the migration replay. `composer ca` clean (1046 tests, PHPStan max).

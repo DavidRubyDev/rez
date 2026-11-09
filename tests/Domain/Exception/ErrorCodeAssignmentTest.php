@@ -26,6 +26,7 @@ use Rez\Domain\Exception\ReservationNotFoundException;
 use Rez\Domain\Exception\ResourceNotFoundException;
 use Rez\Domain\Exception\SessionNotFoundException;
 use Rez\Domain\Exception\UserNotFoundException;
+use Rez\Domain\Exception\TooManyLoginAttemptsException;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
@@ -162,5 +163,13 @@ class ErrorCodeAssignmentTest extends TestCase
         $exception = new InvalidTimeSlotException('Slot end must be after start.');
         $this->assertSame(ErrorCode::InvalidTimeSlot, $exception->errorCode());
         $this->assertSame([], $exception->errorParams());
+    }
+
+    public function testTooManyLoginAttemptsException(): void
+    {
+        $exception = new TooManyLoginAttemptsException(120);
+        $this->assertSame(ErrorCode::TooManyLoginAttempts, $exception->errorCode());
+        $this->assertSame(['retry_after_seconds' => '120'], $exception->errorParams());
+        $this->assertSame(120, $exception->retryAfterSeconds);
     }
 }

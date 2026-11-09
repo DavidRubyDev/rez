@@ -16,6 +16,8 @@ final class UsersConfig
         public readonly int $passwordResetTtlMinutes = 60,
         public readonly int $refreshTokenTtlSeconds = 2592000,
         public readonly int $refreshTokenReuseGraceSeconds = 30,
+        public readonly int $loginMaxFailedAttempts = 5,
+        public readonly int $loginFailureWindowSeconds = 900,
     ) {
         if ($jwtSecret === '') {
             throw new \InvalidArgumentException('jwtSecret must not be empty.');
@@ -39,6 +41,14 @@ final class UsersConfig
 
         if ($refreshTokenReuseGraceSeconds < 0) {
             throw new \InvalidArgumentException("refreshTokenReuseGraceSeconds must not be negative, got {$refreshTokenReuseGraceSeconds}.");
+        }
+
+        if ($loginMaxFailedAttempts < 1) {
+            throw new \InvalidArgumentException("loginMaxFailedAttempts must be at least 1, got {$loginMaxFailedAttempts}.");
+        }
+
+        if ($loginFailureWindowSeconds < 1) {
+            throw new \InvalidArgumentException("loginFailureWindowSeconds must be at least 1, got {$loginFailureWindowSeconds}.");
         }
     }
 }

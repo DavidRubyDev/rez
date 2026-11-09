@@ -85,6 +85,11 @@ class ErrorCodeMapperTest extends TestCase
         $this->assertSame('INVALID_CREDENTIALS', $this->mapper->toString(ErrorCode::InvalidCredentials));
     }
 
+    public function testTooManyLoginAttemptsMapsToString(): void
+    {
+        $this->assertSame('TOO_MANY_LOGIN_ATTEMPTS', $this->mapper->toString(ErrorCode::TooManyLoginAttempts));
+    }
+
     public function testInsufficientFundsMapsToString(): void
     {
         $this->assertSame('INSUFFICIENT_FUNDS', $this->mapper->toString(ErrorCode::InsufficientFunds));

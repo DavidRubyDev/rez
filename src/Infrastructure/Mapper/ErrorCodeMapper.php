@@ -24,6 +24,7 @@ final class ErrorCodeMapper
             ErrorCode::FeatureDisabled               => 'FEATURE_DISABLED',
             ErrorCode::InvalidToken                  => 'INVALID_TOKEN',
             ErrorCode::InvalidCredentials             => 'INVALID_CREDENTIALS',
+            ErrorCode::TooManyLoginAttempts          => 'TOO_MANY_LOGIN_ATTEMPTS',
             ErrorCode::InsufficientFunds             => 'INSUFFICIENT_FUNDS',
             ErrorCode::InvalidParty                  => 'INVALID_PARTY',
             ErrorCode::InvalidReservationState       => 'INVALID_RESERVATION_STATE',

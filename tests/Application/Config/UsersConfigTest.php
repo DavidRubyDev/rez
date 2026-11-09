@@ -21,6 +21,26 @@ class UsersConfigTest extends TestCase
         $this->assertSame(10, $config->refreshTokenReuseGraceSeconds);
     }
 
+    public function testLoginThrottlingCanBeConfigured(): void
+    {
+        $config = new UsersConfig('super-secret', 'super-secret-cancellation-key', loginMaxFailedAttempts: 3, loginFailureWindowSeconds: 60);
+
+        $this->assertSame(3, $config->loginMaxFailedAttempts);
+        $this->assertSame(60, $config->loginFailureWindowSeconds);
+    }
+
+    public function testLoginMaxFailedAttemptsBelowOneThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new UsersConfig('super-secret', 'super-secret-cancellation-key', loginMaxFailedAttempts: 0);
+    }
+
+    public function testLoginFailureWindowBelowOneThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new UsersConfig('super-secret', 'super-secret-cancellation-key', loginFailureWindowSeconds: 0);
+    }
+
     public function testDefaultsAreApplied(): void
     {
         $config = new UsersConfig('super-secret', 'super-secret-cancellation-key');
@@ -29,6 +49,8 @@ class UsersConfigTest extends TestCase
         $this->assertSame(60, $config->passwordResetTtlMinutes);
         $this->assertSame(2592000, $config->refreshTokenTtlSeconds);
         $this->assertSame(30, $config->refreshTokenReuseGraceSeconds);
+        $this->assertSame(5, $config->loginMaxFailedAttempts);
+        $this->assertSame(900, $config->loginFailureWindowSeconds);
     }
 
     public function testEmptyJwtSecretThrows(): void
