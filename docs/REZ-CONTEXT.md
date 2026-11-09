@@ -417,6 +417,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `UserRepositoryInterface` | `MysqlUserRepository` | COMPLETE (same binding note as above) |
 | `PasswordResetRepositoryInterface` | `MysqlPasswordResetRepository` | COMPLETE (same binding note as above) |
 | `RefreshTokenRepositoryInterface` | `MysqlRefreshTokenRepository` | COMPLETE (`feature/refresh-tokens`, same binding note as above). `save()` (upsert by id — persists `used_at`/`revoked_at`), `findByTokenHash()` (throws `InvalidTokenException` if absent), `revokeFamily()`, `revokeAllForUser()` (both only touch not-yet-revoked rows, so the first revocation time is kept) |
+| `LoginFailureRepositoryInterface` | `MysqlLoginFailureRepository` | COMPLETE (`feature/login-throttling`, same binding note as above). `record(LoginThrottleKey, at)`, `failedSince(key, since)` (oldest first), `clear(key)` |
 | `SessionRepositoryInterface` | `MysqlSessionRepository` | COMPLETE (`rez-sessions`) — **bound directly in `config/container.php`**, unlike every other `rez`-owned repository interface above. Per that scaffold's explicit instruction; not left for the client app to bind. |
 
 #### Implemented in client repo (NOT in `rez`)
@@ -490,7 +491,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). `feature/newsletter-unsubscribe-token`: generates a per-subscriber `UnsubscribeToken` from `UsersConfig::$cancellationSecret` inside the send loop and passes it to `sendNewClassNotification()` |
 | `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse(subscribers, total)` | `13_rez-pagination.md`: filters (`search` against email/name, `source`) + `offset`/`limit`/`sortBy`/`sortDir` (`email`\|`name`\|`source`\|`opted_in_at`, default sort `opted_in_at ASC` preserved) via `NewsletterRepositoryInterface::findPage()`/`countPage()`. `findAll()` untouched — still `BroadcastUseCase`'s only caller |
 | `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, AuthTokens $tokens)` | No `FeatureGuard` — users are never gated. `findByEmail()` first (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; issues access + refresh tokens via `AuthTokenIssuer` — only after the user is saved (`rez-users`, `feature/refresh-tokens`) |
-| `LoginUseCase` | `LoginRequest` | `LoginResponse(User, AuthTokens $tokens)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6). Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed. Success starts a new refresh token family via `AuthTokenIssuer` (`rez-users`, `feature/refresh-tokens`) |
+| `LoginUseCase` | `LoginRequest(email, password, clientKey)` | `LoginResponse(User, AuthTokens $tokens)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6), and only after checking the password against a dummy bcrypt hash, so it takes as long as a wrong password. Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed. Both record a failure against `LoginThrottleKey(email, clientKey)`; at `loginMaxFailedAttempts` failures within `loginFailureWindowSeconds` the key is refused with `TooManyLoginAttemptsException(retryAfterSeconds)` **before** the password is checked, and refused attempts aren't recorded (invariant 15). Success clears the key's failures and starts a new refresh token family via `AuthTokenIssuer` (`rez-users`, `feature/refresh-tokens`, `feature/login-throttling`) |
 | `RefreshUseCase` | `RefreshRequest(refreshToken)` | `RefreshResponse(User, AuthTokens)` | (`feature/refresh-tokens`) Looks up by hash; revoked/expired → `InvalidTokenException`. Unused → marked used, successor issued in the same family. **Already used** → within `refreshTokenReuseGraceSeconds` (default 30 — tabs or bundles racing each other) a successor is issued anyway; outside it the token was replayed, so the whole family is revoked, a warning logged, and `InvalidTokenException` thrown (invariant 14). Reloads the user, so the new access token carries the user's *current* role; a deleted user → `InvalidTokenException` |
 | `LogoutUseCase` | `LogoutRequest(refreshToken)` | `LogoutResponse` | (`feature/refresh-tokens`) Revokes the presented token's family. Unknown/already-revoked token → silent success (the caller is logged out either way) |
 | `RequestPasswordResetUseCase` | `RequestPasswordResetRequest(email, resetBaseUrl)` | `RequestPasswordResetResponse(bool $sent)` | Unknown email → `sent: true` silently, no token generated, no email sent (never reveals existence). Known email: generates a raw token via `TokenGeneratorInterface`, stores only `SHA-256(rawToken)` via `PasswordResetRepositoryInterface` (invariant 5), emails the raw token in a URL via `MailerInterface::sendPasswordReset()` (`rez-users`) |
@@ -596,6 +597,15 @@ These are the contracts the library defines. Implementations live in infrastruct
     (`fix/auth-current-role`). The `role` claim inside the JWT is informational only — never
     authorize by it.
 
+15. **Failed logins are throttled per email *and* client, never per email alone.**
+    `LoginThrottleKey` is `SHA-256` of the normalised email plus the caller's client key (the
+    client IP in rez-starter), so the `login_failures` table holds neither. Counting per email
+    alone would let anyone lock a real user out by typing wrong passwords; per pair, an attacker
+    only ever blocks their own attempts. A throttled key is refused before the password is
+    checked — otherwise the one differing answer would still confirm a correct guess. The window
+    slides: the next attempt opens when the oldest failure in it ages out, and that moment is the
+    exception's `retryAfterSeconds`.
+
 ### 3.7 Configuration system
 
 `PlatformConfig` is constructed by the client app and injected via PHP-DI. It is the single root of all feature configuration.
@@ -625,7 +635,8 @@ guest-facing `<rez-unsubscribe>` page (`rez-components`), same relationship
 separate value — never shares `jwtSecret`), `accessTokenTtlSeconds` (default 900, min 1 —
 renamed from `jwtTtlSeconds` in `feature/refresh-tokens`, when the default dropped from 3600),
 `passwordResetTtlMinutes` (default 60, min 1), `refreshTokenTtlSeconds` (default 2592000 = 30
-days, min 1), `refreshTokenReuseGraceSeconds` (default 30, min 0). This resolves the conflict the scaffold flagged:
+days, min 1), `refreshTokenReuseGraceSeconds` (default 30, min 0), `loginMaxFailedAttempts` (default 5, min 1)
+and `loginFailureWindowSeconds` (default 900, min 1) (`feature/login-throttling`). This resolves the conflict the scaffold flagged:
 `cancellationSecret` now lives here as originally planned, not on `MailerConfig`.
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
 `CreditsConfig` — COMPLETE. `minimumTopUpAmount` (int, min 1, haléře/cents), `currency` (non-empty string).
@@ -635,7 +646,7 @@ days, min 1), `refreshTokenReuseGraceSeconds` (default 30, min 0). This resolves
 ```
 PlatformConfig
   ├── MailerConfig          always required (cancellationBaseUrl, unsubscribeBaseUrl)
-  ├── UsersConfig           always required (jwtSecret, cancellationSecret, accessTokenTtlSeconds, passwordResetTtlMinutes, refreshTokenTtlSeconds, refreshTokenReuseGraceSeconds)
+  ├── UsersConfig           always required (jwtSecret, cancellationSecret, accessTokenTtlSeconds, passwordResetTtlMinutes, refreshTokenTtlSeconds, refreshTokenReuseGraceSeconds, loginMaxFailedAttempts, loginFailureWindowSeconds)
   ├── PaymentsConfig?       currency, webhookSecret
   ├── CreditsConfig?        minimumTopUpAmount, currency
   └── SubscriptionsConfig?  PlanConfig[]
@@ -683,6 +694,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Created via `database/migrations/20260101000005_create_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live, same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
 | `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites. Same migration file as `users` (`rez-users`) |
 | `refresh_tokens` | id (PK), family_id, user_id (FK → users, `ON DELETE CASCADE`), token_hash (CHAR 64, UNIQUE), expires_at, created_at, used_at (nullable), revoked_at (nullable) | `database/migrations/20260101000008_create_refresh_tokens.sql` (`feature/refresh-tokens`). One row per issued token — rotation inserts, never overwrites. Indexed on family_id and user_id for the two revocation paths. Uses `IF NOT EXISTS` because `MysqlMigrationRepositoryTest` replays migrations (see #101 in `docs/CONTEXT.md`). Expired rows are not purged yet |
+| `login_failures` | id (BIGINT auto-increment PK), throttle_key (CHAR 64 — `LoginThrottleKey` hash), failed_at | `database/migrations/20260101000009_create_login_failures.sql` (`feature/login-throttling`). One row per failed login, indexed on (throttle_key, failed_at); a successful login deletes its key's rows. Rows of keys that never succeed are inert once outside the window and not purged yet. `IF NOT EXISTS` for the migration replay |
 | `sessions` | id, resource_id (FK → resources, no CASCADE — resources are soft-deleted, invariant 13, so it never fires), start_time, duration_minutes, capacity, status | Created via `database/migrations/20260101000006_create_sessions.sql` (`rez-sessions`), no seed rows (a real collection, same pattern as `email_templates`) |
 | `schema_migrations` | name (PK), applied_at | `feature/db-migrations`. Tracks which migration files have run — bootstrap table, created by `MigrationRepositoryInterface::ensureMigrationsTable()` itself, not a numbered migration |
 
@@ -778,6 +790,7 @@ message`). Two cases send a **fixed generic message instead of the real one** �
 | `CannotDeleteLastAdminException` | 409 | `CANNOT_DELETE_LAST_ADMIN` | — |
 | `FeatureDisabledException` | 501 | `FEATURE_DISABLED` | `feature` |
 | `InvalidCredentialsException` | 401 | `INVALID_CREDENTIALS` | — |
+| `TooManyLoginAttemptsException` | 429 (+ `Retry-After` header) — mapping pending in rez-starter `feat/login-throttling`; until then it falls through to the generic `DomainException` 422 | `TOO_MANY_LOGIN_ATTEMPTS` | `retry_after_seconds` |
 | `InvalidTokenException` | 401 | `INVALID_TOKEN` | — |
 | `ForbiddenException` (`App\Http\Middleware\ForbiddenException` — `rez-starter`'s own, not `rez`'s) | 403 | `FORBIDDEN` | — |
 | `InsufficientFundsException` | 422 | `INSUFFICIENT_FUNDS` | — |
@@ -1276,7 +1289,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
 | Sessions | ✅ (`14_rez-sessions.md`) — fixed-time class occurrence; `Resource.defaultDurationMinutes`, `Reservation.sessionId` | ✅ Create/Get/List/Cancel + session-booking path on `CreateReservationUseCase` (cascade-cancel via `BulkCancelReservationsUseCase`) | ✅ | ✅ |
 | CancellationToken | ✅ value object + generation wired into 5 use cases | — | — | ✅ |
-| Users (core) | ✅ (+ `RefreshToken`) | ✅ (11 use cases + JwtService + AuthTokenIssuer) | ✅ (+ `MysqlRefreshTokenRepository`) | ✅ (`rez-users`, `feature/refresh-tokens`) |
+| Users (core) | ✅ (+ `RefreshToken`, `LoginThrottleKey`) | ✅ (11 use cases + JwtService + AuthTokenIssuer; login throttled) | ✅ (+ `MysqlRefreshTokenRepository`, `MysqlLoginFailureRepository`) | ✅ (`rez-users`, `feature/refresh-tokens`, `feature/login-throttling`) |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
 | Subscriptions | ❌ | ❌ | ❌ | — |

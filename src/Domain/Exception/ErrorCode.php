@@ -19,6 +19,7 @@ enum ErrorCode
     case FeatureDisabled;
     case InvalidToken;
     case InvalidCredentials;
+    case TooManyLoginAttempts;
     case InsufficientFunds;
     case InvalidParty;
     case InvalidReservationState;

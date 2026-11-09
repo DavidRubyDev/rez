@@ -7,6 +7,7 @@ namespace Rez\Application\UseCase\Auth\Login;
 interface LoginUseCaseInterface
 {
     /**
+     * @throws \Rez\Domain\Exception\TooManyLoginAttemptsException
      * @throws \Rez\Domain\Exception\InvalidCredentialsException
      * @throws \Rez\Application\Exception\DatabaseException
      */

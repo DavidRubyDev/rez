@@ -109,6 +109,7 @@ abstract class MysqlIntegrationTestCase extends TestCase
         $pdo->exec('TRUNCATE TABLE users');
         $pdo->exec('TRUNCATE TABLE password_reset_tokens');
         $pdo->exec('TRUNCATE TABLE refresh_tokens');
+        $pdo->exec('TRUNCATE TABLE login_failures');
         $pdo->exec('TRUNCATE TABLE sessions');
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
 
