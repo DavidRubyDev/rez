@@ -1016,8 +1016,9 @@ a client who wants their own design can still have it.
 | `<rez-cancel>` | Guest cancellation confirmation (reads `id`/`token` from the URL) | `rez.cancel.*` |
 | `<rez-unsubscribe>` | Newsletter unsubscribe confirmation (reads `email`/`token` from the URL) | `rez.unsubscribe.*` |
 | `<rez-login>` | Email + password sign-in; once signed in, "Signed in as {name}". Follows sign-ins/outs from any other account component or tab | `rez.account.*` |
+| `<rez-register>` | Account sign-up (name, email, password, newsletter opt-in); creating the account signs the visitor in | `rez.account.*` |
 | `<rez-logout>` | Sign-out button, shown only while someone is signed in | `rez.account.*` |
-| `<rez-account-menu>` | Header widget: "Sign in" → login dialog; signed in → name → panel with email and `<rez-logout>`. Answers `rez:login-required` | `rez.account.*` |
+| `<rez-account-menu>` | Header widget: "Sign in" → login dialog that can switch to sign-up; signed in → name → panel with email and `<rez-logout>`. Answers `rez:login-required` | `rez.account.*` |
 
 ### Bundles
 
@@ -1028,12 +1029,12 @@ A bundle groups components that appear on the same page, so no page loads code i
 | `rez.core.*` | `rez-calendar`, `rez-checkout`, `rez-newsletter` — used together on a booking page | `rez-components` |
 | `rez.cancel.*` | `rez-cancel` — standalone page linked from emails | `rez-components/cancel` |
 | `rez.unsubscribe.*` | `rez-unsubscribe` — standalone page linked from emails | `rez-components/unsubscribe` |
-| `rez.account.*` | `rez-login`, `rez-logout`, `rez-account-menu` (more account components to come — see below), plus the Layer 0 session layer and auth/config API calls | `rez-components/account` |
+| `rez.account.*` | `rez-login`, `rez-register`, `rez-logout`, `rez-account-menu` (more account components to come — see below), plus the Layer 0 session layer and auth/config API calls | `rez-components/account` |
 
 The original plan (`rez.core.js` = calendar + cancel + account, `rez.payments.js`,
 `rez.full.js`) is superseded by the table above.
 
-### Account & user features — architecture (decided November 2026; being built — session layer, `<rez-login>`, `<rez-logout>` and a minimal `<rez-account-menu>` done)
+### Account & user features — architecture (decided November 2026; being built — session layer, `<rez-login>`, `<rez-register>`, `<rez-logout>` and a minimal `<rez-account-menu>` done)
 
 Login, register, logout, profile, password and email changes, account deletion, credit
 balance and top-up, subscription status and checkout, booking history — and whatever comes
@@ -1086,7 +1087,18 @@ the menu's `api-base`/`lang`/`theme`/`translations` — `<rez-login>` uses `dele
 the email field gets focus — and the menu's own `login-footer` slot forwarded into its `footer`
 slot; the dialog closes itself once anyone signs in. Signed in → part `account` (the user's name,
 `aria-expanded`) toggles part `panel` with part `email` and `<rez-logout>`; Escape (focus returns
-to the name) or a click elsewhere closes it. `<rez-account>` and register come later.
+to the name) or a click elsewhere closes it. `<rez-account>` comes later.
+
+**`<rez-register>` and the sign-up switch (`feature/rez-register`).** `<rez-register>`: name
+(`autocomplete="name"`), email (`username`) and password (`new-password`), and a newsletter
+checkbox that starts unticked (consent must be the visitor's own act). Client checks mirror the
+API's rules only — name and password non-empty, a plausible email. Creating the account signs the
+visitor in, so it then shows the same "Signed in as {name}" summary. 409 → "An account with this
+email already exists." (everything typed kept, email focused); other errors as `<rez-login>`.
+Parts as `<rez-login>` plus `checkbox`; slot `footer`. In `<rez-account-menu>`'s dialog, part
+`switch` toggles between `<rez-login>` and `<rez-register>` (the dialog always reopens on
+sign-in); its `register-footer` slot is forwarded like `login-footer`, and the `no-register`
+attribute removes sign-up for sites whose users get accounts some other way.
 
 **Granularity rule.** The smallest unit is a *feature*, never a UI primitive — no
 `<rez-button>`/`<rez-input>`. Shipping primitives means building and maintaining a design
@@ -1175,7 +1187,8 @@ It also exports Layer 0: `SessionController` (any object implementing Lit's
 proving the event/storage protocol end to end → (4) profile, password, email, delete →
 (5) credits, then subscriptions, once their rez/rez-starter APIs exist. Progress: (1) done;
 (2) session layer, login throttling across rez/rez-starter/rez-admin, `<rez-login>` and
-`<rez-logout>` done — `<rez-register>` remains; (3) minimal `<rez-account-menu>` done.
+`<rez-register>`, `<rez-logout>` done; (3) minimal `<rez-account-menu>` done, with a sign-up
+switch. Next: (4).
 
 ### Component communication
 
