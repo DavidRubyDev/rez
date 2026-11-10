@@ -1016,6 +1016,8 @@ a client who wants their own design can still have it.
 | `<rez-cancel>` | Guest cancellation confirmation (reads `id`/`token` from the URL) | `rez.cancel.*` |
 | `<rez-unsubscribe>` | Newsletter unsubscribe confirmation (reads `email`/`token` from the URL) | `rez.unsubscribe.*` |
 | `<rez-login>` | Email + password sign-in; once signed in, "Signed in as {name}". Follows sign-ins/outs from any other account component or tab | `rez.account.*` |
+| `<rez-logout>` | Sign-out button, shown only while someone is signed in | `rez.account.*` |
+| `<rez-account-menu>` | Header widget: "Sign in" → login dialog; signed in → name → panel with email and `<rez-logout>`. Answers `rez:login-required` | `rez.account.*` |
 
 ### Bundles
 
@@ -1026,12 +1028,12 @@ A bundle groups components that appear on the same page, so no page loads code i
 | `rez.core.*` | `rez-calendar`, `rez-checkout`, `rez-newsletter` — used together on a booking page | `rez-components` |
 | `rez.cancel.*` | `rez-cancel` — standalone page linked from emails | `rez-components/cancel` |
 | `rez.unsubscribe.*` | `rez-unsubscribe` — standalone page linked from emails | `rez-components/unsubscribe` |
-| `rez.account.*` | `rez-login` (more account components to come — see below), plus the Layer 0 session layer and auth/config API calls | `rez-components/account` |
+| `rez.account.*` | `rez-login`, `rez-logout`, `rez-account-menu` (more account components to come — see below), plus the Layer 0 session layer and auth/config API calls | `rez-components/account` |
 
 The original plan (`rez.core.js` = calendar + cancel + account, `rez.payments.js`,
 `rez.full.js`) is superseded by the table above.
 
-### Account & user features — architecture (decided November 2026; being built — session layer and `<rez-login>` done)
+### Account & user features — architecture (decided November 2026; being built — session layer, `<rez-login>`, `<rez-logout>` and a minimal `<rez-account-menu>` done)
 
 Login, register, logout, profile, password and email changes, account deletion, credit
 balance and top-up, subscription status and checkout, booking history — and whatever comes
@@ -1075,6 +1077,16 @@ API error → the API's message; unreachable server → the generic message. Par
   <rez-account-menu api-base="https://api.studio.cz/api"></rez-account-menu>
   ```
 Adding a feature later = one new Layer 1 component + one line in the composite.
+
+**Built so far (`feature/rez-account-menu`).** `<rez-logout>`: a button (part `button`) rendered
+only while authenticated; "Signing out…" while in flight. `<rez-account-menu>` (minimal): renders
+nothing while `unknown`; signed out → part `sign-in` opens a native modal `<dialog>` (part
+`dialog`; Escape, backdrop click or part `close` closes it) holding `<rez-login autofocus>` with
+the menu's `api-base`/`lang`/`theme`/`translations` — `<rez-login>` uses `delegatesFocus`, so
+the email field gets focus — and the menu's own `login-footer` slot forwarded into its `footer`
+slot; the dialog closes itself once anyone signs in. Signed in → part `account` (the user's name,
+`aria-expanded`) toggles part `panel` with part `email` and `<rez-logout>`; Escape (focus returns
+to the name) or a click elsewhere closes it. `<rez-account>` and register come later.
 
 **Granularity rule.** The smallest unit is a *feature*, never a UI primitive — no
 `<rez-button>`/`<rez-input>`. Shipping primitives means building and maintaining a design
@@ -1126,7 +1138,10 @@ system. Clients customise instead through, in increasing depth:
 - `rez:login-required` — fired by any component that needs a signed-in user (`<rez-topup>`,
   `<rez-checkout>` when paying with credits, …). `<rez-account-menu>` listens and opens its
   login dialog, so no client glue code is needed; with no menu on the page, the component falls
-  back to rendering an inline `<rez-login>` itself.
+  back to rendering an inline `<rez-login>` itself. Built: detail `{apiBase}`, **cancelable** —
+  a component that takes it calls `preventDefault()`, so `dispatchLoginRequired(apiBase)`
+  returns whether anyone did (the cue for the inline fallback). The menu takes it only for its
+  own `api-base` and only while signed out. Exported from the account bundle for custom UIs.
 
 **Feature detection.** Composites show credits and subscription sections only when the
 deployment has them enabled. They read rez-starter's public, unauthenticated `GET /api/config`
@@ -1159,15 +1174,15 @@ It also exports Layer 0: `SessionController` (any object implementing Lit's
 `<rez-register>`, `<rez-logout>` + `rez:auth-changed` → (3) minimal `<rez-account-menu>`,
 proving the event/storage protocol end to end → (4) profile, password, email, delete →
 (5) credits, then subscriptions, once their rez/rez-starter APIs exist. Progress: (1) done;
-(2) session layer, login throttling across rez/rez-starter/rez-admin, and `<rez-login>` done —
-`<rez-logout>` next, alongside (3); `<rez-register>` after.
+(2) session layer, login throttling across rez/rez-starter/rez-admin, `<rez-login>` and
+`<rez-logout>` done — `<rez-register>` remains; (3) minimal `<rez-account-menu>` done.
 
 ### Component communication
 
 Components communicate only via `rez:*` Custom Events on `document` — never via shared module
 state or by reaching into each other. Built: `rez:slot-selected` (calendar → checkout),
-`rez:selection-cleared`, `rez:booking-complete` (checkout). Planned: `rez:auth-changed`,
-`rez:login-required` (see above).
+`rez:selection-cleared`, `rez:booking-complete` (checkout), `rez:auth-changed` (session layer)
+and `rez:login-required` (`<rez-account-menu>` answers it) — see above.
 
 ### Theming
 
