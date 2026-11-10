@@ -1090,7 +1090,8 @@ slot; the dialog closes itself once anyone signs in. Signed in → part `account
 to the name) or a click elsewhere closes it. `<rez-account>` comes later.
 
 **`<rez-register>` and the sign-up switch (`feature/rez-register`).** `<rez-register>`: name
-(`autocomplete="name"`), email (`username`) and password (`new-password`), and a newsletter
+(`autocomplete="name"`), email (`username`), password and its repeat (both `new-password`;
+a mismatch is caught before sending — the repeat never reaches the API), and a newsletter
 checkbox that starts unticked (consent must be the visitor's own act). Client checks mirror the
 API's rules only — name and password non-empty, a plausible email. Creating the account signs the
 visitor in, so it then shows the same "Signed in as {name}" summary. 409 → "An account with this
