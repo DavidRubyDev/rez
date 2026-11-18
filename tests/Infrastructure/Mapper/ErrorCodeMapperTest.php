@@ -154,4 +154,9 @@ class ErrorCodeMapperTest extends TestCase
     {
         $this->assertSame('PASSWORD_TOO_LONG', $this->mapper->toString(ErrorCode::PasswordTooLong));
     }
+
+    public function testEmailNotVerifiedMapsToString(): void
+    {
+        $this->assertSame('EMAIL_NOT_VERIFIED', $this->mapper->toString(ErrorCode::EmailNotVerified));
+    }
 }

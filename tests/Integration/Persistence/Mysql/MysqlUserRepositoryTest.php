@@ -177,6 +177,7 @@ class MysqlUserRepositoryTest extends MysqlIntegrationTestCase
             false,
             null,
             new \DateTimeImmutable('2024-01-01 10:00:00', $utc),
+            null,
         );
         $second = User::reconstruct(
             UserId::generate(),
@@ -187,6 +188,7 @@ class MysqlUserRepositoryTest extends MysqlIntegrationTestCase
             false,
             null,
             new \DateTimeImmutable('2024-01-01 10:00:01', $utc),
+            null,
         );
 
         $this->repository->save($second);
@@ -212,5 +214,24 @@ class MysqlUserRepositoryTest extends MysqlIntegrationTestCase
         $this->repository->save($this->makeUser('b@example.com'));
 
         $this->assertSame(2, $this->repository->findAll()->count());
+    }
+
+    public function testNewUserIsSavedWithAnUnverifiedEmail(): void
+    {
+        $user = $this->makeUser();
+        $this->repository->save($user);
+
+        $this->assertNull($this->repository->findById($user->id)->emailVerifiedAt);
+    }
+
+    public function testSaveStoresEmailVerifiedAt(): void
+    {
+        $verifiedAt = new \DateTimeImmutable('2026-11-18 10:00:00', new \DateTimeZone('UTC'));
+        $user       = $this->makeUser();
+        $this->repository->save($user);
+
+        $this->repository->save($user->withEmailVerifiedAt($verifiedAt));
+
+        $this->assertSame('2026-11-18 10:00:00', $this->repository->findById($user->id)->emailVerifiedAt?->format('Y-m-d H:i:s'));
     }
 }

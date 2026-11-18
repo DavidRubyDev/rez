@@ -25,6 +25,7 @@ final class ErrorCodeMapper
             ErrorCode::InvalidToken                  => 'INVALID_TOKEN',
             ErrorCode::InvalidCredentials             => 'INVALID_CREDENTIALS',
             ErrorCode::TooManyLoginAttempts          => 'TOO_MANY_LOGIN_ATTEMPTS',
+            ErrorCode::EmailNotVerified              => 'EMAIL_NOT_VERIFIED',
             ErrorCode::PasswordTooShort              => 'PASSWORD_TOO_SHORT',
             ErrorCode::PasswordTooLong               => 'PASSWORD_TOO_LONG',
             ErrorCode::InsufficientFunds             => 'INSUFFICIENT_FUNDS',

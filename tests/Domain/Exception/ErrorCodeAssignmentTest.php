@@ -10,6 +10,7 @@ use Rez\Domain\Exception\CannotDeleteLastAdminException;
 use Rez\Domain\Exception\CannotDeleteSelfException;
 use Rez\Domain\Exception\ConflictException;
 use Rez\Domain\Exception\EmailAlreadyRegisteredException;
+use Rez\Domain\Exception\EmailNotVerifiedException;
 use Rez\Domain\Exception\EmailTemplateNotFoundException;
 use Rez\Domain\Exception\ErrorCode;
 use Rez\Domain\Exception\FeatureDisabledException;
@@ -187,5 +188,12 @@ class ErrorCodeAssignmentTest extends TestCase
         $exception = new PasswordTooLongException(128);
         $this->assertSame(ErrorCode::PasswordTooLong, $exception->errorCode());
         $this->assertSame(['max_length' => '128'], $exception->errorParams());
+    }
+
+    public function testEmailNotVerifiedException(): void
+    {
+        $exception = new EmailNotVerifiedException();
+        $this->assertSame(ErrorCode::EmailNotVerified, $exception->errorCode());
+        $this->assertSame([], $exception->errorParams());
     }
 }
