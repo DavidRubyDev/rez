@@ -34,8 +34,6 @@ final class ResetPasswordUseCase implements ResetPasswordUseCaseInterface
      */
     public function execute(ResetPasswordRequest $request): ResetPasswordResponse
     {
-        $this->passwordPolicy->assertAllows($request->newPassword);
-
         $tokenHash = hash('sha256', $request->token);
 
         try {
@@ -47,6 +45,8 @@ final class ResetPasswordUseCase implements ResetPasswordUseCaseInterface
         if ($record['expires_at'] < Utc::now()) {
             throw new InvalidTokenException('Token has expired');
         }
+
+        $this->passwordPolicy->assertAllows($request->newPassword);
 
         try {
             $user = $this->userRepository->findByEmail($record['email']);

@@ -63,6 +63,16 @@ class ResetPasswordUseCaseTest extends TestCase
         $this->useCase->execute(new ResetPasswordRequest('some-token', 'fourteen-chars'));
     }
 
+    // A dead link is the answer that matters — fixing the password first would only lead to it.
+    public function testExpiredTokenWinsOverATooShortPassword(): void
+    {
+        $this->passwordResetRepository->method('findByTokenHash')->willReturn($this->record(Utc::now()->modify('-1 minute')));
+
+        $this->expectException(InvalidTokenException::class);
+
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'short'));
+    }
+
     public function testUnknownTokenThrowsInvalidTokenException(): void
     {
         $this->passwordResetRepository->method('findByTokenHash')->willThrowException(new InvalidTokenException('Token not found'));
