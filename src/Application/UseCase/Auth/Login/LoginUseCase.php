@@ -25,7 +25,7 @@ final class LoginUseCase implements LoginUseCaseInterface
      * password does. Same algorithm and cost as HashedPassword::fromPlainText() produces; the
      * password behind it was random and discarded.
      */
-    private const TIMING_DUMMY_HASH = '$2y$12$1jZ1gC9WeAzrX5s41gwJDeICvr/MxXeWsofbz2KGEZUTCbsYFrSsq';
+    private const TIMING_DUMMY_HASH = '$argon2id$v=19$m=65536,t=4,p=1$aW5hWEc4UDJRLnVPcHpHZw$jWMVvXrM7XCHEORp+8nssTTgW9N52pdLrikCgImlifs';
 
     public function __construct(
         private readonly UserRepositoryInterface $userRepository,
@@ -58,6 +58,10 @@ final class LoginUseCase implements LoginUseCaseInterface
         }
 
         $this->clearFailures($key);
+
+        if ($user->password->needsRehash()) {
+            $user = $this->saveRehashed($user, $request->password);
+        }
 
         return new LoginResponse($user, $this->tokenIssuer->issue($user));
     }
@@ -98,6 +102,22 @@ final class LoginUseCase implements LoginUseCaseInterface
         } catch (DatabaseException $e) {
             throw new DatabaseException('Failed to load user.', 0, $e);
         }
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    private function saveRehashed(User $user, string $plainText): User
+    {
+        $rehashed = $user->withPassword(HashedPassword::fromPlainText($plainText));
+
+        try {
+            $this->userRepository->save($rehashed);
+        } catch (DatabaseException $e) {
+            throw new DatabaseException('Failed to save rehashed password.', 0, $e);
+        }
+
+        return $rehashed;
     }
 
     /**
