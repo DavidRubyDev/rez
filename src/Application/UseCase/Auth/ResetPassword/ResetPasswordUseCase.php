@@ -8,6 +8,7 @@ use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\PasswordResetRepositoryInterface;
 use Rez\Application\Port\RefreshTokenRepositoryInterface;
 use Rez\Application\Port\UserRepositoryInterface;
+use Rez\Application\Service\EmailVerificationService;
 use Rez\Application\Service\PasswordPolicy;
 use Rez\Domain\Exception\InvalidTokenException;
 use Rez\Domain\Exception\PasswordTooLongException;
@@ -22,6 +23,7 @@ final class ResetPasswordUseCase implements ResetPasswordUseCaseInterface
         private readonly PasswordResetRepositoryInterface $passwordResetRepository,
         private readonly RefreshTokenRepositoryInterface $refreshTokenRepository,
         private readonly PasswordPolicy $passwordPolicy,
+        private readonly EmailVerificationService $emailVerification,
     ) {
     }
 
@@ -61,6 +63,10 @@ final class ResetPasswordUseCase implements ResetPasswordUseCaseInterface
         } catch (DatabaseException $e) {
             throw new DatabaseException('Failed to save user.', 0, $e);
         }
+
+        // The reset link reached this inbox, which proves ownership just as a verification
+        // link would — and is the only way an admin-created user ever proves it.
+        $this->emailVerification->markVerified($updated);
 
         try {
             $this->passwordResetRepository->deleteByEmail($record['email']);

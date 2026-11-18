@@ -118,6 +118,10 @@ use Rez\Application\UseCase\Auth\RequestPasswordReset\RequestPasswordResetUseCas
 use Rez\Application\UseCase\Auth\RequestPasswordReset\RequestPasswordResetUseCaseInterface;
 use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordUseCase;
 use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordUseCaseInterface;
+use Rez\Application\UseCase\Auth\VerifyEmail\VerifyEmailUseCase;
+use Rez\Application\UseCase\Auth\VerifyEmail\VerifyEmailUseCaseInterface;
+use Rez\Application\UseCase\Auth\ResendEmailVerification\ResendEmailVerificationUseCase;
+use Rez\Application\UseCase\Auth\ResendEmailVerification\ResendEmailVerificationUseCaseInterface;
 use Rez\Application\UseCase\User\DeleteUser\DeleteUserUseCase;
 use Rez\Application\UseCase\User\DeleteUser\DeleteUserUseCaseInterface;
 use Rez\Application\UseCase\User\GetUser\GetUserUseCase;
@@ -207,13 +211,13 @@ return [
     UnsubscribeUseCaseInterface::class        => autowire(UnsubscribeUseCase::class),
     BroadcastUseCaseInterface::class          => autowire(BroadcastUseCase::class),
     ListSubscribersUseCaseInterface::class    => autowire(ListSubscribersUseCase::class),
-    // Users are core (always present, never gated). UserRepositoryInterface and
-    // PasswordResetRepositoryInterface must be bound by the client app — same pattern as every
+    // Users are core (always present, never gated). UserRepositoryInterface,
+    // PasswordResetRepositoryInterface and EmailVerificationRepositoryInterface must be bound by the client app — same pattern as every
     // other rez-owned repository interface above. TokenGeneratorInterface is bound directly
     // below (unlike the repositories) since RandomTokenGenerator has no external dependency of
     // its own — nothing client-specific to override. MailerInterface (already bound above) must
-    // resolve to a concrete implementation that implements sendPasswordReset() for
-    // RequestPasswordResetUseCase to work.
+    // resolve to a concrete implementation that implements sendPasswordReset() and
+    // sendEmailVerification() for RequestPasswordResetUseCase and registration to work.
     TokenGeneratorInterface::class            => autowire(RandomTokenGenerator::class),
     JwtService::class                         => autowire(),
     RegisterUseCaseInterface::class           => autowire(RegisterUseCase::class),
@@ -222,6 +226,8 @@ return [
     LogoutUseCaseInterface::class             => autowire(LogoutUseCase::class),
     RequestPasswordResetUseCaseInterface::class => autowire(RequestPasswordResetUseCase::class),
     ResetPasswordUseCaseInterface::class      => autowire(ResetPasswordUseCase::class),
+    VerifyEmailUseCaseInterface::class        => autowire(VerifyEmailUseCase::class),
+    ResendEmailVerificationUseCaseInterface::class => autowire(ResendEmailVerificationUseCase::class),
     GetUserUseCaseInterface::class            => autowire(GetUserUseCase::class),
     DeleteUserUseCaseInterface::class         => autowire(DeleteUserUseCase::class),
     UpdateUserUseCaseInterface::class         => autowire(UpdateUserUseCase::class),

@@ -7,7 +7,13 @@ namespace Rez\Tests\Application\UseCase\Auth;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Rez\Application\Exception\DatabaseException;
+use Psr\Log\NullLogger;
+use Rez\Application\Port\EmailVerificationRepositoryInterface;
+use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\PasswordResetRepositoryInterface;
+use Rez\Application\Port\TokenGeneratorInterface;
+use Rez\Application\Service\EmailVerificationService;
+use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
 use Rez\Application\Port\RefreshTokenRepositoryInterface;
 use Rez\Application\Port\UserRepositoryInterface;
 use Rez\Application\Config\UsersConfig;
@@ -26,6 +32,7 @@ class ResetPasswordUseCaseTest extends TestCase
     private UserRepositoryInterface&MockObject $userRepository;
     private PasswordResetRepositoryInterface&MockObject $passwordResetRepository;
     private RefreshTokenRepositoryInterface&MockObject $refreshTokenRepository;
+    private EmailVerificationRepositoryInterface&MockObject $verificationRepository;
     private ResetPasswordUseCase $useCase;
     private User $user;
 
@@ -34,14 +41,26 @@ class ResetPasswordUseCaseTest extends TestCase
         $this->userRepository          = $this->createMock(UserRepositoryInterface::class);
         $this->passwordResetRepository = $this->createMock(PasswordResetRepositoryInterface::class);
         $this->refreshTokenRepository  = $this->createMock(RefreshTokenRepositoryInterface::class);
+        $this->verificationRepository  = $this->createMock(EmailVerificationRepositoryInterface::class);
+        $config                        = new UsersConfig('super-secret', 'super-secret-cancellation-key');
         $this->useCase                 = new ResetPasswordUseCase(
             $this->userRepository,
             $this->passwordResetRepository,
             $this->refreshTokenRepository,
-            new PasswordPolicy(new UsersConfig('super-secret', 'super-secret-cancellation-key')),
+            new PasswordPolicy($config),
+            new EmailVerificationService(
+                $this->verificationRepository,
+                $this->userRepository,
+                $this->createMock(TokenGeneratorInterface::class),
+                $this->createMock(MailerInterface::class),
+                $this->createMock(SubscribeUseCaseInterface::class),
+                $config,
+                new NullLogger(),
+            ),
         );
 
-        $this->user = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('old-password'));
+        $this->user = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('old-password'))
+            ->withEmailVerifiedAt(Utc::now());
     }
 
     /** @return array{email: string, expires_at: \DateTimeImmutable} */
@@ -165,6 +184,35 @@ class ResetPasswordUseCaseTest extends TestCase
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to revoke refresh tokens.');
+
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
+    }
+
+    public function testResettingTheUnverifiedEmailsPasswordVerifiesIt(): void
+    {
+        $unverified = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('old-password'));
+        $this->passwordResetRepository->method('findByTokenHash')->willReturn($this->record(Utc::now()->modify('+10 minutes')));
+        $this->userRepository->method('findByEmail')->willReturn($unverified);
+
+        $saved = [];
+        $this->userRepository->method('save')->willReturnCallback(function (User $user) use (&$saved): void {
+            $saved[] = $user;
+        });
+        $this->verificationRepository->expects($this->once())->method('deleteForUser')->with($unverified->id);
+
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
+
+        $last = end($saved);
+        $this->assertInstanceOf(User::class, $last);
+        $this->assertTrue($last->isEmailVerified());
+        $this->assertTrue($last->password->verify('new-password-long-enough'));
+    }
+
+    public function testResettingAVerifiedEmailsPasswordLeavesItsVerificationAlone(): void
+    {
+        $this->passwordResetRepository->method('findByTokenHash')->willReturn($this->record(Utc::now()->modify('+10 minutes')));
+        $this->userRepository->method('findByEmail')->willReturn($this->user);
+        $this->verificationRepository->expects($this->never())->method('deleteForUser');
 
         $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
     }

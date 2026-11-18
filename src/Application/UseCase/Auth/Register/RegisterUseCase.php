@@ -6,15 +6,12 @@ namespace Rez\Application\UseCase\Auth\Register;
 
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\UserRepositoryInterface;
-use Rez\Application\Service\AuthTokenIssuer;
+use Rez\Application\Service\EmailVerificationService;
 use Rez\Application\Service\PasswordPolicy;
-use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeRequest;
-use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
 use Rez\Domain\Exception\EmailAlreadyRegisteredException;
 use Rez\Domain\Exception\PasswordTooLongException;
 use Rez\Domain\Exception\PasswordTooShortException;
 use Rez\Domain\Exception\UserNotFoundException;
-use Rez\Domain\Newsletter\SubscriberSource;
 use Rez\Domain\User\HashedPassword;
 use Rez\Domain\User\User;
 use Rez\Domain\User\UserId;
@@ -23,9 +20,8 @@ final class RegisterUseCase implements RegisterUseCaseInterface
 {
     public function __construct(
         private readonly UserRepositoryInterface $userRepository,
-        private readonly SubscribeUseCaseInterface $subscribeUseCase,
-        private readonly AuthTokenIssuer $tokenIssuer,
         private readonly PasswordPolicy $passwordPolicy,
+        private readonly EmailVerificationService $emailVerification,
     ) {
     }
 
@@ -62,10 +58,8 @@ final class RegisterUseCase implements RegisterUseCaseInterface
             throw new DatabaseException('Failed to save user.', 0, $e);
         }
 
-        if ($request->newsletterOptIn) {
-            $this->subscribeUseCase->execute(new SubscribeRequest($request->email, $request->name, SubscriberSource::Registered));
-        }
+        $this->emailVerification->sendLink($user, $request->verificationBaseUrl);
 
-        return new RegisterResponse($user, $this->tokenIssuer->issue($user));
+        return new RegisterResponse($user);
     }
 }

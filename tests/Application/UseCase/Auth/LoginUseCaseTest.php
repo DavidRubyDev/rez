@@ -18,6 +18,7 @@ use Rez\Application\Service\JwtService;
 use Rez\Application\UseCase\Auth\Login\LoginRequest;
 use Rez\Application\UseCase\Auth\Login\LoginUseCase;
 use Rez\Domain\Auth\LoginThrottleKey;
+use Rez\Domain\Exception\EmailNotVerifiedException;
 use Rez\Domain\Exception\InvalidCredentialsException;
 use Rez\Domain\Exception\TooManyLoginAttemptsException;
 use Rez\Domain\Exception\UserNotFoundException;
@@ -54,7 +55,8 @@ class LoginUseCaseTest extends TestCase
         $issuer        = new AuthTokenIssuer($this->jwtService, $this->refreshTokenRepository, $tokenGenerator, $config);
         $this->useCase = new LoginUseCase($this->userRepository, $issuer, $this->loginFailureRepository, $config);
 
-        $this->user = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('correct-password'));
+        $this->user = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('correct-password'))
+            ->withEmailVerifiedAt(Utc::now());
     }
 
     private function login(string $password, string $email = 'john@example.com'): void
@@ -148,7 +150,7 @@ class LoginUseCaseTest extends TestCase
             'John Doe',
             'john@example.com',
             HashedPassword::fromHash(password_hash('correct-password', PASSWORD_BCRYPT)),
-        );
+        )->withEmailVerifiedAt(Utc::now());
     }
 
     public function testLoginWithALegacyBcryptHashSavesItRehashed(): void
@@ -346,5 +348,41 @@ class LoginUseCaseTest extends TestCase
         }
 
         return (hrtime(true) - $start) / 1e9;
+    }
+
+    private function unverifiedUser(): User
+    {
+        return User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('correct-password'));
+    }
+
+    public function testUnverifiedEmailWithTheRightPasswordIsRefusedWithoutSigningIn(): void
+    {
+        $this->userRepository->method('findByEmail')->willReturn($this->unverifiedUser());
+        $this->refreshTokenRepository->expects($this->never())->method('save');
+
+        $this->expectException(EmailNotVerifiedException::class);
+
+        $this->login('correct-password');
+    }
+
+    public function testUnverifiedEmailWithAWrongPasswordGetsTheUsualAnswer(): void
+    {
+        $this->userRepository->method('findByEmail')->willReturn($this->unverifiedUser());
+
+        $this->expectException(InvalidCredentialsException::class);
+
+        $this->login('wrong-password');
+    }
+
+    public function testUnverifiedEmailWithTheRightPasswordIsNotCountedAsAFailure(): void
+    {
+        $this->userRepository->method('findByEmail')->willReturn($this->unverifiedUser());
+        $this->loginFailureRepository->method('failedSince')->willReturn([]);
+        $this->loginFailureRepository->expects($this->never())->method('record');
+
+        try {
+            $this->login('correct-password');
+        } catch (EmailNotVerifiedException) {
+        }
     }
 }
