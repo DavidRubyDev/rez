@@ -12,6 +12,8 @@ use Rez\Application\Port\TokenGeneratorInterface;
 use Rez\Application\Port\UserRepositoryInterface;
 use Rez\Application\Service\AuthTokenIssuer;
 use Rez\Application\Service\JwtService;
+use Rez\Application\Service\PasswordPolicy;
+use Rez\Domain\Exception\PasswordTooShortException;
 use Rez\Application\UseCase\Auth\Register\RegisterRequest;
 use Rez\Application\UseCase\Auth\Register\RegisterUseCase;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeRequest;
@@ -34,6 +36,7 @@ class RegisterUseCaseTest extends TestCase
     private RefreshTokenRepositoryInterface&MockObject $refreshTokenRepository;
     private AuthTokenIssuer $issuer;
     private RegisterUseCase $useCase;
+    private UsersConfig $config;
 
     protected function setUp(): void
     {
@@ -41,18 +44,40 @@ class RegisterUseCaseTest extends TestCase
         $this->subscribeUseCase  = $this->createMock(SubscribeUseCaseInterface::class);
         $this->refreshTokenRepository = $this->createMock(RefreshTokenRepositoryInterface::class);
         $config                       = new UsersConfig('super-secret-jwt-at-least-32-bytes-long', 'super-secret-cancellation-key');
+        $this->config                 = $config;
         $tokenGenerator               = $this->createMock(TokenGeneratorInterface::class);
         $tokenGenerator->method('generate')->willReturn('raw-refresh-token');
         $this->issuer = new AuthTokenIssuer(new JwtService($config), $this->refreshTokenRepository, $tokenGenerator, $config);
 
         $this->userRepository->method('findByEmail')->willThrowException(new UserNotFoundException('john@example.com'));
 
-        $this->useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer);
+        $this->useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer, new PasswordPolicy($config));
     }
 
-    private function request(bool $newsletterOptIn = false): RegisterRequest
+    private function request(bool $newsletterOptIn = false, string $password = 'correct-horse-battery-staple'): RegisterRequest
     {
-        return new RegisterRequest('John Doe', 'john@example.com', 'correct-horse-battery-staple', $newsletterOptIn);
+        return new RegisterRequest('John Doe', 'john@example.com', $password, $newsletterOptIn);
+    }
+
+    public function testPasswordTooShortThrowsAndSavesNothing(): void
+    {
+        $this->userRepository->expects($this->never())->method('save');
+        $this->subscribeUseCase->expects($this->never())->method('execute');
+
+        $this->expectException(PasswordTooShortException::class);
+
+        $this->useCase->execute($this->request(newsletterOptIn: true, password: 'fourteen-chars'));
+    }
+
+    public function testPasswordIsCheckedBeforeTheEmailIsLookedUp(): void
+    {
+        $this->userRepository = $this->createMock(UserRepositoryInterface::class);
+        $this->userRepository->expects($this->never())->method('findByEmail');
+        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer, new PasswordPolicy($this->config));
+
+        $this->expectException(PasswordTooShortException::class);
+
+        $useCase->execute($this->request(password: 'short'));
     }
 
     public function testDuplicateEmailThrowsEmailAlreadyRegisteredException(): void
@@ -60,7 +85,7 @@ class RegisterUseCaseTest extends TestCase
         $existing = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('x'));
         $this->userRepository = $this->createMock(UserRepositoryInterface::class);
         $this->userRepository->method('findByEmail')->willReturn($existing);
-        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer);
+        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer, new PasswordPolicy($this->config));
 
         $this->expectException(EmailAlreadyRegisteredException::class);
 
@@ -71,7 +96,7 @@ class RegisterUseCaseTest extends TestCase
     {
         $this->userRepository = $this->createMock(UserRepositoryInterface::class);
         $this->userRepository->method('findByEmail')->willThrowException(new DatabaseException('pdo error'));
-        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer);
+        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer, new PasswordPolicy($this->config));
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to check for existing user.');

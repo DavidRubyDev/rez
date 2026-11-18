@@ -27,6 +27,8 @@ use Rez\Domain\Exception\ResourceNotFoundException;
 use Rez\Domain\Exception\SessionNotFoundException;
 use Rez\Domain\Exception\UserNotFoundException;
 use Rez\Domain\Exception\TooManyLoginAttemptsException;
+use Rez\Domain\Exception\PasswordTooLongException;
+use Rez\Domain\Exception\PasswordTooShortException;
 use Rez\Domain\Reservation\TimeSlot;
 use Rez\Domain\Resource\Resource;
 use Rez\Domain\Resource\ResourceId;
@@ -171,5 +173,19 @@ class ErrorCodeAssignmentTest extends TestCase
         $this->assertSame(ErrorCode::TooManyLoginAttempts, $exception->errorCode());
         $this->assertSame(['retry_after_seconds' => '120'], $exception->errorParams());
         $this->assertSame(120, $exception->retryAfterSeconds);
+    }
+
+    public function testPasswordTooShortException(): void
+    {
+        $exception = new PasswordTooShortException(15);
+        $this->assertSame(ErrorCode::PasswordTooShort, $exception->errorCode());
+        $this->assertSame(['min_length' => '15'], $exception->errorParams());
+    }
+
+    public function testPasswordTooLongException(): void
+    {
+        $exception = new PasswordTooLongException(128);
+        $this->assertSame(ErrorCode::PasswordTooLong, $exception->errorCode());
+        $this->assertSame(['max_length' => '128'], $exception->errorParams());
     }
 }

@@ -144,4 +144,14 @@ class ErrorCodeMapperTest extends TestCase
     {
         $this->assertSame('INTERNAL_ERROR', $this->mapper->toString(ErrorCode::InternalError));
     }
+
+    public function testPasswordTooShortMapsToString(): void
+    {
+        $this->assertSame('PASSWORD_TOO_SHORT', $this->mapper->toString(ErrorCode::PasswordTooShort));
+    }
+
+    public function testPasswordTooLongMapsToString(): void
+    {
+        $this->assertSame('PASSWORD_TOO_LONG', $this->mapper->toString(ErrorCode::PasswordTooLong));
+    }
 }

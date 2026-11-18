@@ -51,6 +51,36 @@ class UsersConfigTest extends TestCase
         $this->assertSame(30, $config->refreshTokenReuseGraceSeconds);
         $this->assertSame(5, $config->loginMaxFailedAttempts);
         $this->assertSame(900, $config->loginFailureWindowSeconds);
+        $this->assertSame(15, $config->passwordMinLength);
+        $this->assertSame(128, $config->passwordMaxLength);
+    }
+
+    public function testPasswordLengthsCanBeConfigured(): void
+    {
+        $config = new UsersConfig('super-secret', 'super-secret-cancellation-key', passwordMinLength: 12, passwordMaxLength: 64);
+
+        $this->assertSame(12, $config->passwordMinLength);
+        $this->assertSame(64, $config->passwordMaxLength);
+    }
+
+    // NIST SP 800-63B never allows fewer than eight characters, whatever else the deployment does.
+    public function testPasswordMinLengthBelowEightThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new UsersConfig('super-secret', 'super-secret-cancellation-key', passwordMinLength: 7);
+    }
+
+    public function testPasswordMaxLengthBelowMinLengthThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new UsersConfig('super-secret', 'super-secret-cancellation-key', passwordMinLength: 20, passwordMaxLength: 19);
+    }
+
+    public function testPasswordMaxLengthEqualToMinLengthIsAllowed(): void
+    {
+        $config = new UsersConfig('super-secret', 'super-secret-cancellation-key', passwordMinLength: 20, passwordMaxLength: 20);
+
+        $this->assertSame(20, $config->passwordMaxLength);
     }
 
     public function testEmptyJwtSecretThrows(): void
