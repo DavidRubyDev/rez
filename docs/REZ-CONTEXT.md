@@ -305,9 +305,11 @@ time this module was built.
   updaters: `withName()`, `withNewsletterOptIn()`, `withStripeCustomerId()`, `withPassword()`,
   `withRole()` (same pattern as `EmailTemplate::withContent()`). `isAdmin(): bool`.
 - `UserId` — UUID v4 value object, `UuidV4Id` trait (same as `ResourceId`/`NewsletterSubscriberId`).
-- `HashedPassword` — value object wrapping a bcrypt hash. `fromPlainText()` (hashes via
-  `password_hash(..., PASSWORD_BCRYPT)`), `fromHash()` (DB hydration), `verify()`
-  (`password_verify()`).
+- `HashedPassword` — value object wrapping a password hash. `fromPlainText()` (hashes via
+  `password_hash(..., PASSWORD_ARGON2ID)` — bcrypt until `feature/password-policy`, dropped
+  because it ignores everything past 72 bytes), `fromHash()` (DB hydration), `verify()`
+  (`password_verify()`, still accepts legacy bcrypt hashes), `needsRehash()` (true for a bcrypt
+  hash; `LoginUseCase` replaces it on the owner's next successful login).
 - `UserRole` — pure enum: `Customer`, `Admin`. String mapping in `UserRoleMapper`.
 - `UserCollection` — immutable collection, same pattern as `ResourceCollection`, plus
   `findByEmail(string): ?User`.
@@ -442,6 +444,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `ReservationEmailService` | Settings-gated send/log/swallow for all three reservation-lifecycle emails (`sendCreatedIfEnabled`, `sendConfirmedIfEnabled`, `sendCancelledIfEnabled`). Takes `ReservationSettings` from the caller rather than loading it — avoids a second DB read per request. Single home for invariant 11. No interface, injected as a concrete class (same pattern as `FeatureGuard`) | COMPLETE (`rez-lifecycle-email-integration`) |
 | `JwtService` | JWT generation and validation using `firebase/php-jwt` v7 (HS256). `generate(UserId, UserRole): string`, `validate(string): array` (throws `InvalidTokenException` on bad signature or expiry), `extractUserId()`, `extractRole()`. No interface — injected as a concrete class (same pattern as `FeatureGuard`). Lifetime is `UsersConfig::$accessTokenTtlSeconds` | COMPLETE (`rez-users`) |
 | `AuthTokenIssuer` | The single place an access JWT and a refresh token are minted together: `issue(User, ?RefreshTokenFamilyId): AuthTokens` (`accessToken`, `accessTokenExpiresAt`, `refreshToken` (raw), `refreshTokenExpiresAt`). Omit the family to start a new login; pass it when rotating. Saves only the hash. Used by `LoginUseCase`, `RegisterUseCase`, `RefreshUseCase`. Concrete class, no interface | COMPLETE (`feature/refresh-tokens`) |
+| `PasswordPolicy` | `assertAllows(string $plainText)`: length in characters (`mb_strlen`, code points) between `UsersConfig::$passwordMinLength` and `$passwordMaxLength`, else `PasswordTooShortException`/`PasswordTooLongException`. Length is the only rule (invariant 16). Used by `RegisterUseCase` and `ResetPasswordUseCase` — never by login. Concrete class, no interface | COMPLETE (`feature/password-policy`) |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
 | `LoggerInterface` (PSR-3) | Injected via container. `NullLogger` default. Concrete implementation (Monolog) wired in `rez-starter`. | COMPLETE |
@@ -490,12 +493,12 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `UnsubscribeUseCase` | `UnsubscribeRequest(email, ?token)` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found. `feature/newsletter-unsubscribe-token`: `token` optional, verified via `UnsubscribeToken` against `email` when present, throwing `InvalidTokenException` on mismatch before `delete()` — `null` preserves the prior no-check behavior admin callers rely on. `feature/newsletter-unsubscribe-confirmation-email`: on an actual deletion (either path), sends `MailerInterface::sendUnsubscribeConfirmedEmail()` via try/catch-and-log, same non-fatal-email pattern as `SubscribeUseCase` — never sent on the not-found no-op or an invalid-token rejection |
 | `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). `feature/newsletter-unsubscribe-token`: generates a per-subscriber `UnsubscribeToken` from `UsersConfig::$cancellationSecret` inside the send loop and passes it to `sendNewClassNotification()` |
 | `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse(subscribers, total)` | `13_rez-pagination.md`: filters (`search` against email/name, `source`) + `offset`/`limit`/`sortBy`/`sortDir` (`email`\|`name`\|`source`\|`opted_in_at`, default sort `opted_in_at ASC` preserved) via `NewsletterRepositoryInterface::findPage()`/`countPage()`. `findAll()` untouched — still `BroadcastUseCase`'s only caller |
-| `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, AuthTokens $tokens)` | No `FeatureGuard` — users are never gated. `findByEmail()` first (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; issues access + refresh tokens via `AuthTokenIssuer` — only after the user is saved (`rez-users`, `feature/refresh-tokens`) |
-| `LoginUseCase` | `LoginRequest(email, password, clientKey)` | `LoginResponse(User, AuthTokens $tokens)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6), and only after checking the password against a dummy bcrypt hash, so it takes as long as a wrong password. Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed. Both record a failure against `LoginThrottleKey(email, clientKey)`; at `loginMaxFailedAttempts` failures within `loginFailureWindowSeconds` the key is refused with `TooManyLoginAttemptsException(retryAfterSeconds)` **before** the password is checked, and refused attempts aren't recorded (invariant 15). Success clears the key's failures and starts a new refresh token family via `AuthTokenIssuer` (`rez-users`, `feature/refresh-tokens`, `feature/login-throttling`) |
+| `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, AuthTokens $tokens)` | No `FeatureGuard` — users are never gated. `PasswordPolicy::assertAllows()` first (`feature/password-policy`), then `findByEmail()` (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; issues access + refresh tokens via `AuthTokenIssuer` — only after the user is saved (`rez-users`, `feature/refresh-tokens`) |
+| `LoginUseCase` | `LoginRequest(email, password, clientKey)` | `LoginResponse(User, AuthTokens $tokens)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6), and only after checking the password against a dummy Argon2id hash, so it takes as long as a wrong password. Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed. Both record a failure against `LoginThrottleKey(email, clientKey)`; at `loginMaxFailedAttempts` failures within `loginFailureWindowSeconds` the key is refused with `TooManyLoginAttemptsException(retryAfterSeconds)` **before** the password is checked, and refused attempts aren't recorded (invariant 15). Success clears the key's failures, saves the user with a fresh Argon2id hash if `HashedPassword::needsRehash()` (a legacy bcrypt hash — login is the only moment the plain text is known; no length check, so pre-policy passwords keep working), and starts a new refresh token family via `AuthTokenIssuer` (`rez-users`, `feature/refresh-tokens`, `feature/login-throttling`, `feature/password-policy`) |
 | `RefreshUseCase` | `RefreshRequest(refreshToken)` | `RefreshResponse(User, AuthTokens)` | (`feature/refresh-tokens`) Looks up by hash; revoked/expired → `InvalidTokenException`. Unused → marked used, successor issued in the same family. **Already used** → within `refreshTokenReuseGraceSeconds` (default 30 — tabs or bundles racing each other) a successor is issued anyway; outside it the token was replayed, so the whole family is revoked, a warning logged, and `InvalidTokenException` thrown (invariant 14). Reloads the user, so the new access token carries the user's *current* role; a deleted user → `InvalidTokenException` |
 | `LogoutUseCase` | `LogoutRequest(refreshToken)` | `LogoutResponse` | (`feature/refresh-tokens`) Revokes the presented token's family. Unknown/already-revoked token → silent success (the caller is logged out either way) |
 | `RequestPasswordResetUseCase` | `RequestPasswordResetRequest(email, resetBaseUrl)` | `RequestPasswordResetResponse(bool $sent)` | Unknown email → `sent: true` silently, no token generated, no email sent (never reveals existence). Known email: generates a raw token via `TokenGeneratorInterface`, stores only `SHA-256(rawToken)` via `PasswordResetRepositoryInterface` (invariant 5), emails the raw token in a URL via `MailerInterface::sendPasswordReset()` (`rez-users`) |
-| `ResetPasswordUseCase` | `ResetPasswordRequest(token, newPassword)` | `ResetPasswordResponse(bool $success)` | Hashes the incoming token and looks it up (never by raw token — invariant 5); `InvalidTokenException` if not found or expired; on success, re-hashes the new password, saves the user, deletes the reset token row, and revokes every refresh token the user has (`revokeAllForUser`) — a reset is how someone takes their account back, so no earlier login may survive it (`rez-users`, `feature/refresh-tokens`) |
+| `ResetPasswordUseCase` | `ResetPasswordRequest(token, newPassword)` | `ResetPasswordResponse(bool $success)` | Hashes the incoming token and looks it up (never by raw token — invariant 5); `InvalidTokenException` if not found or expired — checked before `PasswordPolicy`, since a dead link is the answer that matters, and a refused password leaves the token usable; on success, re-hashes the new password, saves the user, deletes the reset token row, and revokes every refresh token the user has (`revokeAllForUser`) — a reset is how someone takes their account back, so no earlier login may survive it (`rez-users`, `feature/refresh-tokens`) |
 | `GetUserUseCase` | `GetUserRequest(UserId)` | `GetUserResponse(User)` | (`rez-users`) |
 | `UpdateUserUseCase` | `UpdateUserRequest(UserId, ?name, ?newsletterOptIn)` | `UpdateUserResponse(User)` | PATCH semantics via `User`'s `with*()` methods — self-service profile update, no role field (`rez-users`) |
 | `ListUsersUseCase` | `ListUsersRequest` | `ListUsersResponse(users, total)` | Admin-only by convention — auth enforcement is the HTTP layer's job, not this use case's (`rez-users`). `13_rez-pagination.md`: `ListUsersRequest` gained filters (`search` against name/email, `role`) + `offset`/`limit`/`sortBy`/`sortDir` (`name`\|`email`\|`role`\|`created_at`, default sort `created_at ASC` preserved) via `UserRepositoryInterface::findPage()`/`countPage()` — first `Request` in the codebase to go from empty to populated. `findAll()` untouched |
@@ -605,6 +608,12 @@ These are the contracts the library defines. Implementations live in infrastruct
     checked — otherwise the one differing answer would still confirm a correct guess. The window
     slides: the next attempt opens when the oldest failure in it ages out, and that moment is the
     exception's `retryAfterSeconds`.
+16. **Password length is the only password rule.** Per NIST SP 800-63B: no required mix of
+    upper/lower case, digits or symbols (they push people to `Password1!`), every character
+    allowed, spaces included. `PasswordPolicy` enforces `UsersConfig`'s min/max length (default
+    15–128, counted in characters) only when a password is *set* — register and reset — never at
+    login, so tightening the policy never locks anyone out. Client components read the same
+    limits from `GET /api/config` for hints, but the API's 422 is what counts.
 
 ### 3.7 Configuration system
 
@@ -636,7 +645,8 @@ separate value — never shares `jwtSecret`), `accessTokenTtlSeconds` (default 9
 renamed from `jwtTtlSeconds` in `feature/refresh-tokens`, when the default dropped from 3600),
 `passwordResetTtlMinutes` (default 60, min 1), `refreshTokenTtlSeconds` (default 2592000 = 30
 days, min 1), `refreshTokenReuseGraceSeconds` (default 30, min 0), `loginMaxFailedAttempts` (default 5, min 1)
-and `loginFailureWindowSeconds` (default 900, min 1) (`feature/login-throttling`). This resolves the conflict the scaffold flagged:
+and `loginFailureWindowSeconds` (default 900, min 1) (`feature/login-throttling`), `passwordMinLength` (default 15, min 8 —
+NIST's absolute floor) and `passwordMaxLength` (default 128, min `passwordMinLength`) (`feature/password-policy`). This resolves the conflict the scaffold flagged:
 `cancellationSecret` now lives here as originally planned, not on `MailerConfig`.
 `PaymentsConfig` — COMPLETE. `currency` (non-empty string), `webhookSecret` (non-empty string).
 `CreditsConfig` — COMPLETE. `minimumTopUpAmount` (int, min 1, haléře/cents), `currency` (non-empty string).
@@ -646,7 +656,7 @@ and `loginFailureWindowSeconds` (default 900, min 1) (`feature/login-throttling`
 ```
 PlatformConfig
   ├── MailerConfig          always required (cancellationBaseUrl, unsubscribeBaseUrl)
-  ├── UsersConfig           always required (jwtSecret, cancellationSecret, accessTokenTtlSeconds, passwordResetTtlMinutes, refreshTokenTtlSeconds, refreshTokenReuseGraceSeconds, loginMaxFailedAttempts, loginFailureWindowSeconds)
+  ├── UsersConfig           always required (jwtSecret, cancellationSecret, accessTokenTtlSeconds, passwordResetTtlMinutes, refreshTokenTtlSeconds, refreshTokenReuseGraceSeconds, loginMaxFailedAttempts, loginFailureWindowSeconds, passwordMinLength, passwordMaxLength)
   ├── PaymentsConfig?       currency, webhookSecret
   ├── CreditsConfig?        minimumTopUpAmount, currency
   └── SubscriptionsConfig?  PlanConfig[]
@@ -691,7 +701,7 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `reservation_settings` | id (always 1, single row by convention), auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at | Created via `database/migrations/20260101000002_create_reservation_settings.sql` (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`) |
 | `mailer_settings` | id (always 1, single row by convention), from_address, from_name, updated_at | Created via `database/migrations/20260101000003_create_mailer_settings.sql`, same pattern as `reservation_settings`. Seeded defaults (`noreply@example.com` / `Rez`) are placeholders — every deployment must update them before going live |
 | `email_templates` | id, subject, html (MEDIUMTEXT), created_at | Created via `database/migrations/20260101000004_create_email_templates.sql` — no seed rows (a real collection, not a singleton settings table) |
-| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Created via `database/migrations/20260101000005_create_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live, same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
+| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Created via `database/migrations/20260101000005_create_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live (stored as a bcrypt hash, upgraded to Argon2id on first login; shorter than the default 15-character policy, which applies only once it's changed), same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
 | `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites. Same migration file as `users` (`rez-users`) |
 | `refresh_tokens` | id (PK), family_id, user_id (FK → users, `ON DELETE CASCADE`), token_hash (CHAR 64, UNIQUE), expires_at, created_at, used_at (nullable), revoked_at (nullable) | `database/migrations/20260101000008_create_refresh_tokens.sql` (`feature/refresh-tokens`). One row per issued token — rotation inserts, never overwrites. Indexed on family_id and user_id for the two revocation paths. Uses `IF NOT EXISTS` because `MysqlMigrationRepositoryTest` replays migrations (see #101 in `docs/CONTEXT.md`). Expired rows are not purged yet |
 | `login_failures` | id (BIGINT auto-increment PK), throttle_key (CHAR 64 — `LoginThrottleKey` hash), failed_at | `database/migrations/20260101000009_create_login_failures.sql` (`feature/login-throttling`). One row per failed login, indexed on (throttle_key, failed_at); a successful login deletes its key's rows. Rows of keys that never succeed are inert once outside the window and not purged yet. `IF NOT EXISTS` for the migration replay |
@@ -792,6 +802,8 @@ message`). Two cases send a **fixed generic message instead of the real one** �
 | `InvalidCredentialsException` | 401 | `INVALID_CREDENTIALS` | — |
 | `TooManyLoginAttemptsException` | 429 (+ `Retry-After` header — `ErrorMapper::map()` returns a `headers` map the error handler applies) | `TOO_MANY_LOGIN_ATTEMPTS` | `retry_after_seconds` |
 | `InvalidTokenException` | 401 | `INVALID_TOKEN` | — |
+| `PasswordTooShortException` | 422 | `PASSWORD_TOO_SHORT` | `min_length` |
+| `PasswordTooLongException` | 422 | `PASSWORD_TOO_LONG` | `max_length` |
 | `ForbiddenException` (`App\Http\Middleware\ForbiddenException` — `rez-starter`'s own, not `rez`'s) | 403 | `FORBIDDEN` | — |
 | `InsufficientFundsException` | 422 | `INSUFFICIENT_FUNDS` | — |
 | `InvalidPartyException` / `InvalidReservationStateException` / `InvalidSessionStateException` / `InvalidTimeSlotException` | 422 | `INVALID_PARTY` / `INVALID_RESERVATION_STATE` / `INVALID_SESSION_STATE` / `INVALID_TIME_SLOT` | — (one code + one generic message per exception *class*, not per the many free-text messages each can carry) |
@@ -829,7 +841,7 @@ POST   /api/sessions/{id}/reservations                        ← body: party fi
 POST   /api/newsletter/subscribe
 DELETE /api/newsletter/unsubscribe
 DELETE /api/reservations/{id}?token={hmac}                    ← guest self-cancellation
-GET    /api/config                                            ← auth.mode + public feature details (null when off); never secrets
+GET    /api/config                                            ← auth.mode, auth.password_min_length/max_length + public feature details (null when off); never secrets
 POST   /api/auth/register                                     ← body may add refresh_token_delivery: "cookie" (default) | "body"
 POST   /api/auth/login                                        ← same
 POST   /api/auth/refresh                                      ← credential: refresh cookie or body refresh_token; rotates it
@@ -886,6 +898,13 @@ header. `X-Forwarded-For` is ignored (the sender writes it); behind a reverse pr
 share one address and throttling degrades to per email — never to blocking other users.
 Cross-origin JS can't read `Retry-After` (not exposed via CORS), so browser clients use the body
 param.
+
+**Password length (`feat/password-policy`).** `PASSWORD_MIN_LENGTH` (default 15, min 8) and
+`PASSWORD_MAX_LENGTH` (default 128) feed `UsersConfig`, and `GET /api/config` reports them as
+`auth.password_min_length`/`auth.password_max_length` so client forms hint at the same rule.
+Register and reset-confirm answer a violation with **422** `PASSWORD_TOO_SHORT`
+(`params.min_length`) or `PASSWORD_TOO_LONG` (`params.max_length`); login never checks it
+(invariant 16).
 
 `POST /api/sessions/{id}/reservations` is deliberately narrow: the body carries only `party`
 fields, never `resource_id` or a timeslot — the session id in the URL is the sole source of truth
@@ -1093,7 +1112,11 @@ to the name) or a click elsewhere closes it. `<rez-account>` comes later.
 (`autocomplete="name"`), email (`username`), password and its repeat (both `new-password`;
 a mismatch is caught before sending — the repeat never reaches the API), and a newsletter
 checkbox that starts unticked (consent must be the visitor's own act). Client checks mirror the
-API's rules only — name and password non-empty, a plausible email. Creating the account signs the
+API's rules only — name non-empty, a plausible email, and the password's length from `GET
+/api/config` (`feature/password-policy`: "At least {min} characters." hint under the field, part
+`field-hint`, swapped for the error when there is one; counted in code points like the server;
+skipped if the config can't be loaded). A 422 `PASSWORD_TOO_SHORT`/`TOO_LONG` lands on the
+password field using the server's own limit from `params`. Creating the account signs the
 visitor in, so it then shows the same "Signed in as {name}" summary. 409 → "An account with this
 email already exists." (everything typed kept, email focused); other errors as `<rez-login>`.
 Parts as `<rez-login>` plus `checkbox`; slot `footer`. In `<rez-account-menu>`'s dialog, part
@@ -1501,6 +1524,8 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   transport, `CORS_ALLOWED_ORIGINS` credentialed CORS (`feature/refresh-tokens`, see §4)
 - ✅ Login throttling per email + client IP → 429 `TOO_MANY_LOGIN_ATTEMPTS` + `Retry-After`
   (`feat/login-throttling`, see §4)
+- ✅ Password length policy: `PASSWORD_MIN_LENGTH`/`PASSWORD_MAX_LENGTH`, 422
+  `PASSWORD_TOO_SHORT`/`PASSWORD_TOO_LONG`, limits in `GET /api/config` (`feat/password-policy`, see §4)
 - ✅ Slim bootstrap, PHP-DI wiring, full route surface
 - ✅ Complete exception → HTTP status map (now also `EmailTemplateNotFoundException` → 404)
 - ✅ `PlatformConfig`/`MailerConfig`/`UsersConfig` construction and container wiring fully synced
