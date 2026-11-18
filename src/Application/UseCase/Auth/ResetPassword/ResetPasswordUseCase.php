@@ -8,7 +8,10 @@ use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\PasswordResetRepositoryInterface;
 use Rez\Application\Port\RefreshTokenRepositoryInterface;
 use Rez\Application\Port\UserRepositoryInterface;
+use Rez\Application\Service\PasswordPolicy;
 use Rez\Domain\Exception\InvalidTokenException;
+use Rez\Domain\Exception\PasswordTooLongException;
+use Rez\Domain\Exception\PasswordTooShortException;
 use Rez\Domain\Shared\Utc;
 use Rez\Domain\User\HashedPassword;
 
@@ -18,10 +21,13 @@ final class ResetPasswordUseCase implements ResetPasswordUseCaseInterface
         private readonly UserRepositoryInterface $userRepository,
         private readonly PasswordResetRepositoryInterface $passwordResetRepository,
         private readonly RefreshTokenRepositoryInterface $refreshTokenRepository,
+        private readonly PasswordPolicy $passwordPolicy,
     ) {
     }
 
     /**
+     * @throws PasswordTooShortException
+     * @throws PasswordTooLongException
      * @throws InvalidTokenException
      * @throws \Rez\Domain\Exception\UserNotFoundException
      * @throws DatabaseException
@@ -39,6 +45,8 @@ final class ResetPasswordUseCase implements ResetPasswordUseCaseInterface
         if ($record['expires_at'] < Utc::now()) {
             throw new InvalidTokenException('Token has expired');
         }
+
+        $this->passwordPolicy->assertAllows($request->newPassword);
 
         try {
             $user = $this->userRepository->findByEmail($record['email']);

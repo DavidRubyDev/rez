@@ -7,9 +7,12 @@ namespace Rez\Application\UseCase\Auth\Register;
 use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\UserRepositoryInterface;
 use Rez\Application\Service\AuthTokenIssuer;
+use Rez\Application\Service\PasswordPolicy;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeRequest;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
 use Rez\Domain\Exception\EmailAlreadyRegisteredException;
+use Rez\Domain\Exception\PasswordTooLongException;
+use Rez\Domain\Exception\PasswordTooShortException;
 use Rez\Domain\Exception\UserNotFoundException;
 use Rez\Domain\Newsletter\SubscriberSource;
 use Rez\Domain\User\HashedPassword;
@@ -22,15 +25,20 @@ final class RegisterUseCase implements RegisterUseCaseInterface
         private readonly UserRepositoryInterface $userRepository,
         private readonly SubscribeUseCaseInterface $subscribeUseCase,
         private readonly AuthTokenIssuer $tokenIssuer,
+        private readonly PasswordPolicy $passwordPolicy,
     ) {
     }
 
     /**
+     * @throws PasswordTooShortException
+     * @throws PasswordTooLongException
      * @throws EmailAlreadyRegisteredException
      * @throws DatabaseException
      */
     public function execute(RegisterRequest $request): RegisterResponse
     {
+        $this->passwordPolicy->assertAllows($request->password);
+
         try {
             $this->userRepository->findByEmail($request->email);
             throw new EmailAlreadyRegisteredException($request->email);

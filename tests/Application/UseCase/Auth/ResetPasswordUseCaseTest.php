@@ -10,6 +10,9 @@ use Rez\Application\Exception\DatabaseException;
 use Rez\Application\Port\PasswordResetRepositoryInterface;
 use Rez\Application\Port\RefreshTokenRepositoryInterface;
 use Rez\Application\Port\UserRepositoryInterface;
+use Rez\Application\Config\UsersConfig;
+use Rez\Application\Service\PasswordPolicy;
+use Rez\Domain\Exception\PasswordTooShortException;
 use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordRequest;
 use Rez\Application\UseCase\Auth\ResetPassword\ResetPasswordUseCase;
 use Rez\Domain\Exception\InvalidTokenException;
@@ -31,7 +34,12 @@ class ResetPasswordUseCaseTest extends TestCase
         $this->userRepository          = $this->createMock(UserRepositoryInterface::class);
         $this->passwordResetRepository = $this->createMock(PasswordResetRepositoryInterface::class);
         $this->refreshTokenRepository  = $this->createMock(RefreshTokenRepositoryInterface::class);
-        $this->useCase                 = new ResetPasswordUseCase($this->userRepository, $this->passwordResetRepository, $this->refreshTokenRepository);
+        $this->useCase                 = new ResetPasswordUseCase(
+            $this->userRepository,
+            $this->passwordResetRepository,
+            $this->refreshTokenRepository,
+            new PasswordPolicy(new UsersConfig('super-secret', 'super-secret-cancellation-key')),
+        );
 
         $this->user = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('old-password'));
     }
@@ -42,13 +50,36 @@ class ResetPasswordUseCaseTest extends TestCase
         return ['email' => 'john@example.com', 'expires_at' => $expiresAt];
     }
 
+    public function testPasswordTooShortThrowsAndLeavesTheTokenUsable(): void
+    {
+        $this->passwordResetRepository->method('findByTokenHash')->willReturn($this->record(Utc::now()->modify('+10 minutes')));
+        $this->userRepository->method('findByEmail')->willReturn($this->user);
+        $this->userRepository->expects($this->never())->method('save');
+        $this->passwordResetRepository->expects($this->never())->method('deleteByEmail');
+        $this->refreshTokenRepository->expects($this->never())->method('revokeAllForUser');
+
+        $this->expectException(PasswordTooShortException::class);
+
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'fourteen-chars'));
+    }
+
+    // A dead link is the answer that matters — fixing the password first would only lead to it.
+    public function testExpiredTokenWinsOverATooShortPassword(): void
+    {
+        $this->passwordResetRepository->method('findByTokenHash')->willReturn($this->record(Utc::now()->modify('-1 minute')));
+
+        $this->expectException(InvalidTokenException::class);
+
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'short'));
+    }
+
     public function testUnknownTokenThrowsInvalidTokenException(): void
     {
         $this->passwordResetRepository->method('findByTokenHash')->willThrowException(new InvalidTokenException('Token not found'));
 
         $this->expectException(InvalidTokenException::class);
 
-        $this->useCase->execute(new ResetPasswordRequest('bad-token', 'new-password'));
+        $this->useCase->execute(new ResetPasswordRequest('bad-token', 'new-password-long-enough'));
     }
 
     public function testFindByTokenHashDatabaseExceptionPropagates(): void
@@ -57,7 +88,7 @@ class ResetPasswordUseCaseTest extends TestCase
 
         $this->expectException(DatabaseException::class);
 
-        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
     }
 
     public function testExpiredTokenThrowsInvalidTokenException(): void
@@ -67,7 +98,7 @@ class ResetPasswordUseCaseTest extends TestCase
 
         $this->expectException(InvalidTokenException::class);
 
-        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
     }
 
     public function testSuccessSavesUserWithNewPasswordHash(): void
@@ -78,9 +109,9 @@ class ResetPasswordUseCaseTest extends TestCase
 
         $this->userRepository->expects($this->once())
             ->method('save')
-            ->with($this->callback(fn (User $u) => $u->password->verify('new-password') && !$u->password->verify('old-password')));
+            ->with($this->callback(fn (User $u) => $u->password->verify('new-password-long-enough') && !$u->password->verify('old-password')));
 
-        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
     }
 
     public function testSuccessDeletesTokenAfterUse(): void
@@ -91,7 +122,7 @@ class ResetPasswordUseCaseTest extends TestCase
 
         $this->passwordResetRepository->expects($this->once())->method('deleteByEmail')->with('john@example.com');
 
-        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
     }
 
     public function testSuccessReturnsSuccessTrue(): void
@@ -100,7 +131,7 @@ class ResetPasswordUseCaseTest extends TestCase
         $this->passwordResetRepository->method('findByTokenHash')->willReturn($this->record($valid));
         $this->userRepository->method('findByEmail')->willReturn($this->user);
 
-        $response = $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+        $response = $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
 
         $this->assertTrue($response->success);
     }
@@ -113,7 +144,7 @@ class ResetPasswordUseCaseTest extends TestCase
             fn (UserId $userId): bool => $userId->equals($this->user->id),
         ));
 
-        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
     }
 
     public function testExpiredTokenRevokesNothing(): void
@@ -123,7 +154,7 @@ class ResetPasswordUseCaseTest extends TestCase
 
         $this->expectException(InvalidTokenException::class);
 
-        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
     }
 
     public function testRevokeDatabaseExceptionPropagates(): void
@@ -135,6 +166,6 @@ class ResetPasswordUseCaseTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to revoke refresh tokens.');
 
-        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password'));
+        $this->useCase->execute(new ResetPasswordRequest('some-token', 'new-password-long-enough'));
     }
 }

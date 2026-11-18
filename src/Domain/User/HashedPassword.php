@@ -20,7 +20,7 @@ final class HashedPassword
             throw new \InvalidArgumentException('Password must not be empty.');
         }
 
-        return new self(password_hash($plainText, PASSWORD_BCRYPT));
+        return new self(password_hash($plainText, PASSWORD_ARGON2ID));
     }
 
     /**
@@ -38,6 +38,15 @@ final class HashedPassword
     public function verify(string $plainText): bool
     {
         return password_verify($plainText, $this->hash);
+    }
+
+    /**
+     * True for a hash made before the switch to Argon2id (or with older cost settings) —
+     * replaced the next time its owner logs in, the one moment the plain text is known.
+     */
+    public function needsRehash(): bool
+    {
+        return password_needs_rehash($this->hash, PASSWORD_ARGON2ID);
     }
 
     public function toString(): string

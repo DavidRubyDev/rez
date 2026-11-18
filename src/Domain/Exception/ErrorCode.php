@@ -20,6 +20,8 @@ enum ErrorCode
     case InvalidToken;
     case InvalidCredentials;
     case TooManyLoginAttempts;
+    case PasswordTooShort;
+    case PasswordTooLong;
     case InsufficientFunds;
     case InvalidParty;
     case InvalidReservationState;

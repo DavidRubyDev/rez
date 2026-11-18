@@ -141,6 +141,65 @@ class LoginUseCaseTest extends TestCase
         $this->login('correct-password');
     }
 
+    private function legacyBcryptUser(): User
+    {
+        return User::create(
+            UserId::generate(),
+            'John Doe',
+            'john@example.com',
+            HashedPassword::fromHash(password_hash('correct-password', PASSWORD_BCRYPT)),
+        );
+    }
+
+    public function testLoginWithALegacyBcryptHashSavesItRehashed(): void
+    {
+        $this->userRepository->method('findByEmail')->willReturn($this->legacyBcryptUser());
+
+        $this->userRepository->expects($this->once())
+            ->method('save')
+            ->with($this->callback(fn (User $u) => !$u->password->needsRehash() && $u->password->verify('correct-password')));
+
+        $this->login('correct-password');
+    }
+
+    public function testLoginWithALegacyBcryptHashReturnsTheRehashedUser(): void
+    {
+        $this->userRepository->method('findByEmail')->willReturn($this->legacyBcryptUser());
+
+        $response = $this->useCase->execute(new LoginRequest('john@example.com', 'correct-password', self::CLIENT));
+
+        $this->assertFalse($response->user->password->needsRehash());
+    }
+
+    public function testLoginWithACurrentHashSavesNothing(): void
+    {
+        $this->userRepository->method('findByEmail')->willReturn($this->user);
+        $this->userRepository->expects($this->never())->method('save');
+
+        $this->login('correct-password');
+    }
+
+    public function testWrongPasswordNeverRehashes(): void
+    {
+        $this->userRepository->method('findByEmail')->willReturn($this->legacyBcryptUser());
+        $this->userRepository->expects($this->never())->method('save');
+
+        $this->expectException(InvalidCredentialsException::class);
+
+        $this->login('wrong-password');
+    }
+
+    public function testRehashSaveDatabaseExceptionPropagates(): void
+    {
+        $this->userRepository->method('findByEmail')->willReturn($this->legacyBcryptUser());
+        $this->userRepository->method('save')->willThrowException(new DatabaseException('pdo error'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to save rehashed password.');
+
+        $this->login('correct-password');
+    }
+
     public function testWrongPasswordIsRecordedAgainstThisEmailAndClient(): void
     {
         $this->userRepository->method('findByEmail')->willReturn($this->user);

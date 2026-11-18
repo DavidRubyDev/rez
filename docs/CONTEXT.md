@@ -2687,3 +2687,42 @@ must bind the port, pass the IP, run the migration and map the exception to 429 
 
 Integration tests ran in rez-starter's MySQL container against `rez_integration` — 141 tests
 (5 new), including the migration replay. `composer ca` clean (1046 tests, PHPStan max).
+
+### 104. Password policy and Argon2id (`feature/password-policy`)
+
+`HashedPassword::fromPlainText()` accepted any non-empty string, and bcrypt only ever read its
+first 72 bytes. Now (invariant 16):
+
+- **Argon2id.** `fromPlainText()` hashes with `PASSWORD_ARGON2ID` (PHP's defaults: 64 MiB, t=4,
+  p=1 — about as slow as the old bcrypt cost 12 on the dev machine). `verify()` still accepts
+  bcrypt hashes; new `needsRehash()` flags them. `LoginUseCase` saves a fresh hash after a
+  successful login with a legacy one (`Failed to save rehashed password.` on a DB error) and
+  returns the rehashed user — login is the only moment the plain text is known, so users migrate
+  one by one with no forced reset. `TIMING_DUMMY_HASH` is now Argon2id. During the migration a
+  legacy account's wrong password costs bcrypt time rather than Argon2id time; the two were
+  ~175 ms vs ~150 ms here, so the enumeration signal is small and disappears as users log in.
+  `users.password_hash` is already `VARCHAR(255)`; Argon2id hashes are 97 characters.
+- **Length is the only rule.** `UsersConfig` gained `passwordMinLength` (default 15, min 8 — NIST
+  SP 800-63B's 15 for single-factor passwords, 8 as the floor no deployment may go below) and
+  `passwordMaxLength` (default 128, min `passwordMinLength`). `Application/Service/PasswordPolicy`
+  counts characters with `mb_strlen` (code points — `ř` and `😀` each count once) and throws
+  `PasswordTooShortException` (`PASSWORD_TOO_SHORT`, `min_length`) or `PasswordTooLongException`
+  (`PASSWORD_TOO_LONG`, `max_length`) — both plain `DomainException`s, so rez-starter's
+  `ErrorMapper` already answers 422. No character-class rules, no blocklist: at 15 characters a
+  common-password list barely bites; a breached-password check (HIBP k-anonymity) would be the
+  next step if one is wanted.
+- `RegisterUseCase` checks the policy before anything else. `ResetPasswordUseCase` checks it
+  after the token (a dead link is the answer that matters) and before touching the user, so a
+  refused password leaves the token usable. Both take `PasswordPolicy` as a new constructor
+  argument (breaking for rez-starter — autowired there). Login never checks it, so a deployment
+  can raise the minimum without locking anyone out; the seed rows' `ChangeMe123!` (12 chars)
+  still logs in.
+
+TDD in four increments: hashing, login rehash, policy + use cases, then the reset ordering.
+`composer ca` clean (1074 tests, PHPStan max). Integration suite in rez-starter's MySQL container
+against `rez_integration`: 141 tests, unchanged (the one warning is the seeder's
+missing-file test). Verified live through rez-starter: a 14-character registration → 422
+`PASSWORD_TOO_SHORT`; a valid one stores a 97-character `$argon2id$` hash and logs in; logging in
+as the seeded customer turned its `$2y$12$` hash into `$argon2id$`, and it logs in again.
+`rez-starter` (`PASSWORD_MIN_LENGTH`/`PASSWORD_MAX_LENGTH`, limits in `GET /api/config`) and
+`rez-components` (`<rez-register>` hint and checks) built on the same branch name in their own repos.
