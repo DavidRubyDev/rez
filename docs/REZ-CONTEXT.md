@@ -297,7 +297,9 @@ time this module was built.
 
 - `User` — immutable entity, static factory only (`create()`/`reconstruct()`, matching
   `Reservation`/`NewsletterSubscriber`). Fields: `id`, `name`, `email`, `password`
-  (`HashedPassword`), `role`, `newsletterOptIn`, `stripeCustomerId` (nullable), `createdAt` — all
+  (`HashedPassword`), `role`, `newsletterOptIn`, `stripeCustomerId` (nullable), `createdAt`, `emailVerifiedAt` (nullable —
+  `null` until the user proves they own the address, `feature/email-verification`; `isEmailVerified()`,
+  `withEmailVerifiedAt()`) — all
   `public readonly`, **no getter methods**. The instruction doc specified `getId()`/`getName()`/
   etc., which was this codebase's convention before the step-73 cleanup; `CLAUDE.md` now
   explicitly forbids getters when a public readonly property suffices, so this module follows
@@ -418,6 +420,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `NewsletterRepositoryInterface` ✅ | `MysqlNewsletterRepository` ✅ | COMPLETE |
 | `UserRepositoryInterface` | `MysqlUserRepository` | COMPLETE (same binding note as above) |
 | `PasswordResetRepositoryInterface` | `MysqlPasswordResetRepository` | COMPLETE (same binding note as above) |
+| `EmailVerificationRepositoryInterface` | `MysqlEmailVerificationRepository` | COMPLETE (`feature/email-verification`, same binding note as above). One outstanding link per user — `save(UserId, tokenHash, issuedAt, expiresAt)` replaces an earlier one; `findByTokenHash()` (`InvalidTokenException` if unknown), `findIssuedAtForUser()` (resend cooldown), `deleteForUser()` |
 | `RefreshTokenRepositoryInterface` | `MysqlRefreshTokenRepository` | COMPLETE (`feature/refresh-tokens`, same binding note as above). `save()` (upsert by id — persists `used_at`/`revoked_at`), `findByTokenHash()` (throws `InvalidTokenException` if absent), `revokeFamily()`, `revokeAllForUser()` (both only touch not-yet-revoked rows, so the first revocation time is kept) |
 | `LoginFailureRepositoryInterface` | `MysqlLoginFailureRepository` | COMPLETE (`feature/login-throttling`, same binding note as above). `record(LoginThrottleKey, at)`, `failedSince(key, since)` (oldest first), `clear(key)` |
 | `SessionRepositoryInterface` | `MysqlSessionRepository` | COMPLETE (`rez-sessions`) — **bound directly in `config/container.php`**, unlike every other `rez`-owned repository interface above. Per that scaffold's explicit instruction; not left for the client app to bind. |
@@ -445,6 +448,7 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `JwtService` | JWT generation and validation using `firebase/php-jwt` v7 (HS256). `generate(UserId, UserRole): string`, `validate(string): array` (throws `InvalidTokenException` on bad signature or expiry), `extractUserId()`, `extractRole()`. No interface — injected as a concrete class (same pattern as `FeatureGuard`). Lifetime is `UsersConfig::$accessTokenTtlSeconds` | COMPLETE (`rez-users`) |
 | `AuthTokenIssuer` | The single place an access JWT and a refresh token are minted together: `issue(User, ?RefreshTokenFamilyId): AuthTokens` (`accessToken`, `accessTokenExpiresAt`, `refreshToken` (raw), `refreshTokenExpiresAt`). Omit the family to start a new login; pass it when rotating. Saves only the hash. Used by `LoginUseCase`, `RegisterUseCase`, `RefreshUseCase`. Concrete class, no interface | COMPLETE (`feature/refresh-tokens`) |
 | `PasswordPolicy` | `assertAllows(string $plainText)`: length in characters (`mb_strlen`, code points) between `UsersConfig::$passwordMinLength` and `$passwordMaxLength`, else `PasswordTooShortException`/`PasswordTooLongException`. Length is the only rule (invariant 16). Used by `RegisterUseCase` and `ResetPasswordUseCase` — never by login. Concrete class, no interface | COMPLETE (`feature/password-policy`) |
+| `EmailVerificationService` | Both ends of proving a user owns their email (`feature/email-verification`). `sendLink(User, verificationBaseUrl)`: raw token from `TokenGeneratorInterface`, only its SHA-256 stored (invariant 5) with `UsersConfig::$emailVerificationTtlMinutes` (default 1440), emails `{base}?token=` via `MailerInterface::sendEmailVerification()` — a mailer failure is logged, not thrown (the account already exists; the visitor can ask again). `markVerified(User)`: sets `emailVerifiedAt`, saves, deletes the link, and subscribes the user to the newsletter if they opted in at registration (that opt-in waits for proof of ownership); no-op for a verified user. Concrete class, no interface | COMPLETE (`feature/email-verification`) |
 | `PartyResolver` | Resolves `Party` from either a `UserId` (authenticated) or guest fields | NOT YET BUILT |
 | `PaymentResolver` | Determines payment method validity and returns `PaymentResolution` | NOT YET BUILT |
 | `LoggerInterface` (PSR-3) | Injected via container. `NullLogger` default. Concrete implementation (Monolog) wired in `rez-starter`. | COMPLETE |
@@ -493,12 +497,14 @@ These are the contracts the library defines. Implementations live in infrastruct
 | `UnsubscribeUseCase` | `UnsubscribeRequest(email, ?token)` | `UnsubscribeResponse` | Silent success (`removed: false`) if email not found. `feature/newsletter-unsubscribe-token`: `token` optional, verified via `UnsubscribeToken` against `email` when present, throwing `InvalidTokenException` on mismatch before `delete()` — `null` preserves the prior no-check behavior admin callers rely on. `feature/newsletter-unsubscribe-confirmation-email`: on an actual deletion (either path), sends `MailerInterface::sendUnsubscribeConfirmedEmail()` via try/catch-and-log, same non-fatal-email pattern as `SubscribeUseCase` — never sent on the not-found no-op or an invalid-token rejection |
 | `BroadcastUseCase` | `BroadcastRequest` | `BroadcastResponse` | Sends new-class email to all opted-in subscribers, returns sent count. `BroadcastRequest` fields: `resourceName` (string), `resourceDate` (DateTimeImmutable). `feature/newsletter-unsubscribe-token`: generates a per-subscriber `UnsubscribeToken` from `UsersConfig::$cancellationSecret` inside the send loop and passes it to `sendNewClassNotification()` |
 | `ListSubscribersUseCase` | `ListSubscribersRequest` | `ListSubscribersResponse(subscribers, total)` | `13_rez-pagination.md`: filters (`search` against email/name, `source`) + `offset`/`limit`/`sortBy`/`sortDir` (`email`\|`name`\|`source`\|`opted_in_at`, default sort `opted_in_at ASC` preserved) via `NewsletterRepositoryInterface::findPage()`/`countPage()`. `findAll()` untouched — still `BroadcastUseCase`'s only caller |
-| `RegisterUseCase` | `RegisterRequest` | `RegisterResponse(User, AuthTokens $tokens)` | No `FeatureGuard` — users are never gated. `PasswordPolicy::assertAllows()` first (`feature/password-policy`), then `findByEmail()` (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves via `UserRepositoryInterface`; if `newsletterOptIn`, also calls `SubscribeUseCaseInterface` with `SubscriberSource::Registered`; issues access + refresh tokens via `AuthTokenIssuer` — only after the user is saved (`rez-users`, `feature/refresh-tokens`) |
-| `LoginUseCase` | `LoginRequest(email, password, clientKey)` | `LoginResponse(User, AuthTokens $tokens)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6), and only after checking the password against a dummy Argon2id hash, so it takes as long as a wrong password. Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed. Both record a failure against `LoginThrottleKey(email, clientKey)`; at `loginMaxFailedAttempts` failures within `loginFailureWindowSeconds` the key is refused with `TooManyLoginAttemptsException(retryAfterSeconds)` **before** the password is checked, and refused attempts aren't recorded (invariant 15). Success clears the key's failures, saves the user with a fresh Argon2id hash if `HashedPassword::needsRehash()` (a legacy bcrypt hash — login is the only moment the plain text is known; no length check, so pre-policy passwords keep working), and starts a new refresh token family via `AuthTokenIssuer` (`rez-users`, `feature/refresh-tokens`, `feature/login-throttling`, `feature/password-policy`) |
+| `RegisterUseCase` | `RegisterRequest(name, email, password, verificationBaseUrl, newsletterOptIn)` | `RegisterResponse(User)` | No `FeatureGuard` — users are never gated. `PasswordPolicy::assertAllows()` first (`feature/password-policy`), then `findByEmail()` (catches `UserNotFoundException` to confirm availability, throws `EmailAlreadyRegisteredException` if found); saves the user **unverified** and sends the verification link via `EmailVerificationService::sendLink()`. No tokens — the user can't sign in until they follow the link (invariant 17); the newsletter opt-in is stored and acted on at verification (`rez-users`, `feature/refresh-tokens`, `feature/email-verification`) |
+| `LoginUseCase` | `LoginRequest(email, password, clientKey)` | `LoginResponse(User, AuthTokens $tokens)` | Unknown email → `InvalidCredentialsException`, never `UserNotFoundException` (invariant 6), and only after checking the password against a dummy Argon2id hash, so it takes as long as a wrong password. Wrong password (checked via `HashedPassword::verify()`) → same exception, same message — never reveals which check failed. Both record a failure against `LoginThrottleKey(email, clientKey)`; at `loginMaxFailedAttempts` failures within `loginFailureWindowSeconds` the key is refused with `TooManyLoginAttemptsException(retryAfterSeconds)` **before** the password is checked, and refused attempts aren't recorded (invariant 15). Success clears the key's failures, saves the user with a fresh Argon2id hash if `HashedPassword::needsRehash()` (a legacy bcrypt hash — login is the only moment the plain text is known; no length check, so pre-policy passwords keep working), and starts a new refresh token family via `AuthTokenIssuer` An unverified user with the right password → `EmailNotVerifiedException` (invariant 17) — after the failures are cleared, so it's neither counted nor revealed to a guesser (`rez-users`, `feature/refresh-tokens`, `feature/login-throttling`, `feature/password-policy`, `feature/email-verification`) |
 | `RefreshUseCase` | `RefreshRequest(refreshToken)` | `RefreshResponse(User, AuthTokens)` | (`feature/refresh-tokens`) Looks up by hash; revoked/expired → `InvalidTokenException`. Unused → marked used, successor issued in the same family. **Already used** → within `refreshTokenReuseGraceSeconds` (default 30 — tabs or bundles racing each other) a successor is issued anyway; outside it the token was replayed, so the whole family is revoked, a warning logged, and `InvalidTokenException` thrown (invariant 14). Reloads the user, so the new access token carries the user's *current* role; a deleted user → `InvalidTokenException` |
 | `LogoutUseCase` | `LogoutRequest(refreshToken)` | `LogoutResponse` | (`feature/refresh-tokens`) Revokes the presented token's family. Unknown/already-revoked token → silent success (the caller is logged out either way) |
 | `RequestPasswordResetUseCase` | `RequestPasswordResetRequest(email, resetBaseUrl)` | `RequestPasswordResetResponse(bool $sent)` | Unknown email → `sent: true` silently, no token generated, no email sent (never reveals existence). Known email: generates a raw token via `TokenGeneratorInterface`, stores only `SHA-256(rawToken)` via `PasswordResetRepositoryInterface` (invariant 5), emails the raw token in a URL via `MailerInterface::sendPasswordReset()` (`rez-users`) |
-| `ResetPasswordUseCase` | `ResetPasswordRequest(token, newPassword)` | `ResetPasswordResponse(bool $success)` | Hashes the incoming token and looks it up (never by raw token — invariant 5); `InvalidTokenException` if not found or expired — checked before `PasswordPolicy`, since a dead link is the answer that matters, and a refused password leaves the token usable; on success, re-hashes the new password, saves the user, deletes the reset token row, and revokes every refresh token the user has (`revokeAllForUser`) — a reset is how someone takes their account back, so no earlier login may survive it (`rez-users`, `feature/refresh-tokens`) |
+| `ResetPasswordUseCase` | `ResetPasswordRequest(token, newPassword)` | `ResetPasswordResponse(bool $success)` | Hashes the incoming token and looks it up (never by raw token — invariant 5); `InvalidTokenException` if not found or expired — checked before `PasswordPolicy`, since a dead link is the answer that matters, and a refused password leaves the token usable; on success, re-hashes the new password, saves the user, deletes the reset token row, and revokes every refresh token the user has (`revokeAllForUser`) — a reset is how someone takes their account back, so no earlier login may survive it. Also marks an unverified email verified via `EmailVerificationService::markVerified()` — the reset link proves ownership, and it's the only way an admin-created user ever proves it (`rez-users`, `feature/refresh-tokens`, `feature/email-verification`) |
+| `VerifyEmailUseCase` | `VerifyEmailRequest(token)` | `VerifyEmailResponse(User, AuthTokens)` | (`feature/email-verification`) Looks the link up by hash; unknown or expired → `InvalidTokenException`. Marks the user verified (`EmailVerificationService::markVerified()`, which uses the link up) and signs them in via `AuthTokenIssuer` — following the link proves what a reset link proves |
+| `ResendEmailVerificationUseCase` | `ResendEmailVerificationRequest(email, verificationBaseUrl)` | `ResendEmailVerificationResponse(bool $sent)` | (`feature/email-verification`) Always `sent: true`. Sends a fresh link (replacing the old) only for an existing, unverified user whose last link is older than `UsersConfig::$emailVerificationResendCooldownSeconds` (default 60) — unknown, verified and too-soon all answer identically, so it reveals nothing and can't flood an inbox |
 | `GetUserUseCase` | `GetUserRequest(UserId)` | `GetUserResponse(User)` | (`rez-users`) |
 | `UpdateUserUseCase` | `UpdateUserRequest(UserId, ?name, ?newsletterOptIn)` | `UpdateUserResponse(User)` | PATCH semantics via `User`'s `with*()` methods — self-service profile update, no role field (`rez-users`) |
 | `ListUsersUseCase` | `ListUsersRequest` | `ListUsersResponse(users, total)` | Admin-only by convention — auth enforcement is the HTTP layer's job, not this use case's (`rez-users`). `13_rez-pagination.md`: `ListUsersRequest` gained filters (`search` against name/email, `role`) + `offset`/`limit`/`sortBy`/`sortDir` (`name`\|`email`\|`role`\|`created_at`, default sort `created_at ASC` preserved) via `UserRepositoryInterface::findPage()`/`countPage()` — first `Request` in the codebase to go from empty to populated. `findAll()` untouched |
@@ -614,6 +620,13 @@ These are the contracts the library defines. Implementations live in infrastruct
     15–128, counted in characters) only when a password is *set* — register and reset — never at
     login, so tightening the policy never locks anyone out. Client components read the same
     limits from `GET /api/config` for hints, but the API's 422 is what counts.
+17. **A self-registered user can't sign in until their email is verified.** Registration issues
+    no tokens; only following the emailed link (`VerifyEmailUseCase`) or completing a password
+    reset proves the address and sets `User::$emailVerifiedAt`. `LoginUseCase` refuses an
+    unverified user with `EmailNotVerifiedException` only once the password is right, so it says
+    nothing to someone guessing. Anything that acts on the address on the user's behalf — the
+    newsletter opt-in given at registration — waits for verification too. Users that existed
+    before `feature/email-verification` were migrated as verified.
 
 ### 3.7 Configuration system
 
@@ -701,8 +714,9 @@ All tables in one MySQL database. `rez` owns all schema — no per-module databa
 | `reservation_settings` | id (always 1, single row by convention), auto_confirm, auto_send_reservation_created, auto_send_reservation_confirmed, auto_send_reservation_cancelled, updated_at | Created via `database/migrations/20260101000002_create_reservation_settings.sql` (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`) |
 | `mailer_settings` | id (always 1, single row by convention), from_address, from_name, updated_at | Created via `database/migrations/20260101000003_create_mailer_settings.sql`, same pattern as `reservation_settings`. Seeded defaults (`noreply@example.com` / `Rez`) are placeholders — every deployment must update them before going live |
 | `email_templates` | id, subject, html (MEDIUMTEXT), created_at | Created via `database/migrations/20260101000004_create_email_templates.sql` — no seed rows (a real collection, not a singleton settings table) |
-| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at | Created via `database/migrations/20260101000005_create_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live (stored as a bcrypt hash, upgraded to Argon2id on first login; shorter than the default 15-character policy, which applies only once it's changed), same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
+| `users` | id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at, email_verified_at (nullable — added by `20260101000010`, which marked every existing row verified as of its `created_at`) | Created via `database/migrations/20260101000005_create_users.sql` (`rez-users`). Unlike the rest of this table, ships two seed rows: a default Admin (`admin@example.com`) and a default Customer (`customer@example.com`), both with placeholder password `ChangeMe123!` — must change before going live (stored as a bcrypt hash, upgraded to Argon2id on first login; shorter than the default 15-character policy, which applies only once it's changed), same convention as `mailer_settings`' defaults — each `INSERT IGNORE` on a fixed UUID, safe to re-run. Every deployment needs at least one Admin to log into rez-admin and there's no use case to bootstrap one; the Customer row exists for exercising customer-facing flows out of the box. Must exist before the not-yet-built `wallet_transactions`/`subscriptions` tables |
 | `password_reset_tokens` | email (PK), token_hash (CHAR 64), expires_at | One token per email — re-request overwrites. Same migration file as `users` (`rez-users`) |
+| `email_verification_tokens` | user_id (PK, FK → users, `ON DELETE CASCADE`), token_hash (CHAR 64, UNIQUE), issued_at, expires_at | `database/migrations/20260101000010_add_email_verification.sql` (`feature/email-verification`). One link per user — a resend overwrites; deleted once used |
 | `refresh_tokens` | id (PK), family_id, user_id (FK → users, `ON DELETE CASCADE`), token_hash (CHAR 64, UNIQUE), expires_at, created_at, used_at (nullable), revoked_at (nullable) | `database/migrations/20260101000008_create_refresh_tokens.sql` (`feature/refresh-tokens`). One row per issued token — rotation inserts, never overwrites. Indexed on family_id and user_id for the two revocation paths. Uses `IF NOT EXISTS` because `MysqlMigrationRepositoryTest` replays migrations (see #101 in `docs/CONTEXT.md`). Expired rows are not purged yet |
 | `login_failures` | id (BIGINT auto-increment PK), throttle_key (CHAR 64 — `LoginThrottleKey` hash), failed_at | `database/migrations/20260101000009_create_login_failures.sql` (`feature/login-throttling`). One row per failed login, indexed on (throttle_key, failed_at); a successful login deletes its key's rows. Rows of keys that never succeed are inert once outside the window and not purged yet. `IF NOT EXISTS` for the migration replay |
 | `sessions` | id, resource_id (FK → resources, no CASCADE — resources are soft-deleted, invariant 13, so it never fires), start_time, duration_minutes, capacity, status | Created via `database/migrations/20260101000006_create_sessions.sql` (`rez-sessions`), no seed rows (a real collection, same pattern as `email_templates`) |
@@ -805,6 +819,7 @@ message`). Two cases send a **fixed generic message instead of the real one** �
 | `PasswordTooShortException` | 422 | `PASSWORD_TOO_SHORT` | `min_length` |
 | `PasswordTooLongException` | 422 | `PASSWORD_TOO_LONG` | `max_length` |
 | `ForbiddenException` (`App\Http\Middleware\ForbiddenException` — `rez-starter`'s own, not `rez`'s) | 403 | `FORBIDDEN` | — |
+| `EmailNotVerifiedException` | 403 | `EMAIL_NOT_VERIFIED` | — |
 | `InsufficientFundsException` | 422 | `INSUFFICIENT_FUNDS` | — |
 | `InvalidPartyException` / `InvalidReservationStateException` / `InvalidSessionStateException` / `InvalidTimeSlotException` | 422 | `INVALID_PARTY` / `INVALID_RESERVATION_STATE` / `INVALID_SESSION_STATE` / `INVALID_TIME_SLOT` | — (one code + one generic message per exception *class*, not per the many free-text messages each can carry) |
 | `\InvalidArgumentException` / `\DateMalformedStringException` | 422 | `VALIDATION_ERROR` | — |
@@ -842,8 +857,10 @@ POST   /api/newsletter/subscribe
 DELETE /api/newsletter/unsubscribe
 DELETE /api/reservations/{id}?token={hmac}                    ← guest self-cancellation
 GET    /api/config                                            ← auth.mode, auth.password_min_length/max_length + public feature details (null when off); never secrets
-POST   /api/auth/register                                     ← body may add refresh_token_delivery: "cookie" (default) | "body"
-POST   /api/auth/login                                        ← same
+POST   /api/auth/register                                     ← 201 {user} only — signs nobody in until the emailed link is followed
+POST   /api/auth/login                                        ← body may add refresh_token_delivery: "cookie" (default) | "body"; 403 EMAIL_NOT_VERIFIED for an unverified account
+POST   /api/auth/verify-email                                 ← body: token (+ refresh_token_delivery); verifies and signs in, answers like login
+POST   /api/auth/verify-email/resend                          ← body: email; always {sent: true}
 POST   /api/auth/refresh                                      ← credential: refresh cookie or body refresh_token; rotates it
 POST   /api/auth/logout                                       ← 204; revokes the presented login, always clears the cookie
 POST   /api/auth/password-reset/request
@@ -1035,7 +1052,8 @@ a client who wants their own design can still have it.
 | `<rez-cancel>` | Guest cancellation confirmation (reads `id`/`token` from the URL) | `rez.cancel.*` |
 | `<rez-unsubscribe>` | Newsletter unsubscribe confirmation (reads `email`/`token` from the URL) | `rez.unsubscribe.*` |
 | `<rez-login>` | Email + password sign-in; once signed in, "Signed in as {name}". Follows sign-ins/outs from any other account component or tab | `rez.account.*` |
-| `<rez-register>` | Account sign-up (name, email, password, newsletter opt-in); creating the account signs the visitor in | `rez.account.*` |
+| `<rez-register>` | Account sign-up (name, email, password, newsletter opt-in); then "check your inbox" with a resend button | `rez.account.*` |
+| `<rez-verify-email>` | Landing page for the emailed verification link (reads `token` from the URL); verifies and signs the visitor in | `rez.account.*` |
 | `<rez-logout>` | Sign-out button, shown only while someone is signed in | `rez.account.*` |
 | `<rez-account-menu>` | Header widget: "Sign in" → login dialog that can switch to sign-up; signed in → name → panel with email and `<rez-logout>`. Answers `rez:login-required` | `rez.account.*` |
 
@@ -1048,7 +1066,7 @@ A bundle groups components that appear on the same page, so no page loads code i
 | `rez.core.*` | `rez-calendar`, `rez-checkout`, `rez-newsletter` — used together on a booking page | `rez-components` |
 | `rez.cancel.*` | `rez-cancel` — standalone page linked from emails | `rez-components/cancel` |
 | `rez.unsubscribe.*` | `rez-unsubscribe` — standalone page linked from emails | `rez-components/unsubscribe` |
-| `rez.account.*` | `rez-login`, `rez-register`, `rez-logout`, `rez-account-menu` (more account components to come — see below), plus the Layer 0 session layer and auth/config API calls | `rez-components/account` |
+| `rez.account.*` | `rez-login`, `rez-register`, `rez-logout`, `rez-account-menu`, `rez-verify-email` (more account components to come — see below), plus the Layer 0 session layer and auth/config API calls | `rez-components/account` |
 
 The original plan (`rez.core.js` = calendar + cancel + account, `rez.payments.js`,
 `rez.full.js`) is superseded by the table above.
@@ -1116,13 +1134,25 @@ API's rules only — name non-empty, a plausible email, and the password's lengt
 /api/config` (`feature/password-policy`: "At least {min} characters." hint under the field, part
 `field-hint`, swapped for the error when there is one; counted in code points like the server;
 skipped if the config can't be loaded). A 422 `PASSWORD_TOO_SHORT`/`TOO_LONG` lands on the
-password field using the server's own limit from `params`. Creating the account signs the
-visitor in, so it then shows the same "Signed in as {name}" summary. 409 → "An account with this
+password field using the server's own limit from `params`. Creating the account doesn't sign
+the visitor in (invariant 17): it shows part `confirmation` — "Check your inbox — we've sent a
+link to {email}" — with a part `resend` button. 409 → "An account with this
 email already exists." (everything typed kept, email focused); other errors as `<rez-login>`.
 Parts as `<rez-login>` plus `checkbox`; slot `footer`. In `<rez-account-menu>`'s dialog, part
 `switch` toggles between `<rez-login>` and `<rez-register>` (the dialog always reopens on
 sign-in); its `register-footer` slot is forwarded like `login-footer`, and the `no-register`
 attribute removes sign-up for sites whose users get accounts some other way.
+
+**Email verification (`feature/email-verification`).** `<rez-verify-email>` is the page
+`EMAIL_VERIFICATION_BASE_URL` points at: it reads `?token=` (a `token` attribute wins) and
+follows it as soon as it has an `api-base` — no button first, since confirming an email changes
+nothing the visitor could regret — through `SessionController.verifyEmail()`, which signs them in
+on every account component. Then "Email confirmed / Signed in as {name}" and a composed
+`email-verified` event (`{email}`); a dead link → "This link doesn't work" with slot `footer` for
+a sign-in link. `<rez-login>` turns a 403 `EMAIL_NOT_VERIFIED` into "Confirm your email address
+first" with the same resend button as `<rez-register>`'s confirmation. Layer 0:
+`register()` takes no delivery and resolves with `{user}`; `verifyEmail()` and
+`resendEmailVerification()` are new; `SessionController.register()` leaves the session alone.
 
 **Granularity rule.** The smallest unit is a *feature*, never a UI primitive — no
 `<rez-button>`/`<rez-input>`. Shipping primitives means building and maintaining a design
@@ -1212,7 +1242,7 @@ proving the event/storage protocol end to end → (4) profile, password, email, 
 (5) credits, then subscriptions, once their rez/rez-starter APIs exist. Progress: (1) done;
 (2) session layer, login throttling across rez/rez-starter/rez-admin, `<rez-login>` and
 `<rez-register>`, `<rez-logout>` done; (3) minimal `<rez-account-menu>` done, with a sign-up
-switch. Next: (4).
+switch; email verification (double opt-in) across rez/rez-starter/components. Next: (4).
 
 ### Component communication
 
@@ -1370,7 +1400,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 | Newsletter | ✅ | ✅ | ✅ | ✅ |
 | Sessions | ✅ (`14_rez-sessions.md`) — fixed-time class occurrence; `Resource.defaultDurationMinutes`, `Reservation.sessionId` | ✅ Create/Get/List/Cancel + session-booking path on `CreateReservationUseCase` (cascade-cancel via `BulkCancelReservationsUseCase`) | ✅ | ✅ |
 | CancellationToken | ✅ value object + generation wired into 5 use cases | — | — | ✅ |
-| Users (core) | ✅ (+ `RefreshToken`, `LoginThrottleKey`) | ✅ (11 use cases + JwtService + AuthTokenIssuer; login throttled) | ✅ (+ `MysqlRefreshTokenRepository`, `MysqlLoginFailureRepository`) | ✅ (`rez-users`, `feature/refresh-tokens`, `feature/login-throttling`) |
+| Users (core) | ✅ (+ `RefreshToken`, `LoginThrottleKey`, `User::$emailVerifiedAt`) | ✅ (13 use cases + JwtService + AuthTokenIssuer + EmailVerificationService; login throttled; email verified before sign-in) | ✅ (+ `MysqlRefreshTokenRepository`, `MysqlLoginFailureRepository`, `MysqlEmailVerificationRepository`) | ✅ (`rez-users`, `feature/refresh-tokens`, `feature/login-throttling`, `feature/email-verification`) |
 | Payments / Stripe port | ❌ | ❌ | ❌ | — |
 | Credits / Wallet | ❌ | ❌ | ❌ | — |
 | Subscriptions | ❌ | ❌ | ❌ | — |
@@ -1526,6 +1556,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
   (`feat/login-throttling`, see §4)
 - ✅ Password length policy: `PASSWORD_MIN_LENGTH`/`PASSWORD_MAX_LENGTH`, 422
   `PASSWORD_TOO_SHORT`/`PASSWORD_TOO_LONG`, limits in `GET /api/config` (`feat/password-policy`, see §4)
+- ✅ Email verification: register answers `{user}` without tokens, `POST /api/auth/verify-email`
+  and `.../resend`, 403 `EMAIL_NOT_VERIFIED`, `EMAIL_VERIFICATION_BASE_URL`, `email_verified_at` on
+  every serialized user (`feat/email-verification`, see §4 and invariant 17)
 - ✅ Slim bootstrap, PHP-DI wiring, full route surface
 - ✅ Complete exception → HTTP status map (now also `EmailTemplateNotFoundException` → 404)
 - ✅ `PlatformConfig`/`MailerConfig`/`UsersConfig` construction and container wiring fully synced
@@ -1601,9 +1634,9 @@ ssh-keygen -t ed25519 -f ~/.ssh/deploy_rez -N ""
 - ✅ `<rez-calendar>` — built, see `docs/CONTEXT.md` steps 6-7, 11-12
 - ✅ `<rez-cancel>` — built, see `docs/CONTEXT.md` step 13 (`feature/rez-cancel`, not yet merged)
 - ✅ `<rez-checkout>` — built, see `docs/CONTEXT.md` steps 8-10, 12
-- ❌ Account & user features (`rez.account.*`) — architecture decided, not started; see §5
-  "Account & user features". The auth routes they need now exist, including refresh/logout
-  (`feature/refresh-tokens`); next prerequisite is rez-starter's public config endpoint
+- 🟡 Account & user features (`rez.account.*`) — session layer, `<rez-login>`, `<rez-register>`
+  (with email verification and `<rez-verify-email>`), `<rez-logout>` and a minimal
+  `<rez-account-menu>` built; profile/password/email/delete next. See §5 "Account & user features"
 
 ### `rez-admin`
 - ✅ Project scaffold (Vite + React + TypeScript + Tailwind, Vitest, Dockerfile + nginx)

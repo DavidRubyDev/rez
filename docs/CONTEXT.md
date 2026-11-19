@@ -2726,3 +2726,49 @@ missing-file test). Verified live through rez-starter: a 14-character registrati
 as the seeded customer turned its `$2y$12$` hash into `$argon2id$`, and it logs in again.
 `rez-starter` (`PASSWORD_MIN_LENGTH`/`PASSWORD_MAX_LENGTH`, limits in `GET /api/config`) and
 `rez-components` (`<rez-register>` hint and checks) built on the same branch name in their own repos.
+
+### 105. Email verification — double opt-in (`feature/email-verification`)
+
+Self-registration used to sign the visitor straight in, for any address they typed. Now a
+self-registered user can't log in until they've followed a link emailed to them — the "full
+double opt-in" target recorded when the registration email was deferred (#82).
+
+- **`User::$emailVerifiedAt`** (`?DateTimeImmutable`, null until verified), `isEmailVerified()`,
+  `withEmailVerifiedAt()`. `create()` always starts unverified; `reconstruct()` takes it as a new
+  last argument (required, so a hydration can't silently forget it). Migration
+  `20260101000010_add_email_verification.sql` adds `users.email_verified_at` and marks every
+  existing user verified as of their `created_at` — same guard as the column, so a replay never
+  verifies someone still waiting on a link — and creates `email_verification_tokens` (one row per
+  user, SHA-256 of the token only, `issued_at` + `expires_at`, FK `ON DELETE CASCADE`).
+- **Port** `EmailVerificationRepositoryInterface` (`save` replaces the user's earlier link,
+  `findByTokenHash`, `findIssuedAtForUser`, `deleteForUser`) + `MysqlEmailVerificationRepository`.
+  **Mailer** `sendEmailVerification(email, name, verificationUrl)`.
+- **`UsersConfig`**: `emailVerificationTtlMinutes` (default 1440, min 1) and
+  `emailVerificationResendCooldownSeconds` (default 60, min 0).
+- **`Application/Service/EmailVerificationService`** — the one home for both ends:
+  `sendLink(User, baseUrl)` (raw token from `TokenGeneratorInterface`, `{baseUrl}?token=`; a
+  mailer failure is logged, not thrown — the account already exists and the visitor can ask for
+  another link) and `markVerified(User)` (saves, deletes the link, and subscribes the user to the
+  newsletter if they opted in at registration — that opt-in now waits for proof the address is
+  theirs; a no-op for an already verified user).
+- **`RegisterUseCase`** no longer issues tokens: `RegisterRequest` gained a required
+  `verificationBaseUrl` (before `newsletterOptIn`), `RegisterResponse` is just `(User)`. It saves
+  the unverified user and sends the link. Breaking for rez-starter.
+- **`VerifyEmailUseCase`** (`token`) → `VerifyEmailResponse(User, AuthTokens)`. Unknown or expired
+  token → `InvalidTokenException`. Following the link signs the user in — it proves the same
+  thing a reset link does.
+- **`ResendEmailVerificationUseCase`** (`email`, `verificationBaseUrl`) → `sent: true` always:
+  unknown, already verified, or sent a link within the cooldown all answer identically.
+- **`LoginUseCase`** throws the new `EmailNotVerifiedException` (`EMAIL_NOT_VERIFIED`) for an
+  unverified user — only once the password is right, so it reveals nothing to a guesser, and not
+  counted as a failure.
+- **`ResetPasswordUseCase`** marks the email verified too (new `EmailVerificationService`
+  argument — breaking for rez-starter): the reset link proves ownership, and it's the only way an
+  admin-created user (forced through a reset, #82) ever proves it.
+
+Not built: purging expired verification rows (inert, like expired refresh tokens), an admin
+"mark verified" action, and re-verification on an email change (no email-change use case yet).
+
+TDD in three increments (domain + persistence, the service + config, the use cases).
+`composer ca` clean (1120 tests, PHPStan max). Integration suite in rez-starter's MySQL container
+against `rez_integration`: 150 tests (9 new), including the migration replay.

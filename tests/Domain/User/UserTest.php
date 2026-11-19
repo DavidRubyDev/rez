@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rez\Tests\Domain\User;
 
 use PHPUnit\Framework\TestCase;
+use Rez\Domain\Shared\Utc;
 use Rez\Domain\User\HashedPassword;
 use Rez\Domain\User\User;
 use Rez\Domain\User\UserId;
@@ -147,5 +148,46 @@ class UserTest extends TestCase
         $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
 
         $this->assertEqualsWithDelta($now->getTimestamp(), $user->createdAt->getTimestamp(), 2);
+    }
+
+    public function testNewUserHasUnverifiedEmail(): void
+    {
+        $user = User::create($this->id, 'John Doe', 'john@example.com', $this->password);
+
+        $this->assertNull($user->emailVerifiedAt);
+        $this->assertFalse($user->isEmailVerified());
+    }
+
+    public function testWithEmailVerifiedAtMarksTheEmailVerified(): void
+    {
+        $user       = User::create($this->id, 'John Doe', 'john@example.com', $this->password);
+        $verifiedAt = new \DateTimeImmutable('2026-11-18 10:00:00', new \DateTimeZone('UTC'));
+
+        $verified = $user->withEmailVerifiedAt($verifiedAt);
+
+        $this->assertSame($verifiedAt, $verified->emailVerifiedAt);
+        $this->assertTrue($verified->isEmailVerified());
+        $this->assertNull($user->emailVerifiedAt);
+    }
+
+    public function testReconstructKeepsEmailVerifiedAt(): void
+    {
+        $verifiedAt = new \DateTimeImmutable('2026-11-18 10:00:00', new \DateTimeZone('UTC'));
+
+        $user = User::reconstruct($this->id, 'John Doe', 'john@example.com', $this->password, UserRole::Customer, false, null, Utc::now(), $verifiedAt);
+
+        $this->assertSame($verifiedAt, $user->emailVerifiedAt);
+    }
+
+    public function testWithersKeepEmailVerifiedAt(): void
+    {
+        $verifiedAt = new \DateTimeImmutable('2026-11-18 10:00:00', new \DateTimeZone('UTC'));
+        $user       = User::create($this->id, 'John Doe', 'john@example.com', $this->password)->withEmailVerifiedAt($verifiedAt);
+
+        $this->assertSame($verifiedAt, $user->withName('Jane Doe')->emailVerifiedAt);
+        $this->assertSame($verifiedAt, $user->withNewsletterOptIn(true)->emailVerifiedAt);
+        $this->assertSame($verifiedAt, $user->withStripeCustomerId('cus_123')->emailVerifiedAt);
+        $this->assertSame($verifiedAt, $user->withPassword($this->password)->emailVerifiedAt);
+        $this->assertSame($verifiedAt, $user->withRole(UserRole::Admin)->emailVerifiedAt);
     }
 }

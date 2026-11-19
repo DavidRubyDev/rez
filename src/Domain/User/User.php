@@ -18,6 +18,7 @@ final class User
         public readonly bool $newsletterOptIn,
         public readonly ?string $stripeCustomerId,
         public readonly \DateTimeImmutable $createdAt,
+        public readonly ?\DateTimeImmutable $emailVerifiedAt,
     ) {
     }
 
@@ -36,7 +37,7 @@ final class User
         self::validateName($name);
         self::validateEmail($email);
 
-        return new self($id, $name, $email, $password, $role, $newsletterOptIn, $stripeCustomerId, Utc::now());
+        return new self($id, $name, $email, $password, $role, $newsletterOptIn, $stripeCustomerId, Utc::now(), null);
     }
 
     public static function reconstruct(
@@ -48,8 +49,9 @@ final class User
         bool $newsletterOptIn,
         ?string $stripeCustomerId,
         \DateTimeImmutable $createdAt,
+        ?\DateTimeImmutable $emailVerifiedAt,
     ): self {
-        return new self($id, $name, $email, $password, $role, $newsletterOptIn, $stripeCustomerId, $createdAt);
+        return new self($id, $name, $email, $password, $role, $newsletterOptIn, $stripeCustomerId, $createdAt, $emailVerifiedAt);
     }
 
     /**
@@ -59,27 +61,37 @@ final class User
     {
         self::validateName($name);
 
-        return new self($this->id, $name, $this->email, $this->password, $this->role, $this->newsletterOptIn, $this->stripeCustomerId, $this->createdAt);
+        return new self($this->id, $name, $this->email, $this->password, $this->role, $this->newsletterOptIn, $this->stripeCustomerId, $this->createdAt, $this->emailVerifiedAt);
     }
 
     public function withNewsletterOptIn(bool $optIn): self
     {
-        return new self($this->id, $this->name, $this->email, $this->password, $this->role, $optIn, $this->stripeCustomerId, $this->createdAt);
+        return new self($this->id, $this->name, $this->email, $this->password, $this->role, $optIn, $this->stripeCustomerId, $this->createdAt, $this->emailVerifiedAt);
     }
 
     public function withStripeCustomerId(string $stripeCustomerId): self
     {
-        return new self($this->id, $this->name, $this->email, $this->password, $this->role, $this->newsletterOptIn, $stripeCustomerId, $this->createdAt);
+        return new self($this->id, $this->name, $this->email, $this->password, $this->role, $this->newsletterOptIn, $stripeCustomerId, $this->createdAt, $this->emailVerifiedAt);
     }
 
     public function withPassword(HashedPassword $password): self
     {
-        return new self($this->id, $this->name, $this->email, $password, $this->role, $this->newsletterOptIn, $this->stripeCustomerId, $this->createdAt);
+        return new self($this->id, $this->name, $this->email, $password, $this->role, $this->newsletterOptIn, $this->stripeCustomerId, $this->createdAt, $this->emailVerifiedAt);
     }
 
     public function withRole(UserRole $role): self
     {
-        return new self($this->id, $this->name, $this->email, $this->password, $role, $this->newsletterOptIn, $this->stripeCustomerId, $this->createdAt);
+        return new self($this->id, $this->name, $this->email, $this->password, $role, $this->newsletterOptIn, $this->stripeCustomerId, $this->createdAt, $this->emailVerifiedAt);
+    }
+
+    public function withEmailVerifiedAt(\DateTimeImmutable $verifiedAt): self
+    {
+        return new self($this->id, $this->name, $this->email, $this->password, $this->role, $this->newsletterOptIn, $this->stripeCustomerId, $this->createdAt, $verifiedAt);
+    }
+
+    public function isEmailVerified(): bool
+    {
+        return $this->emailVerifiedAt !== null;
     }
 
     public function isAdmin(): bool

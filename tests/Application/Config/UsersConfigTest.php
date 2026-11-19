@@ -125,4 +125,32 @@ class UsersConfigTest extends TestCase
 
         $this->assertSame(0, $config->refreshTokenReuseGraceSeconds);
     }
+
+    public function testEmailVerificationDefaults(): void
+    {
+        $config = new UsersConfig('super-secret', 'super-secret-cancellation-key');
+
+        $this->assertSame(1440, $config->emailVerificationTtlMinutes);
+        $this->assertSame(60, $config->emailVerificationResendCooldownSeconds);
+    }
+
+    public function testEmailVerificationCanBeConfigured(): void
+    {
+        $config = new UsersConfig('super-secret', 'super-secret-cancellation-key', emailVerificationTtlMinutes: 30, emailVerificationResendCooldownSeconds: 0);
+
+        $this->assertSame(30, $config->emailVerificationTtlMinutes);
+        $this->assertSame(0, $config->emailVerificationResendCooldownSeconds);
+    }
+
+    public function testEmailVerificationTtlBelowOneThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new UsersConfig('super-secret', 'super-secret-cancellation-key', emailVerificationTtlMinutes: 0);
+    }
+
+    public function testNegativeEmailVerificationResendCooldownThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new UsersConfig('super-secret', 'super-secret-cancellation-key', emailVerificationResendCooldownSeconds: -1);
+    }
 }

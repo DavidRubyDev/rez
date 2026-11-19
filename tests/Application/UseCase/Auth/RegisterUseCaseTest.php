@@ -6,162 +6,160 @@ namespace Rez\Tests\Application\UseCase\Auth;
 
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
+use Rez\Application\Config\UsersConfig;
 use Rez\Application\Exception\DatabaseException;
-use Rez\Application\Port\RefreshTokenRepositoryInterface;
+use Rez\Application\Port\EmailVerificationRepositoryInterface;
+use Rez\Application\Port\MailerInterface;
 use Rez\Application\Port\TokenGeneratorInterface;
 use Rez\Application\Port\UserRepositoryInterface;
-use Rez\Application\Service\AuthTokenIssuer;
-use Rez\Application\Service\JwtService;
+use Rez\Application\Service\EmailVerificationService;
 use Rez\Application\Service\PasswordPolicy;
-use Rez\Domain\Exception\PasswordTooShortException;
 use Rez\Application\UseCase\Auth\Register\RegisterRequest;
 use Rez\Application\UseCase\Auth\Register\RegisterUseCase;
-use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeRequest;
 use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeUseCaseInterface;
 use Rez\Domain\Exception\EmailAlreadyRegisteredException;
+use Rez\Domain\Exception\PasswordTooShortException;
 use Rez\Domain\Exception\UserNotFoundException;
-use Rez\Domain\Newsletter\NewsletterSubscriber;
-use Rez\Domain\Newsletter\NewsletterSubscriberId;
-use Rez\Domain\Newsletter\SubscriberSource;
-use Rez\Application\UseCase\Newsletter\Subscribe\SubscribeResponse;
-use Rez\Application\Config\UsersConfig;
+use Rez\Domain\User\HashedPassword;
 use Rez\Domain\User\User;
 use Rez\Domain\User\UserId;
-use Rez\Domain\User\HashedPassword;
 
 class RegisterUseCaseTest extends TestCase
 {
+    private const VERIFICATION_BASE_URL = 'https://studio.example/verify';
+
     private UserRepositoryInterface&MockObject $userRepository;
+    private EmailVerificationRepositoryInterface&MockObject $verificationRepository;
+    private MailerInterface&MockObject $mailer;
     private SubscribeUseCaseInterface&MockObject $subscribeUseCase;
-    private RefreshTokenRepositoryInterface&MockObject $refreshTokenRepository;
-    private AuthTokenIssuer $issuer;
-    private RegisterUseCase $useCase;
     private UsersConfig $config;
 
     protected function setUp(): void
     {
-        $this->userRepository    = $this->createMock(UserRepositoryInterface::class);
-        $this->subscribeUseCase  = $this->createMock(SubscribeUseCaseInterface::class);
-        $this->refreshTokenRepository = $this->createMock(RefreshTokenRepositoryInterface::class);
-        $config                       = new UsersConfig('super-secret-jwt-at-least-32-bytes-long', 'super-secret-cancellation-key');
-        $this->config                 = $config;
-        $tokenGenerator               = $this->createMock(TokenGeneratorInterface::class);
-        $tokenGenerator->method('generate')->willReturn('raw-refresh-token');
-        $this->issuer = new AuthTokenIssuer(new JwtService($config), $this->refreshTokenRepository, $tokenGenerator, $config);
+        $this->userRepository         = $this->createMock(UserRepositoryInterface::class);
+        $this->verificationRepository = $this->createMock(EmailVerificationRepositoryInterface::class);
+        $this->mailer                 = $this->createMock(MailerInterface::class);
+        $this->subscribeUseCase       = $this->createMock(SubscribeUseCaseInterface::class);
+        $this->config                 = new UsersConfig('super-secret-jwt-at-least-32-bytes-long', 'super-secret-cancellation-key');
 
         $this->userRepository->method('findByEmail')->willThrowException(new UserNotFoundException('john@example.com'));
+    }
 
-        $this->useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer, new PasswordPolicy($config));
+    private function useCase(): RegisterUseCase
+    {
+        $tokenGenerator = $this->createMock(TokenGeneratorInterface::class);
+        $tokenGenerator->method('generate')->willReturn('raw-verification-token');
+
+        return new RegisterUseCase(
+            $this->userRepository,
+            new PasswordPolicy($this->config),
+            new EmailVerificationService(
+                $this->verificationRepository,
+                $this->userRepository,
+                $tokenGenerator,
+                $this->mailer,
+                $this->subscribeUseCase,
+                $this->config,
+                new NullLogger(),
+            ),
+        );
     }
 
     private function request(bool $newsletterOptIn = false, string $password = 'correct-horse-battery-staple'): RegisterRequest
     {
-        return new RegisterRequest('John Doe', 'john@example.com', $password, $newsletterOptIn);
+        return new RegisterRequest('John Doe', 'john@example.com', $password, self::VERIFICATION_BASE_URL, $newsletterOptIn);
     }
 
     public function testPasswordTooShortThrowsAndSavesNothing(): void
     {
         $this->userRepository->expects($this->never())->method('save');
-        $this->subscribeUseCase->expects($this->never())->method('execute');
+        $this->mailer->expects($this->never())->method('sendEmailVerification');
 
         $this->expectException(PasswordTooShortException::class);
 
-        $this->useCase->execute($this->request(newsletterOptIn: true, password: 'fourteen-chars'));
+        $this->useCase()->execute($this->request(password: 'fourteen-chars'));
     }
 
     public function testPasswordIsCheckedBeforeTheEmailIsLookedUp(): void
     {
         $this->userRepository = $this->createMock(UserRepositoryInterface::class);
         $this->userRepository->expects($this->never())->method('findByEmail');
-        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer, new PasswordPolicy($this->config));
 
         $this->expectException(PasswordTooShortException::class);
 
-        $useCase->execute($this->request(password: 'short'));
+        $this->useCase()->execute($this->request(password: 'short'));
     }
 
     public function testDuplicateEmailThrowsEmailAlreadyRegisteredException(): void
     {
-        $existing = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('x'));
+        $existing             = User::create(UserId::generate(), 'John Doe', 'john@example.com', HashedPassword::fromPlainText('x'));
         $this->userRepository = $this->createMock(UserRepositoryInterface::class);
         $this->userRepository->method('findByEmail')->willReturn($existing);
-        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer, new PasswordPolicy($this->config));
+        $this->mailer->expects($this->never())->method('sendEmailVerification');
 
         $this->expectException(EmailAlreadyRegisteredException::class);
 
-        $useCase->execute($this->request());
+        $this->useCase()->execute($this->request());
     }
 
     public function testFindByEmailDatabaseExceptionPropagates(): void
     {
         $this->userRepository = $this->createMock(UserRepositoryInterface::class);
         $this->userRepository->method('findByEmail')->willThrowException(new DatabaseException('pdo error'));
-        $useCase = new RegisterUseCase($this->userRepository, $this->subscribeUseCase, $this->issuer, new PasswordPolicy($this->config));
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Failed to check for existing user.');
 
-        $useCase->execute($this->request());
+        $this->useCase()->execute($this->request());
     }
 
-    public function testSuccessSaveCalledExactlyOnce(): void
+    public function testSavesTheUserOnceWithAnUnverifiedEmail(): void
     {
-        $this->userRepository->expects($this->once())->method('save');
+        $this->userRepository->expects($this->once())
+            ->method('save')
+            ->with($this->callback(fn (User $user) => !$user->isEmailVerified()));
 
-        $this->useCase->execute($this->request());
+        $this->useCase()->execute($this->request());
     }
 
-    public function testSuccessReturnsAccessAndRefreshTokens(): void
+    public function testEmailsAVerificationLink(): void
     {
-        $this->refreshTokenRepository->expects($this->once())->method('save');
+        $this->verificationRepository->expects($this->once())->method('save');
+        $this->mailer->expects($this->once())
+            ->method('sendEmailVerification')
+            ->with('john@example.com', 'John Doe', self::VERIFICATION_BASE_URL . '?token=raw-verification-token');
 
-        $response = $this->useCase->execute($this->request());
-
-        $this->assertNotSame('', $response->tokens->accessToken);
-        $this->assertSame('raw-refresh-token', $response->tokens->refreshToken);
+        $this->useCase()->execute($this->request());
     }
 
-    public function testRefreshTokenIsIssuedOnlyAfterTheUserIsSaved(): void
+    public function testNoLinkIsSentWhenTheUserCannotBeSaved(): void
     {
         $this->userRepository->method('save')->willThrowException(new DatabaseException('pdo error'));
-        $this->refreshTokenRepository->expects($this->never())->method('save');
+        $this->mailer->expects($this->never())->method('sendEmailVerification');
 
         $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to save user.');
 
-        $this->useCase->execute($this->request());
+        $this->useCase()->execute($this->request());
     }
 
-    public function testSuccessWithNewsletterOptInTrueCallsSubscribeUseCase(): void
+    public function testNewsletterOptInIsKeptButNotActedOnUntilTheEmailIsVerified(): void
     {
-        $this->subscribeUseCase->expects($this->once())
-            ->method('execute')
-            ->with($this->callback(
-                fn (SubscribeRequest $request) => $request->email === 'john@example.com'
-                    && $request->name === 'John Doe'
-                    && $request->source === SubscriberSource::Registered
-            ))
-            ->willReturn(new SubscribeResponse(NewsletterSubscriber::create(
-                NewsletterSubscriberId::generate(),
-                'john@example.com',
-                'John Doe',
-                SubscriberSource::Registered,
-            )));
-
-        $this->useCase->execute($this->request(newsletterOptIn: true));
-    }
-
-    public function testSuccessWithNewsletterOptInFalseNeverCallsSubscribeUseCase(): void
-    {
+        $this->userRepository->expects($this->once())
+            ->method('save')
+            ->with($this->callback(fn (User $user) => $user->newsletterOptIn));
         $this->subscribeUseCase->expects($this->never())->method('execute');
 
-        $this->useCase->execute($this->request(newsletterOptIn: false));
+        $this->useCase()->execute($this->request(newsletterOptIn: true));
     }
 
-    public function testReturnedUserHasCorrectNameAndEmail(): void
+    public function testReturnsTheNewUnverifiedUser(): void
     {
-        $response = $this->useCase->execute($this->request());
+        $response = $this->useCase()->execute($this->request());
 
         $this->assertSame('John Doe', $response->user->name);
         $this->assertSame('john@example.com', $response->user->email);
+        $this->assertFalse($response->user->isEmailVerified());
     }
 }

@@ -20,6 +20,8 @@ final class UsersConfig
         public readonly int $loginFailureWindowSeconds = 900,
         public readonly int $passwordMinLength = 15,
         public readonly int $passwordMaxLength = 128,
+        public readonly int $emailVerificationTtlMinutes = 1440,
+        public readonly int $emailVerificationResendCooldownSeconds = 60,
     ) {
         if ($jwtSecret === '') {
             throw new \InvalidArgumentException('jwtSecret must not be empty.');
@@ -60,6 +62,14 @@ final class UsersConfig
 
         if ($passwordMaxLength < $passwordMinLength) {
             throw new \InvalidArgumentException("passwordMaxLength must be at least passwordMinLength ({$passwordMinLength}), got {$passwordMaxLength}.");
+        }
+
+        if ($emailVerificationTtlMinutes < 1) {
+            throw new \InvalidArgumentException("emailVerificationTtlMinutes must be at least 1, got {$emailVerificationTtlMinutes}.");
+        }
+
+        if ($emailVerificationResendCooldownSeconds < 0) {
+            throw new \InvalidArgumentException("emailVerificationResendCooldownSeconds must not be negative, got {$emailVerificationResendCooldownSeconds}.");
         }
     }
 }

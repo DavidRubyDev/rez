@@ -11,6 +11,7 @@ use Rez\Application\Port\LoginFailureRepositoryInterface;
 use Rez\Application\Port\UserRepositoryInterface;
 use Rez\Application\Service\AuthTokenIssuer;
 use Rez\Domain\Auth\LoginThrottleKey;
+use Rez\Domain\Exception\EmailNotVerifiedException;
 use Rez\Domain\Exception\InvalidCredentialsException;
 use Rez\Domain\Exception\TooManyLoginAttemptsException;
 use Rez\Domain\Exception\UserNotFoundException;
@@ -38,6 +39,7 @@ final class LoginUseCase implements LoginUseCaseInterface
     /**
      * @throws TooManyLoginAttemptsException
      * @throws InvalidCredentialsException
+     * @throws EmailNotVerifiedException
      * @throws DatabaseException
      */
     public function execute(LoginRequest $request): LoginResponse
@@ -58,6 +60,11 @@ final class LoginUseCase implements LoginUseCaseInterface
         }
 
         $this->clearFailures($key);
+
+        // Only said once the password is right, so it reveals nothing to someone guessing.
+        if (!$user->isEmailVerified()) {
+            throw new EmailNotVerifiedException();
+        }
 
         if ($user->password->needsRehash()) {
             $user = $this->saveRehashed($user, $request->password);

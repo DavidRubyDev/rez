@@ -176,15 +176,16 @@ final class MysqlUserRepository extends MysqlRepository implements UserRepositor
     {
         try {
             $stmt = $this->pdo->prepare('
-                INSERT INTO users (id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at)
-                VALUES (:id, :name, :email, :password_hash, :role, :newsletter_opt_in, :stripe_customer_id, :created_at)
+                INSERT INTO users (id, name, email, password_hash, role, newsletter_opt_in, stripe_customer_id, created_at, email_verified_at)
+                VALUES (:id, :name, :email, :password_hash, :role, :newsletter_opt_in, :stripe_customer_id, :created_at, :email_verified_at)
                 ON DUPLICATE KEY UPDATE
                     name               = VALUES(name),
                     email              = VALUES(email),
                     password_hash      = VALUES(password_hash),
                     role               = VALUES(role),
                     newsletter_opt_in  = VALUES(newsletter_opt_in),
-                    stripe_customer_id = VALUES(stripe_customer_id)
+                    stripe_customer_id = VALUES(stripe_customer_id),
+                    email_verified_at  = VALUES(email_verified_at)
             ');
 
             $stmt->execute([
@@ -196,6 +197,7 @@ final class MysqlUserRepository extends MysqlRepository implements UserRepositor
                 ':newsletter_opt_in'  => $user->newsletterOptIn ? 1 : 0,
                 ':stripe_customer_id' => $user->stripeCustomerId,
                 ':created_at'         => $user->createdAt->format('Y-m-d H:i:s'),
+                ':email_verified_at'  => $user->emailVerifiedAt?->format('Y-m-d H:i:s'),
             ]);
         } catch (\PDOException $e) {
             $this->logger->critical('Database query failed', ['operation' => __METHOD__, 'error' => $e->getMessage()]);
@@ -226,6 +228,14 @@ final class MysqlUserRepository extends MysqlRepository implements UserRepositor
             $this->bool($row['newsletter_opt_in']),
             $this->nullStr($row['stripe_customer_id']),
             new \DateTimeImmutable($this->str($row['created_at']), Utc::timezone()),
+            $this->nullDateTime($row['email_verified_at']),
         );
+    }
+
+    private function nullDateTime(mixed $value): ?\DateTimeImmutable
+    {
+        $string = $this->nullStr($value);
+
+        return $string === null ? null : new \DateTimeImmutable($string, Utc::timezone());
     }
 }

@@ -38,6 +38,13 @@ final class NullMailer implements MailerInterface
     ): void {
     }
 
+    public function sendEmailVerification(
+        string $email,
+        string $name,
+        string $verificationUrl,
+    ): void {
+    }
+
     public function sendNewClassNotification(
         string $email,
         string $className,
